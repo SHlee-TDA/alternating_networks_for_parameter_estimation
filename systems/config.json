@@ -1,0 +1,45 @@
+{
+    "data": {
+        "raw_data_path": "data/raw/clean_sumner_n_612.xlsx",
+        "processed_data_path": "data/processed/processed_sumner_n_612.xlsx"
+    },
+    "ode_params": {
+        "a1": 5.99,
+        "a2": 2.14,
+        "a3": 0.0013,
+        "t1": 15.60,
+        "t2": 137.2,
+        "t3": 258.3,
+        "r20": 0.006,
+        "hepasi": 1,
+        "gamma_bar": 1,
+        "gamma": 0.04375
+    },
+    "initial_conditions": [80.1842, 5.8462, 60.9341, 443.7764],
+    "initial_parameters": [1, 0.8],
+    "parameter_bounds": {
+        "lower": [0.01, 0.01],
+        "upper": [10, 100]
+    },
+    "costparams": {
+        "init": [80.1842, 5.8462, 60.9341, 443.7764],
+        "weights_G": [1, 1, 1, 1, 1],  
+        "weights_I": [1, 1, 1, 1, 1],  
+        "LB": [0.01, 0.01],  
+        "UB": [10, 100],     
+        "doPlot": true
+    },
+    "optimization_options": {
+        "method": "Nelder-Mead",
+        "options": {
+            "xatol": 0.0001,
+            "fatol": 1,
+            "maxfev": 100000,
+            "maxiter": 100000,
+            "disp": true
+        }
+    },
+    "output": {
+        "result_path": "results/test"
+    }
+}
