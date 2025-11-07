@@ -35,6 +35,9 @@ class Trainer:
     def train(self):
         print(f"Training models for {self.config.EXPERIMENT_NAME}...")
         history = defaultdict(list)
+        best_val_loss = np.inf
+        patience_counter = 0
+        
         for epoch in range(self.config.EPOCHS):
             self.f_theta.train()
             self.g_phi.train()
@@ -89,6 +92,31 @@ class Trainer:
             
             if epoch % 100 == 0 or epoch == self.config.EPOCHS - 1:
                 print(f"Epoch {epoch+1:04d} | Train Loss: {history['train_total_loss'][-1]:.4f} | Val Loss: {history['val_total_loss'][-1]:.4f}")
+            
+            if self.config.USE_EARLY_STOPPING:
+                current_val_loss = history['val_total_loss'][-1]
+                
+                # 검증 손실이 개선되었는지 확인
+                if current_val_loss < best_val_loss - self.config.EARLY_STOPPING_MIN_DELTA:
+                    # 개선됨: best loss 업데이트, patience 초기화
+                    best_val_loss = current_val_loss
+                    patience_counter = 0
+                    
+                    # Best 모델 가중치 저장 (선택적이지만 권장)
+                    print(f"  -> New best validation loss: {best_val_loss:.4f}. Saving best model.")
+                    torch.save(self.f_theta.state_dict(), os.path.join(self.results_path, 'f_theta_best.pth'))
+                    torch.save(self.g_phi.state_dict(), os.path.join(self.results_path, 'g_phi_best.pth'))
+                
+                else:
+                    # 개선 없음: patience 증가
+                    patience_counter += 1
+                
+                # Patience 한계 도달 시 학습 중단
+                if patience_counter >= self.config.EARLY_STOPPING_PATIENCE:
+                    print(f"\n[Early Stopping] Validation loss did not improve for {self.config.EARLY_STOPPING_PATIENCE} epochs.")
+                    print(f"Stopping at epoch {epoch+1}. Best validation loss: {best_val_loss:.4f}")
+                    break # Epoch loop 탈출
+                
                 
         print(f"Training complete. Saving artifacts to {self.results_path}")
         # 1. 모델 가중치 저장
@@ -114,7 +142,7 @@ class Trainer:
         """모델의 모든 층에 대해 가중치 행렬의 스펙트럴 노름 곱을 계산합니다."""
         def spectral_norm(module):
             if hasattr(module, 'weight'):
-                weight = module.weight
+                weight = getattr(module, 'weight_orig', module.weight) # <-- 수정됨
                 u, s, v = torch.svd(weight)
                 return s[0]  # 최대 특이값
             return 1.0  # 가중치가 없는 경우 페널티 없음
@@ -155,7 +183,7 @@ class Trainer:
             if self.config.USE_CONSISTENCY_LOSS:
                 p_reconstructed_norm = self.g_phi(x_batch, y_pred_f)
                 loss_consistency = self.loss_fn(p_reconstructed_norm, p_batch_norm)
-                total_loss += self.config.CONSISTENCY_LOSS_LAMBDA * loss_consistency
+                # total_loss += self.config.CONSISTENCY_LOSS_LAMBDA * loss_consistency
                 losses['loss_consistency'].append(loss_consistency.item())
 
         # 평균 손실 반환

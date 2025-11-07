@@ -33,12 +33,17 @@ class Config:
     # =========================================================================
     # 3. 데이터 및 학습 하이퍼파라미터 (Data & Training Hyperparameters)
     # =========================================================================
-    NUM_SAMPLES = 100      # 생성할 데이터 샘플의 총 개수
+    NUM_SAMPLES = 10000     # 생성할 데이터 샘플의 총 개수
     TEST_SPLIT = 0.2        # 테스트 데이터셋의 비율
     BATCH_SIZE = 128        # 학습 시 미니배치 크기
-    EPOCHS = 10          # 총 학습 에포크 수
+    EPOCHS = 2000          # 총 학습 에포크 수
     LEARNING_RATE = 1e-6    # 옵티마이저의 학습률
     WEIGHT_DECAY = 1e-5     # L2 정규화 (Weight Decay) 계수
+    
+    # Early Stopping 설정
+    USE_EARLY_STOPPING = True       # 조기 종료 기능 활성화 여부
+    EARLY_STOPPING_PATIENCE = 50    # 검증 손실이 개선되지 않아도 기다릴 에포크 수 (더 학습할 여지를 주려면 이 값을 늘리세요)
+    EARLY_STOPPING_MIN_DELTA = 1e-6 # "개선"으로 간주할 최소 손실 감소량
     
     # =========================================================================
     # 4. 방법론 관련 하이퍼파라미터 (Methodology Hyperparameters)
@@ -50,6 +55,7 @@ class Config:
     ITERATIONS = 10
     
     USE_LAGRANGIAN = True  # 라그랑지안 방법론 사용 여부 (main.py에서 동적으로 설정됨)
+    
     
     # =========================================================================
     # 5. 모델 구조 설정 (Model Architecture)
