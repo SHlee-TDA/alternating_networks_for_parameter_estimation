@@ -4,7 +4,7 @@ import os
 
 import numpy as np
 from scipy.integrate import solve_ivp
-from torch.utils.data import TensorDataset, DataLoader
+from torch.utils.data import TensorDataset, DataLoader, random_split
 import torch
 
 # External function for parallel data generation
@@ -137,13 +137,23 @@ def create_dataloaders(data_tuple, config):
 
     P_tensor = torch.tensor(P_true, dtype=torch.float32)
 
-    # 데이터셋 및 로더 생성 (이하 동일)
+    # 데이터셋 및 로더 생성
     dataset = TensorDataset(X_tensor, Y_tensor, P_tensor)
-    train_size = int((1 - config.TEST_SPLIT) * len(dataset))
-    test_size = len(dataset) - train_size
-    train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size])
-
+    
+    # Split Train/Test
+    test_size = int(config.TEST_SPLIT * N)
+    train_val_size = N - test_size
+    train_val_dataset, test_dataset = random_split(dataset, [train_val_size, test_size])
+    
+    # Split Train/Validation
+    val_split = 0.1 # valid set 비율
+    val_size = int(val_split * train_val_size)
+    train_size = train_val_size - val_size
+    train_dataset, val_dataset = random_split(train_val_dataset, [train_size, val_size])
+    
+    # DataLoader 생성
     train_loader = DataLoader(train_dataset, batch_size=config.BATCH_SIZE, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=config.BATCH_SIZE)
     test_loader = DataLoader(test_dataset, batch_size=config.BATCH_SIZE)
 
     # 초기 파라미터 추측치 계산
@@ -153,7 +163,7 @@ def create_dataloaders(data_tuple, config):
     except AttributeError:
         p_initial_guess = P_tensor[:train_size].mean(dim=0).unsqueeze(0).to(config.DEVICE)
 
-    return train_loader, test_loader, p_initial_guess
+    return train_loader, val_loader, test_loader, p_initial_guess
 
 
 

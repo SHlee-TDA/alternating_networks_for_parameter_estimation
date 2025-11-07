@@ -4,11 +4,12 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp
-import itertools # ✨ 조합 생성을 위해 추가
+import itertools 
+import json
 
 class Analyzer:
     """학습된 모델의 성능 분석 및 시각화를 담당하는 클래스"""
-    def __init__(self, f_theta, g_phi, test_loader, config, system, p_initial_guess, normalizer=None):
+    def __init__(self, f_theta, g_phi, test_loader, config, system, p_initial_guess, normalizer=None, history=None):
         self.f_theta = f_theta.to(config.DEVICE)
         self.g_phi = g_phi.to(config.DEVICE)
         self.test_loader = test_loader
@@ -16,10 +17,53 @@ class Analyzer:
         self.system = system
         self.normalizer = normalizer
         self.p_initial_guess = p_initial_guess
+        self.history = history
         # 결과 저장 경로를 시스템 및 실험 이름에 따라 동적으로 설정
         self.results_path = os.path.join(config.RESULTS_DIR, config.SYSTEM_NAME, config.EXPERIMENT_NAME)
         os.makedirs(self.results_path, exist_ok=True)
 
+    def plot_loss_curves(self):
+        if self.history is None:
+            print("No history found, skipping loss curve plotting.")
+            return
+
+        print("Plotting and saving loss curves...")
+        fig, ax = plt.subplots(figsize=(10, 6))
+        epochs = range(1, len(self.history['train_total_loss']) + 1)
+
+        ax.plot(epochs, self.history['train_total_loss'], label='Train Total Loss', color='blue')
+        ax.plot(epochs, self.history['val_total_loss'], label='Validation Total Loss', color='orange', linestyle='--')
+
+        ax.set_xlabel("Epochs")
+        ax.set_ylabel("Loss")
+        ax.set_title(f"Training and Validation Loss ({self.config.EXPERIMENT_NAME})")
+        ax.legend()
+        ax.grid(True)
+
+        save_path = os.path.join(self.results_path, 'loss_curves.png')
+        plt.tight_layout()
+        plt.savefig(save_path)
+        plt.close(fig)
+
+        # [3단계 기능] 손실 데이터도 JSON으로 저장
+        data_path = os.path.join(self.results_path, 'loss_history.json')
+        # history는 이미 딕셔너리이므로 변환 필요 없음
+        with open(data_path, 'w') as f:
+            json.dump(self.history, f, indent=4)
+        print(f"Saved loss history data to {data_path}")
+    
+    def _get_model_spectral_norms(self, model):
+        norms, indices = [], []
+        linear_idx = 1
+        for layer in model.network.children():
+            if isinstance(layer, torch.nn.Linear):
+                weight = getattr(layer, 'weight_orig', layer.weight)
+                norm = torch.linalg.norm(weight, ord=2).item()
+                norms.append(norm)
+                indices.append(linear_idx)
+                linear_idx += 1
+        return {'indices': indices, 'norms': norms}
+    
     def _analyze_spectral_norms_single(self, model, model_name):
         """단일 모델의 스펙트럴 노름을 계산하고 출력합니다."""
         print(f"\n--- Analyzing Spectral Norms for {model_name} ---")
@@ -101,42 +145,52 @@ class Analyzer:
         plt.savefig(save_path)
         plt.close(fig)
 
+        # Save values
+        data_path = os.path.join(self.results_path, 'predictions.npz')
+        np.savez(data_path, p_true=p_true, p_pred=p_pred)
+        print(f"Saved prediction data to {data_path}")
+        
     def plot_spectral_norms_by_layer(self):
         """각 모델의 레이어별 스펙트럴 노름을 막대그래프로 시각화합니다."""
+        """각 모델의 레이어별 스펙트럴 노름을 막대그래프로 시각화합니다."""
         print("Plotting and saving spectral norms by layer...")
-        fig, axes = plt.subplots(1, 2, figsize=(15, 6), sharey=True)
-        fig.suptitle(f'Spectral Norms per Layer for {self.config.EXPERIMENT_NAME}', fontsize=16)
 
-        def _plot_for_model(ax, model, model_name):
-            norms, indices = [], []
-            linear_idx = 1
-            for layer in model.network.children():
-                if isinstance(layer, torch.nn.Linear):
-                    weight = getattr(layer, 'weight_orig', layer.weight)
-                    norm = torch.linalg.norm(weight, ord=2).item()
-                    norms.append(norm)
-                    indices.append(linear_idx)
-                    linear_idx += 1
-            
-            ax.bar(indices, norms, color='skyblue', edgecolor='black')
+        # [수정] 헬퍼를 사용하여 데이터 먼저 추출
+        f_theta_data = self._get_model_spectral_norms(self.f_theta)
+        g_phi_data = self._get_model_spectral_norms(self.g_phi)
+
+        fig, axes = plt.subplots(1, 2, figsize=(15, 6), sharey=True)
+        fig.suptitle(...)
+
+        # [수정] 내부 함수 대신 추출된 데이터로 플롯
+        def _plot_for_model(ax, norm_data, model_name):
+            ax.bar(norm_data['indices'], norm_data['norms'], color='skyblue', edgecolor='black')
             ax.axhline(y=1.0, color='r', linestyle='--', label='Threshold y=1')
             ax.set_xlabel("Linear Layer Index")
             ax.set_ylabel("Spectral Norm")
             ax.set_title(f"Model: {model_name}")
-            ax.set_xticks(indices)
+            ax.set_xticks(norm_data['indices'])
             ax.legend()
             ax.grid(axis='y', linestyle='--', alpha=0.7)
 
-        _plot_for_model(axes[0], self.f_theta, "f_theta (HiddenVarPredictor)")
-        _plot_for_model(axes[1], self.g_phi, "g_phi (ParameterEstimator)")
+        _plot_for_model(axes[0], f_theta_data, "f_theta (HiddenVarPredictor)")
+        _plot_for_model(axes[1], g_phi_data, "g_phi (ParameterEstimator)")
 
         save_path = os.path.join(self.results_path, 'spectral_norms_plot.png')
-        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         plt.savefig(save_path)
         plt.close(fig)
 
+        # [추가] 스펙트럴 노름 데이터 저장
+        all_norm_data = {
+            'f_theta': f_theta_data,
+            'g_phi': g_phi_data
+        }
+        data_path = os.path.join(self.results_path, 'spectral_norms_by_layer.json')
+        with open(data_path, 'w') as f:
+            json.dump(all_norm_data, f, indent=4)
+        print(f"Saved spectral norm data to {data_path}")
+
     def plot_phase_portraits(self):
-        """ ✨ 수정된 부분: 파라미터 공간의 위상 초상을 동적으로 시각화합니다. """
         print("Plotting and saving phase portraits...")
         num_params = len(self.system.param_names)
         if num_params < 2:
@@ -171,40 +225,78 @@ class Analyzer:
 
     def _plot_single_portrait(self, ax, x_observed, true_params, p_dims, num_iterations=10):
         """하나의 2D 파라미터 평면에 대한 위상 초상과 궤적을 그립니다."""
+        
+        # --- (self.normalizer가 있는지 확인) ---
+        if self.normalizer is None:
+            print("Normalizer is missing. Cannot plot phase portraits correctly.")
+            return
+            
         p1_idx, p2_idx = p_dims
         p1_name, p2_name = self.system.param_names[p1_idx], self.system.param_names[p2_idx]
         
+        # 1. 그리드는 원본(Raw) 스케일로 생성 (이 부분은 동일)
         p1_range = np.linspace(true_params[p1_idx] * 0.5, true_params[p1_idx] * 1.5, 20)
         p2_range = np.linspace(true_params[p2_idx] * 0.5, true_params[p2_idx] * 1.5, 20)
         p1_grid, p2_grid = np.meshgrid(p1_range, p2_range)
         
-        p0_grid = torch.tensor(true_params, dtype=torch.float32).repeat(p1_grid.size, 1).to(self.config.DEVICE)
-        p0_grid[:, p1_idx] = torch.tensor(p1_grid.flatten(), dtype=torch.float32)
-        p0_grid[:, p2_idx] = torch.tensor(p2_grid.flatten(), dtype=torch.float32)
+        # p0_grid_raw: 원본 스케일의 그리드 포인트
+        p0_grid_raw = torch.tensor(true_params, dtype=torch.float32).repeat(p1_grid.size, 1).to(self.config.DEVICE)
+        p0_grid_raw[:, p1_idx] = torch.tensor(p1_grid.flatten(), dtype=torch.float32)
+        p0_grid_raw[:, p2_idx] = torch.tensor(p2_grid.flatten(), dtype=torch.float32)
+        
+        # [FIX] 2. 연산을 위해 그리드를 정규화합니다. (p_n_norm)
+        p0_grid_norm = self.normalizer.normalize(p0_grid_raw)
         
         with torch.no_grad():
             x_batch = x_observed.repeat(p1_grid.size, 1)
-            y_hat = self.f_theta(x_batch, p0_grid)
-            p1_grid_out = self.g_phi(x_batch, y_hat)
+            
+            # [FIX] 3. f_theta에는 정규화된 p를 denormalize해서 입력
+            y_hat = self.f_theta(x_batch, self.normalizer.denormalize(p0_grid_norm))
+            
+            # [FIX] 4. g_phi는 정규화된 p_{n+1}을 출력 (p1_grid_norm)
+            p1_grid_norm = self.g_phi(x_batch, y_hat)
         
-        dp = (p1_grid_out - p0_grid).cpu().numpy()
-        ax.quiver(p1_grid, p2_grid, dp[:, p1_idx], dp[:, p2_idx], color='teal', alpha=0.6, width=0.003)
+        # [FIX] 5. 벡터 필드(dp)를 계산합니다.
+        # p_{n+1}_raw 와 p_{n}_raw를 구해서 빼야 플롯에 의미가 있습니다.
+        p1_grid_raw = self.normalizer.denormalize(p1_grid_norm).cpu().numpy()
+        dp_raw = p1_grid_raw - p0_grid_raw.cpu().numpy()
+
+        # [FIX] 6. 원본 스케일의 그리드(p1_grid, p2_grid)에 원본 스케일의 벡터(dp_raw)를 그립니다.
+        ax.quiver(p1_grid, p2_grid, dp_raw[:, p1_idx], dp_raw[:, p2_idx], color='teal', alpha=0.6, width=0.003)
         ax.plot(true_params[p1_idx], true_params[p2_idx], 'r*', markersize=18, label='True Value', zorder=10)
         
-        p_start = torch.tensor(true_params, dtype=torch.float32).unsqueeze(0).to(self.config.DEVICE)
-        p_start[0, p1_idx] = p1_range[0]
-        p_start[0, p2_idx] = p2_range[-1]
+        
+        # --- [FIX] 궤적(Trajectory) 계산 수정 ---
+        
+        # [FIX] 7. 시작점을 원본(raw) 스케일로 정의
+        p_start_raw = torch.tensor(true_params, dtype=torch.float32).unsqueeze(0).to(self.config.DEVICE)
+        p_start_raw[0, p1_idx] = p1_range[0]
+        p_start_raw[0, p2_idx] = p2_range[-1]
 
-        trajectory = [p_start.clone()]
-        p_current = p_start
+        trajectory_raw = [p_start_raw.clone()] # 플롯을 위해 원본 스케일 값 저장
+        
+        # [FIX] 8. 반복은 정규화된(normalized) 값으로 시작
+        p_current_norm = self.normalizer.normalize(p_start_raw)
+        
         with torch.no_grad():
             for _ in range(num_iterations):
-                y_hat = self.f_theta(x_observed, p_current)
-                p_next = self.g_phi(x_observed, y_hat)
-                trajectory.append(p_next.clone())
-                p_current = p_next
+                # [FIX] 9. f_theta 입력을 위해 denormalize
+                p_current_raw_for_f = self.normalizer.denormalize(p_current_norm)
+                
+                # 10. y_hat 계산
+                y_hat = self.f_theta(x_observed, p_current_raw_for_f)
+                
+                # [FIX] 11. g_phi에서 다음 스텝(normalized) p를 얻음
+                p_next_norm = self.g_phi(x_observed, y_hat)
+                
+                # [FIX] 12. 플롯을 위해 원본(raw) 스케일로 변환하여 저장
+                trajectory_raw.append(self.normalizer.denormalize(p_next_norm).clone())
+                
+                # [FIX] 13. 상태 업데이트는 정규화된(normalized) 값으로 수행
+                p_current_norm = p_next_norm
         
-        traj_np = torch.cat(trajectory).cpu().numpy()
+        # [FIX] 14. 궤적 플롯 (이제 trajectory_raw는 모두 원본 스케일 값임)
+        traj_np = torch.cat(trajectory_raw).cpu().numpy()
         starts, ends = traj_np[:-1], traj_np[1:]
         vectors = ends - starts
         

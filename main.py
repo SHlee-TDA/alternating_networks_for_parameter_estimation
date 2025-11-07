@@ -59,7 +59,7 @@ def run_experiment(exp_config, system, data_tuple, normalizer, base_config):
     
     
     # 이제 data_tuple과 config.USE_LAGRANGIAN 설정이 100% 일치합니다.
-    train_loader, test_loader, p_initial_guess = create_dataloaders(data_tuple, config)
+    train_loader, val_loader, test_loader, p_initial_guess = create_dataloaders(data_tuple, config)
     
     try:
         x_sample, y_sample, p_sample = next(iter(train_loader))
@@ -94,13 +94,16 @@ def run_experiment(exp_config, system, data_tuple, normalizer, base_config):
         initialization_config=config.MODEL_CONFIG.get('initialization')
     ).to(config.DEVICE)
     
-    trainer = Trainer(f_theta, g_phi, train_loader, config, normalizer)
+    trainer = Trainer(f_theta, g_phi, 
+                      train_loader, val_loader,
+                      config, normalizer)
     
     # 학습
-    f_theta, g_phi = trainer.train()
+    f_theta, g_phi, history = trainer.train()
     
     # 분석
-    analyzer = Analyzer(f_theta, g_phi, test_loader, config, system, p_initial_guess, normalizer)
+    analyzer = Analyzer(f_theta, g_phi, test_loader, config, system, p_initial_guess, normalizer, history)
+    analyzer.plot_loss_curves()
     analyzer.analyze_spectral_norms()
     p_true, p_pred = analyzer.evaluate_predictions()
     analyzer.plot_scatter(p_true, p_pred)

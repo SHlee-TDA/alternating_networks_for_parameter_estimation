@@ -2,17 +2,23 @@
 import os
 import pickle
 import json
+from collections import defaultdict
 
+import numpy as np
 import torch
 import torch.nn as nn
 from tqdm import tqdm
 
 class Trainer:
     """모델 학습 과정을 담당하는 클래스"""
-    def __init__(self, f_theta, g_phi, train_loader, config, normalizer):
+    def __init__(self, 
+                 f_theta, g_phi, 
+                 train_loader, val_loader, 
+                 config, normalizer):
         self.f_theta = f_theta.to(config.DEVICE)
         self.g_phi = g_phi.to(config.DEVICE)
         self.train_loader = train_loader
+        self.val_loader = val_loader
         self.config = config
         self.normalizer = normalizer
         self.optimizer = torch.optim.Adam(
@@ -23,13 +29,19 @@ class Trainer:
         self.loss_fn = nn.MSELoss()
         
         # 결과 저장 경로
-        self.result_dir = os.path.join(config.RESULTS_DIR, config.SYSTEM_NAME, config.EXPERIMENT_NAME)
+        self.results_path = os.path.join(config.RESULTS_DIR, config.SYSTEM_NAME, config.EXPERIMENT_NAME)
         os.makedirs(self.results_path, exist_ok=True)
         
     def train(self):
         print(f"Training models for {self.config.EXPERIMENT_NAME}...")
+        history = defaultdict(list)
         for epoch in range(self.config.EPOCHS):
-            for x_batch, y_batch, p_batch in tqdm(self.train_loader, desc=f"Epoch {epoch+1}/{self.config.EPOCHS}", leave=False):
+            self.f_theta.train()
+            self.g_phi.train()
+            
+            epoch_train_losses = defaultdict(list)
+            pbar = tqdm(self.train_loader, desc=f"Epoch {epoch+1}/{self.config.EPOCHS}", leave=False)
+            for x_batch, y_batch, p_batch in pbar:
                 x_batch = x_batch.to(self.config.DEVICE)
                 y_batch = y_batch.to(self.config.DEVICE)
                 p_batch = p_batch.to(self.config.DEVICE)
@@ -56,9 +68,27 @@ class Trainer:
                     f_theta_penalty, g_phi_penalty = self.weight_product_penalty()
                     spectral_norm_loss = (f_theta_penalty + g_phi_penalty)
                     total_loss += spectral_norm_loss
-                    
+                
+                # logging
+                epoch_train_losses['total_loss'].append(total_loss.item())
+                epoch_train_losses['loss_f'].append(loss_f.item())
+                epoch_train_losses['loss_g'].append(loss_g.item())
+                if self.config.USE_CONSISTENCY_LOSS:
+                    epoch_train_losses['loss_consistency'].append(loss_consistency.item())
+                
                 total_loss.backward()
                 self.optimizer.step()
+                pbar.set_postfix(loss=total_loss.item())
+            # Epoch 종료 후 검증
+            val_losses = self.evaluate(self.val_loader)
+            
+            for k, v in epoch_train_losses.items():
+                history[f'train_{k}'].append(np.mean(v))
+            for k, v in val_losses.items():
+                history[f'val_{k}'].append(v)
+            
+            if epoch % 100 == 0 or epoch == self.config.EPOCHS - 1:
+                print(f"Epoch {epoch+1:04d} | Train Loss: {history['train_total_loss'][-1]:.4f} | Val Loss: {history['val_total_loss'][-1]:.4f}")
                 
         print(f"Training complete. Saving artifacts to {self.results_path}")
         # 1. 모델 가중치 저장
@@ -77,7 +107,7 @@ class Trainer:
         with open(os.path.join(self.results_path, 'config_run.json'), 'w') as f:
             json.dump(config_dict, f, indent=4)
         
-        return self.f_theta, self.g_phi
+        return self.f_theta, self.g_phi, history
     
     
     def weight_product_penalty(self):
@@ -98,3 +128,35 @@ class Trainer:
             g_phi_penalty *= spectral_norm(module)
 
         return f_theta_penalty, g_phi_penalty
+    
+    @torch.no_grad()
+    def evaluate(self, loader):
+        self.f_theta.eval()
+        self.g_phi.eval()
+        losses = defaultdict(list)
+        for x_batch, y_batch, p_batch in loader:
+            x_batch = x_batch.to(self.config.DEVICE)
+            y_batch = y_batch.to(self.config.DEVICE)
+            p_batch = p_batch.to(self.config.DEVICE)
+            p_batch_norm = self.normalizer.normalize(p_batch)
+
+            y_pred_f = self.f_theta(x_batch, p_batch)
+            loss_f = self.loss_fn(y_pred_f, y_batch)
+
+            p_pred_g = self.g_phi(x_batch, y_batch)
+            p_pred_g_norm = self.normalizer.normalize(p_pred_g)
+            loss_g = self.loss_fn(p_pred_g_norm, p_batch_norm)
+
+            total_loss = loss_f + loss_g
+            losses['total_loss'].append(total_loss.item())
+            losses['loss_f'].append(loss_f.item())
+            losses['loss_g'].append(loss_g.item())
+
+            if self.config.USE_CONSISTENCY_LOSS:
+                p_reconstructed_norm = self.g_phi(x_batch, y_pred_f)
+                loss_consistency = self.loss_fn(p_reconstructed_norm, p_batch_norm)
+                total_loss += self.config.CONSISTENCY_LOSS_LAMBDA * loss_consistency
+                losses['loss_consistency'].append(loss_consistency.item())
+
+        # 평균 손실 반환
+        return {k: np.mean(v) for k, v in losses.items()}
