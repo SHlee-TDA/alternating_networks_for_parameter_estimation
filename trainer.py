@@ -1,4 +1,8 @@
 # trainer.py
+import os
+import pickle
+import json
+
 import torch
 import torch.nn as nn
 from tqdm import tqdm
@@ -17,7 +21,11 @@ class Trainer:
             weight_decay=config.WEIGHT_DECAY
         )
         self.loss_fn = nn.MSELoss()
-
+        
+        # 결과 저장 경로
+        self.result_dir = os.path.join(config.RESULTS_DIR, config.SYSTEM_NAME, config.EXPERIMENT_NAME)
+        os.makedirs(self.results_path, exist_ok=True)
+        
     def train(self):
         print(f"Training models for {self.config.EXPERIMENT_NAME}...")
         for epoch in range(self.config.EPOCHS):
@@ -51,6 +59,23 @@ class Trainer:
                     
                 total_loss.backward()
                 self.optimizer.step()
+                
+        print(f"Training complete. Saving artifacts to {self.results_path}")
+        # 1. 모델 가중치 저장
+        torch.save(self.f_theta.state_dict(), os.path.join(self.results_path, 'f_theta.pth'))
+        torch.save(self.g_phi.state_dict(), os.path.join(self.results_path, 'g_phi.pth'))
+
+        # 2. Normalizer 저장 (추론 시 필수)
+        with open(os.path.join(self.results_path, 'normalizer.pkl'), 'wb') as f:
+            pickle.dump(self.normalizer, f)
+
+        # 3. 사용된 config 저장 (모델 구조 복원 시 필수)
+        config_dict = {k: v for k, v in self.config.__dict__.items() if not k.startswith('__') and not callable(v)}
+        config_dict['DEVICE'] = str(config_dict.get('DEVICE')) # non-serializable 변환
+        config_dict.pop('EXPERIMENTS', None) # 전체 리스트는 제외
+
+        with open(os.path.join(self.results_path, 'config_run.json'), 'w') as f:
+            json.dump(config_dict, f, indent=4)
         
         return self.f_theta, self.g_phi
     
