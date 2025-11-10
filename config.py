@@ -9,7 +9,7 @@ class Config:
     # =========================================================================
     # 여기서 시스템 이름을 변경하여 Lotka-Volterra와 SIR 실험을 전환합니다.
     # 사용 가능한 옵션: 'lotka_volterra', 'sir', 'nc_sir'
-    SYSTEM_NAME = 'lotka_volterra'
+    SYSTEM_NAME = 'ogtt_simul'
     
     # =========================================================================
     # 2. 실행 관리 (Execution Management)
@@ -36,7 +36,7 @@ class Config:
     NUM_SAMPLES = 10000     # 생성할 데이터 샘플의 총 개수
     TEST_SPLIT = 0.2        # 테스트 데이터셋의 비율
     BATCH_SIZE = 128        # 학습 시 미니배치 크기
-    EPOCHS = 2000          # 총 학습 에포크 수
+    EPOCHS = 10000          # 총 학습 에포크 수
     LEARNING_RATE = 1e-6    # 옵티마이저의 학습률
     WEIGHT_DECAY = 1e-5     # L2 정규화 (Weight Decay) 계수
     

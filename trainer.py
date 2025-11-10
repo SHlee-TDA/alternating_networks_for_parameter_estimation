@@ -103,10 +103,20 @@ class Trainer:
                     patience_counter = 0
                     
                     # Best 모델 가중치 저장 (선택적이지만 권장)
-                    print(f"  -> New best validation loss: {best_val_loss:.4f}. Saving best model.")
-                    torch.save(self.f_theta.state_dict(), os.path.join(self.results_path, 'f_theta_best.pth'))
-                    torch.save(self.g_phi.state_dict(), os.path.join(self.results_path, 'g_phi_best.pth'))
-                
+                    #print(f"  -> New best validation loss: {best_val_loss:.4f}. Saving best model.")
+                    os.makedirs(self.results_path, exist_ok=True)
+                    save_path = os.path.join(self.results_path, 'best_model_at_epoch_{}.pth'.format(epoch+1))
+                    try:
+                        torch.save({
+                            'f_theta_state_dict': self.f_theta.state_dict(),
+                            'g_phi_state_dict': self.g_phi.state_dict(),
+                            'optimizer_state_dict': self.optimizer.state_dict(),
+                            'epoch': epoch + 1,
+                            'best_val_loss': best_val_loss
+                        }, save_path)
+                    except Exception as e:
+                        print(f"  -> Warning: Could not save best model due to: {e}")
+                    
                 else:
                     # 개선 없음: patience 증가
                     patience_counter += 1

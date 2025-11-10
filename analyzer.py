@@ -31,8 +31,10 @@ class Analyzer:
         fig, ax = plt.subplots(figsize=(10, 6))
         epochs = range(1, len(self.history['train_total_loss']) + 1)
 
-        ax.plot(epochs, self.history['train_total_loss'], label='Train Total Loss', color='blue')
-        ax.plot(epochs, self.history['val_total_loss'], label='Validation Total Loss', color='orange', linestyle='--')
+        ax.plot(epochs, self.history['train_loss_f'], label='Train Loss of f_theta', color='blue')
+        ax.plot(epochs, self.history['train_loss_g'], label='Train Loss of g_phi', color='green')
+        ax.plot(epochs, self.history['val_loss_f'], label='Validation Loss of f_theta', color='orange', linestyle='--')
+        ax.plot(epochs, self.history['val_loss_g'], label='Validation Loss of g_phi', color='red', linestyle='--')
 
         ax.set_xlabel("Epochs")
         ax.set_ylabel("Loss")
