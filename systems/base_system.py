@@ -1,7 +1,11 @@
 from abc import ABC, abstractmethod
+import numpy as np
 
 class System(ABC):
-    """모든 ODE 시스템의 기본 구조를 정의하는 추상 베이스 클래스"""
+    """
+    모든 ODE 시스템의 기본 구조를 정의하는 추상 베이스 클래스
+    SDE 확장을 위해 drift와 diffusion 메서드를 분리함
+    """
     
     @property
     @abstractmethod
@@ -61,3 +65,12 @@ class System(ABC):
     def ode_func(t, y, params):
         """시스템의 ODE 함수"""
         pass
+
+    # ---- SDE Extension ----
+    def drift_func(self, t, y, params):
+        """SDE의 drift 함수 (기본적으로 ODE 함수와 동일)"""
+        return self.ode_func(t, y, params)
+    
+    def diffusion_func(self, t, y, params):
+        """SDE의 diffusion 함수 (기본적으로 0 행렬 반환)"""
+        return np.zeros_like(y)
