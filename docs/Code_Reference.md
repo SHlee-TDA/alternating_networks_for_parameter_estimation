@@ -1,5 +1,6 @@
 # 코드 레퍼런스 (Code Reference) - SDE 패치 영역
 
+
 ## 1. data_loader.py
 ### `class RealOGTTDataLoader`
 NIH OGTT 데이터셋을 로드하고 전처리하는 전용 클래스.
@@ -12,6 +13,14 @@ NIH OGTT 데이터셋을 로드하고 전처리하는 전용 클래스.
     - `Hidden Data (Insulin)`: `(N, 5, 1)`
     - `Parameters (si, sigma)`: `(N, 2)`
     - `Time Points`: `(5,)`
+
+### `class DataGenerator` (SDE Update):**
+- **입력:** `distribution_params.json` (있으면 Data-Driven Sampling, 없으면 Uniform).
+- **출력:** `data/{SYSTEM}/augmented_data_sde_{N}.npz` 파일로 저장.
+- **특징:**
+    - `USE_SDE=True`: Euler-Maruyama Solver 사용 (1분 간격 시뮬레이션 후 Subsampling).
+    - `USE_LAGRANGIAN=True`: 상태 변수 외에 Drift Term(도함수)을 Feature로 추가. 차원 `(N, T, 2)`.
+
 
 ## 2. noise_calibration.py
 ### `def calibrate_noise()`
@@ -37,3 +46,7 @@ SDE 확산 항($\sigma_{emp}$)을 결정하기 위해 실제 데이터의 불확
 - **`euler_maruyama(..., system=None)`:**
     - **입력:** `system` 객체를 선택적으로 받아 `state_bounds` 속성에 접근.
     - **Clamping:** 매 시간 스텝($\Delta t=1$분) 업데이트 직후, 상태 변수를 `[lower, upper]` 범위로 자름(Clip)으로써 수치적 폭주를 원천 차단.
+
+## 6. distribution_analysis.py (신규)
+- **`analyze_distributions()`:**
+    - NIH 데이터를 로드하여 $G_0, I_0, S_I, \sigma$에 대한 Log-Normal 분포 파라미터($s, loc, scale$)를 추정하고 JSON으로 저장.

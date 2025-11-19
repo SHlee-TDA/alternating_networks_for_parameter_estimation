@@ -8,9 +8,9 @@
 | :---: | :--- | :---: | :--- |
 | **Phase 1** | **문제 정의 및 기반 마련** | **완료** | `systems/base_system.py`에 `drift_func` 및 `diffusion_func` 인터페이스 정의 완료. |
 | **Phase 2** | **Noise Calibration** | **완료** | 실제 NIH 데이터를 로드하여 결정론적 궤적과 데이터 간의 잔차를 분석, $\sigma_{emp}$를 추정함. |
-| **Phase 3** | **SDE 모델링 및 Solver 구현** | **완료** | **`utils.py`**: Clamping이 적용된 안정적인 Euler-Maruyama Solver 구현. **`ogtt_simul.py`**: $\sigma(t)$ 보간 및 `state_bounds` 로직 구현. |
-| **Phase 4** | **데이터 증강 (Data Augmentation)** | **진행 예정** | `data_loader.py`의 `DataGenerator`를 SDE 모드로 확장하여 확률적 궤적 앙상블($P_{sde}$)을 대량 생성함. |
-| **Phase 5** | **모델 학습 및 검증** | **대기 중** | 확장된 $P_{sde}$ 데이터셋을 이용하여 Inverse Problem Solver (f_theta, g_phi)를 학습하고, Wasserstein Distance ($W_1$)를 사용해 $P_{sde} \approx P_{real}$ 검증을 수행함. |
+| **Phase 3** | **SDE 모델링 및 Solver 구현** | **완료** | Clamping 적용된 Euler-Maruyama Solver 구현 완료. |
+| **Phase 4** | **데이터 증강 (Data Augmentation)** | **완료 (Verified)** | **`data_loader.py`**: SDE Solver 통합, Rejection Sampling, `.npz` 저장/로드 구현 완료. **`distribution_analysis.py`**: 데이터 분포 분석 도구 구현. |
+| **Phase 5** | **모델 학습 및 검증** | **대기 중** | 확장된 데이터셋($P_{sde}$)으로 학습 수행 및 Wasserstein Distance 검증. |
 
 ---
 

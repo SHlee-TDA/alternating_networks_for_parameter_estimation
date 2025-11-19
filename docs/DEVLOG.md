@@ -37,3 +37,26 @@
   * **Upper Bound:** 실제 데이터 관측 최댓값의 110% ($1.1 \times Max_{obs}$).
   * `noise_calibration.py`에서 상한값을 계산하여 `calibrated_sigmas.json`에 저장하고, `euler_maruyama`에서 매 스텝마다 이를 적용.
 * **교훈:** 생물학적/물리적 모델의 SDE 시뮬레이션 시, 상태 변수가 유효 범위 내에 머물도록 강제하는 안전장치(Clamping)가 필수적임.
+
+
+## 2025-11-19: 데이터 증강 파이프라인 통합 (Phase 4)
+
+### 1. 변경 사항
+* **Data-Driven Sampling:**
+  * `distribution_analysis.py`: 실제 NIH 데이터의 $G_0, I_0, S_I, \sigma$ 분포를 Log-Normal로 피팅하고 `distribution_params.json` 생성.
+  * `data_loader.py`: `sample_from_lognorm` 함수 추가 (Rejection Sampling으로 양수 보장).
+* **DataGenerator 업그레이드:**
+  * `USE_SDE` 플래그에 따라 Euler-Maruyama Solver 호출.
+  * `USE_LAGRANGIAN` 플래그에 따라 Drift Term(=도함수) Feature 추가.
+  * 생성된 대량의 데이터를 `data/{SYSTEM}/` 폴더에 `.npz` 포맷으로 저장/로드하여 재사용성 확보.
+
+### 2. 트러블슈팅 (Troubleshooting)
+* **이슈 1:** `ValueError: not enough values to unpack`
+  * **원인:** `_generate_one_sample` 함수 인자는 4개(`dist_params` 추가)로 늘렸으나, 호출부(`args_list`)에서 3개만 넘김.
+  * **해결:** `args_list` 생성 시 `self.dist_params` 추가.
+* **이슈 2:** `AssertionError: Found non-positive Glucose values`
+  * **원인:** 테스트 코드가 데이터의 2번째 채널(미분값, $\dot{G}$)까지 농도($G$)로 착각하여 양수 검사를 수행함. 미분값은 음수일 수 있음.
+  * **해결:** 테스트 코드에서 농도(Index 0)와 미분(Index 1)을 분리하여 검사하도록 로직 수정.
+* **Note (Sim-to-Real Mismatch):**
+  * 현재 증강 데이터는 `(N, 5, 2)` (값 + 미분) 형태이나, 실제 NIH 데이터 로더는 `(N, 5, 1)` (값) 형태임.
+  * **Action Item:** 추후 학습 단계에서 실제 데이터 로더에도 수치 미분 등을 적용하여 차원을 일치시켜야 함.

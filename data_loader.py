@@ -1,89 +1,205 @@
 # data_loader.py
 from concurrent.futures import ProcessPoolExecutor
 import os
+import json
+import time
+from pathlib import Path
 
 import pandas as pd
 import numpy as np
 from scipy.integrate import solve_ivp
+from scipy import stats
 from torch.utils.data import TensorDataset, DataLoader, random_split
 import torch
 
+from utils import euler_maruyama
+from systems.ogtt_simul import OgttSimul
+
+# --- Helper Functions ---
+
 # External function for parallel data generation
 def _generate_one_sample(args):
-    system, config, seed = args
+    system, config, seed, dist_params = args
     
     np.random.seed(seed)
     
-    # Parameter sampling
-    params_dict = {
-        k: np.random.uniform(*v) 
-        for k, v in system.param_ranges.items()
-        }
-    
-    params_list = [
-        params_dict[p] 
-        for p in system.param_names
-        ]
+    # 1. Samping (Data-Driven or Uniform)
+    # dist_params가 있으면 Data-Driven Log-Normal sampling 사용 (SDE 모드 권장)
+    if dist_params is not None:
+        si = sample_from_lognorm(dist_params['si'])
+        sigma_p = sample_from_lognorm(dist_params['sigma'])
+        params_list = [si, sigma_p]
 
-    # Initial state sampling
-    y0 = system.sample_initial_conditions(params_dict)
-    
-    # Solve ODE
-    sol = solve_ivp(
-        fun=lambda t, y: system.ode_func(t, y, params_list),
-        t_span=system.t_span,
-        y0=y0,
-        t_eval=system.t_points 
-    )
-    
-    if not sol.success:
-        # Fallback: use last y value repeated
-        y_full = np.tile(sol.y[:, -1][:, None], (1, len(system.t_points)))
+        g0 = sample_from_lognorm(dist_params['G0'])
+        i0 = sample_from_lognorm(dist_params['I0'])
+
+        # 간소화: OgttSimul의 find_steady_state_N 로직을 호출하기 위해 임시 모델 생성
+        from systems.ogtt_simul import OGTTModel, ode_params, sys_params
+        temp_model = OGTTModel(ode_params, sys_params, {'si': si, 'sigma': sigma_p})
+        n5, n6 = temp_model.find_steady_state_N(g0)
+        
+        y0 = [g0, i0, n5, n6]
+
     else:
-        y_full = sol.y  # shape (n_vars, T)
+        # Parameter sampling
+        params_dict = {
+            k: np.random.uniform(*v) 
+            for k, v in system.param_ranges.items()
+            }
+        
+        params_list = [
+            params_dict[p] 
+            for p in system.param_names
+            ]
+        # Initial state sampling
+        y0 = system.sample_initial_conditions(params_dict)
+
+    n_vars = len(y0)
+    
+    # 2. Simulation (SDE vs ODE)
+    sys_instance = system() if isinstance(system, type) else system
+    if getattr(config, 'USE_SDE', False):
+        # SDE Solver: Euler-Maruyama
+        y_full = euler_maruyama(
+            sys_instance.drift_func,
+            sys_instance.diffusion_func,
+            sys_instance.t_span,
+            y0,
+            sys_instance.t_points,
+            params_list,
+            dt_sim=1.0,
+            system=sys_instance # Clamping bounds 접근용
+        )   # (n_vars, T)
+    # Solve ODE
+    else:
+        sol = solve_ivp(
+            fun=lambda t, y: system.ode_func(t, y, params_list),
+            t_span=system.t_span,
+            y0=y0,
+            t_eval=system.t_points 
+        )
+        
+        if not sol.success:
+            # Fallback: use last y value repeated
+            y_full = np.tile(sol.y[:, -1][:, None], (1, len(system.t_points)))
+        else:
+            y_full = sol.y  # shape (n_vars, T)
         
     # If Lagrangian method is used, compute derivatives at each time point
-    if config.USE_LAGRANGIAN:
+    if getattr(config, 'USE_LAGRANGIAN', False):
         t_points = system.t_points
         T = len(t_points)
         y_dot_full = np.zeros_like(y_full)
+
         for i in range(T):
             t_i = t_points[i]
             y_i = y_full[:, i]
-            # ode_func를 직접 호출하여 해당 시점의 도함수를 계산
-            y_dot_full[:, i] = system.ode_func(t_i, y_i, params_list)
+            # ode_func=drift_func를 직접 호출하여 해당 시점의 도함수를 계산
+            y_dot_full[:, i] = sys_instance.drift_func(t_i, y_i, params_list)
         y_full = np.concatenate([y_full, y_dot_full], axis=0)  # (n_vars*2, T)
     
     # Variable splitting
-    y_full_T = y_full.T  # (T, n_vars)
+    y_full_T = y_full.T  # (T, n_features)
     
-    obs_idx = [system.observed_var_idx]
-    if config.USE_LAGRANGIAN:
+    obs_idx = [sys_instance.observed_var_idx]
+    hid_idx = [sys_instance.hidden_var_idx]
+
+    if getattr(config, 'USE_LAGRANGIAN', False):
         # 관측 변수의 도함수 인덱스 추가
-        obs_idx += [idx + len(y0) for idx in obs_idx]
-    hid_idx = [system.hidden_var_idx]
+        obs_deriv_idx = [idx + n_vars for idx in obs_idx]
+        obs_idx += obs_deriv_idx
     
     X_obs = y_full_T[:, obs_idx] # (T, n_obs)
     Y_hid = y_full_T[:, hid_idx] # (T, n_hidden)
     
     return X_obs, Y_hid, params_list
     
+def sample_from_lognorm(dist_params, size=1, max_retries=100):
+    """
+    scipy.stats.lognorm에서 샘플링하되, 0 이하의 값이 나오면 Rejection Sampling 수행.
+    dist_params: {'s': ..., 'loc': ..., 'scale': ...}
+    """
+    s = dist_params['s']
+    loc = dist_params['loc']
+    scale = dist_params['scale']
+
+    samples = np.zeros(size)
+    remaining_indices = np.arange(size)
+
+    for _ in range(max_retries):
+        if len(remaining_indices) == 0:
+            break
+
+        current_n = len(remaining_indices)
+        # Scipy rvs returns samples in ORIGINAL scale (already shifted by loc)
+        new_samples = stats.lognorm.rvs(s=s, loc=loc, scale=scale, size=current_n)
+        
+        # Check positivity
+        valid_mask = new_samples > 1e-6 # 0보다 커야 함 (안전장치 1e-6)
+        
+        # Assign valid samples
+        valid_indices = remaining_indices[valid_mask]
+        samples[valid_indices] = new_samples[valid_mask]
+        
+        # Update remaining
+        remaining_indices = remaining_indices[~valid_mask]
+        
+    if len(remaining_indices) > 0:
+        # Fallback for extremely rare cases: force absolute value or mean
+        # print(f"Warning: {len(remaining_indices)} samples failed rejection sampling. Using absolute values.")
+        # Force positive by taking absolute or using mean (scale * exp(s^2/2) is roughly mean for loc=0)
+        samples[remaining_indices] = np.abs(stats.lognorm.rvs(s=s, loc=loc, scale=scale, size=len(remaining_indices))) + 1e-6
+        
+    return samples if size > 1 else samples[0]
 
 class DataGenerator:
     def __init__(self, system, config):
         self.system = system
         self.config = config
+        self.dist_params = None
+
+        # Data-Driven Sampling용 분포 파라미터 로드
+        dist_file = Path('distribution_params.json')
+        if dist_file.exists():
+            with open(dist_file, 'r') as f:
+                self.dist_params = json.load(f)
+            print("Loaded data-driven distribution parameters for sampling.")
+        else:
+            print("Data-driven distribution parameters file not found. Using uniform sampling.")
 
     def generate_data(self):
-            print(f"Generating data for {self.system.name} model...")
+            # Data Save
+            data_root = Path('data')
+            save_dir = data_root / self.config.SYSTEM_NAME
+            os.makedirs(save_dir, exist_ok=True)
+
+            suffix = "sde" if getattr(self.config, 'USE_SDE', False) else "ode"
+            filename = f"augmented_data_{suffix}_{self.config.NUM_SAMPLES}.npz"
+            save_path = save_dir / filename
+
+            if save_path.exists():
+                print(f"Loading existing data from {save_path}...")
+                try:
+                    with np.load(save_path) as data:
+                        observed_data = data['observed_data']
+                        hidden_data = data['hidden']
+                        params_data = data['params']
+                        t_points = data['t_points']
+                    print(f"Loaded {len(observed_data)} samples")
+                    return observed_data, hidden_data, params_data, t_points
+                except Exception as e:
+                    print(f"Failed to load existing data: {e}. Regenerating data...")
+
+            # Generating Data
+            print(f"Generating {self.config.NUM_SAMPLES} samples using {suffix.upper()} model...")
             num_samples = self.config.NUM_SAMPLES
             t_points = np.asarray(self.system.t_points)
             
             # 각 작업에 전달할 고유한 시드 생성
             seeds = np.random.randint(0, 100000, size=num_samples)
             
-            # 각 작업에 (system, config, seed) 튜플 전달
-            args_list = [(self.system, self.config, seeds[i]) for i in range(num_samples)]
+            # 각 작업에 (system, config, seed, dist_params) 튜플 전달
+            args_list = [(self.system, self.config, seeds[i], self.dist_params) for i in range(num_samples)]
             
             observed_data = []
             hidden_data = []
@@ -91,24 +207,87 @@ class DataGenerator:
 
             # 병렬 처리 실행
             # 사용할 CPU 코어 수 (None이면 가능한 모든 코어 사용)
-            num_workers = 8 
+            num_workers = min(8, os.cpu_count() or 1)
             print(f"Starting data generation with {num_workers} workers...")
             
+            start_time = time.time()
             with ProcessPoolExecutor(max_workers=num_workers) as executor:
                 # results는 (X_obs, Y_hid, params_list) 튜플의 리스트가 됨
                 results = list(executor.map(_generate_one_sample, args_list))
             
-            print("Data generation complete. Unpacking results...")
-            
+            print(f"Generation complete in {time.time() - start_time:.2f} seconds.")   
+
             # 결과 재조립
             for res in results:
                 observed_data.append(res[0])
                 hidden_data.append(res[1])
                 params_data.append(res[2])
+
+            observed_data = np.array(observed_data)
+            hidden_data = np.array(hidden_data)
+            params_data = np.array(params_data)
+
+            # Save
+            print(f"Saving data to {save_path}...")
+            np.savez_compressed(
+                save_path,
+                observed_data=observed_data,
+                hidden=hidden_data,
+                params=params_data,
+                t_points=t_points
+            )
                 
-            return (np.array(observed_data), np.array(hidden_data), np.array(params_data), t_points)
+            return observed_data, hidden_data, params_data, t_points
+
 
 def create_dataloaders(data_tuple, config):
+    # ... (기존 로직 유지) ...
+    # 단, DataGenerator가 반환하는 shape이 (N, T, 1)이므로 reshape 로직이 호환되어야 함.
+    # 기존 create_dataloaders는 (N, T, n_features)를 받아 (N, T*n_features)로 flattening 함.
+    # 따라서 호환됨.
+    X_obs, Y_hidden, P_true, t_points = data_tuple
+    N, T, n_features = X_obs.shape
+
+    # (N, T, n_features) -> (N, T * n_features)
+    X_flat = X_obs.reshape(N, -1)
+    
+    # Y_hidden 처리 (N, T, 1) -> (N, T*1)
+    if Y_hidden.ndim == 3:
+        Y_flat = Y_hidden.reshape(N, -1)
+    else:
+        Y_flat = Y_hidden # 이미 평탄화된 경우
+
+    X_tensor = torch.tensor(X_flat, dtype=torch.float32)
+    Y_tensor = torch.tensor(Y_flat, dtype=torch.float32)
+    P_tensor = torch.tensor(P_true, dtype=torch.float32)
+
+    dataset = TensorDataset(X_tensor, Y_tensor, P_tensor)
+    
+    # Split Train/Val/Test
+    test_size = int(config.TEST_SPLIT * N)
+    train_val_size = N - test_size
+    train_val_dataset, test_dataset = random_split(dataset, [train_val_size, test_size])
+    
+    val_split = 0.1 
+    val_size = int(val_split * train_val_size)
+    train_size = train_val_size - val_size
+    train_dataset, val_dataset = random_split(train_val_dataset, [train_size, val_size])
+    
+    train_loader = DataLoader(train_dataset, batch_size=config.BATCH_SIZE, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=config.BATCH_SIZE)
+    test_loader = DataLoader(test_dataset, batch_size=config.BATCH_SIZE)
+
+    # 초기 추측값 (Train Mean)
+    try:
+        indices = train_dataset.indices
+        p_initial_guess = P_tensor[indices].mean(dim=0).unsqueeze(0).to(config.DEVICE)
+    except AttributeError:
+        p_initial_guess = P_tensor[:train_size].mean(dim=0).unsqueeze(0).to(config.DEVICE)
+
+    return train_loader, val_loader, test_loader, p_initial_guess
+
+
+def create_dataloaders_(data_tuple, config):
     """
     data_tuple: (X_obs, Y_hidden, P_true, t_points)
       X_obs: ndarray shape (N, T, n_obs)
@@ -402,12 +581,6 @@ class OGTTModel:
 
         Equation:
         OGTT_flux = OGTT_bar * [Piecewise function based on time intervals]
-
-        # [Note: Vectorization Fix]
-        # scipy.solve_ivp의 BDF/LSODA 솔버는 Jacobian 계산 등을 위해 시간 t를 
-        # 스칼라가 아닌 벡터(array) 형태로 전달할 수 있습니다.
-        # 따라서 Python 기본 if문 대신 NumPy의 벡터 연산(np.select)을 사용해야 합니다.
-        # 절대 if 0 < t <= t1: 형태로 되돌리지 마세요!
         """
         p_ode = self.ode_params
         p_sys = self.sys_params
@@ -421,6 +594,11 @@ class OGTTModel:
 
         OGTT_bar = p_sys['OGTT_bar']
 
+        # [Note: Vectorization Fix]
+        # scipy.solve_ivp의 BDF/LSODA 솔버는 Jacobian 계산 등을 위해 시간 t를 
+        # 스칼라가 아닌 벡터(array) 형태로 전달할 수 있습니다.
+        # 따라서 Python 기본 if문 대신 NumPy의 벡터 연산(np.select)을 사용해야 합니다.
+        # 절대 if 0 < t <= t1: 형태로 되돌리지 마세요!
         if 0 < t <= t1:
             OGTT_flux = t * a1 / t1
         elif t1 < t <= t2:
