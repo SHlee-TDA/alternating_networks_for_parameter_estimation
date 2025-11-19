@@ -163,7 +163,11 @@ class OGTTModel:
         return dydt
 
     def simulate(self, t_span, initial_conditions, t_eval=None):
-        if t_eval==None:
+        # [Note: NumPy Array Comparison]
+        # t_eval은 numpy array일 수 있으므로 '== None'으로 비교하면 
+        # "The truth value of an array is ambiguous" 에러가 발생합니다.
+        # 반드시 'is None'을 사용하여 객체의 정체성을 비교해야 합니다.
+        if t_eval is None:
             t_eval = np.linspace(0, 120, 121)
 
         solution = solve_ivp(
@@ -207,17 +211,7 @@ class OGTTModel:
     def calculate_ogtt_flux(self, t):
         """
         Calculates the glucose infusion rate during an OGTT at time t.
-
-        Parameters:
-        t : float
-            Current time point.
-
-        Returns:
-        OGTT_flux : float
-            OGTT glucose infusion rate.
-
-        Equation:
-        OGTT_flux = OGTT_bar * [Piecewise function based on time intervals]
+        Vectorized version to handle both scalar and array inputs for t.
         """
         p_ode = self.ode_params
         p_sys = self.sys_params
@@ -231,14 +225,29 @@ class OGTTModel:
 
         OGTT_bar = p_sys['OGTT_bar']
 
-        if 0 < t <= t1:
-            OGTT_flux = t * a1 / t1
-        elif t1 < t <= t2:
-            OGTT_flux = ((t - t2) * (a2 - a1) / (t2 - t1)) + a2
-        elif t2 < t <= t3:
-            OGTT_flux = (t - t3) * (a3 - a2) / (t3 - t2)
-        else:
-            OGTT_flux = 0
+        # [Note: Vectorization Fix]
+        # scipy.solve_ivp의 BDF/LSODA 솔버는 Jacobian 계산 등을 위해 시간 t를 
+        # 스칼라가 아닌 벡터(array) 형태로 전달할 수 있습니다.
+        # 따라서 Python 기본 if문 대신 NumPy의 벡터 연산(np.select)을 사용해야 합니다.
+        # 절대 if 0 < t <= t1: 형태로 되돌리지 마세요!
+
+        # 조건을 리스트로 정의 (Vectorized Conditions)
+        condlist = [
+            (t > 0) & (t <= t1),
+            (t > t1) & (t <= t2),
+            (t > t2) & (t <= t3)
+        ]
+
+        # 각 조건별 계산식 정의
+        choicelist = [
+            t * a1 / t1,
+            ((t - t2) * (a2 - a1) / (t2 - t1)) + a2,
+            (t - t3) * (a3 - a2) / (t3 - t2)
+        ]
+
+        # np.select를 사용하여 조건에 맞는 값 선택 (기본값 0)
+        # t가 스칼라일 경우에도 정상 작동하도록 np.select 결과 사용
+        OGTT_flux = np.select(condlist, choicelist, default=0.0)
 
         return OGTT_bar * OGTT_flux
 

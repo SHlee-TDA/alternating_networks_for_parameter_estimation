@@ -2,6 +2,7 @@
 from concurrent.futures import ProcessPoolExecutor
 import os
 
+import pandas as pd
 import numpy as np
 from scipy.integrate import solve_ivp
 from torch.utils.data import TensorDataset, DataLoader, random_split
@@ -401,6 +402,12 @@ class OGTTModel:
 
         Equation:
         OGTT_flux = OGTT_bar * [Piecewise function based on time intervals]
+
+        # [Note: Vectorization Fix]
+        # scipy.solve_ivp의 BDF/LSODA 솔버는 Jacobian 계산 등을 위해 시간 t를 
+        # 스칼라가 아닌 벡터(array) 형태로 전달할 수 있습니다.
+        # 따라서 Python 기본 if문 대신 NumPy의 벡터 연산(np.select)을 사용해야 합니다.
+        # 절대 if 0 < t <= t1: 형태로 되돌리지 마세요!
         """
         p_ode = self.ode_params
         p_sys = self.sys_params
@@ -636,4 +643,79 @@ def find_steady_state_N(oglu0, model):
         return n5_ss, n6_ss
     except np.linalg.LinAlgError:
         return 1.0, 0.5
+
+class RealOGTTDataLoader:
+    """
+    NIH OGTT 데이터를 로드하고 전처리하는 클래스.
+    
+    정책:
+    1. Time Points: 15분 시점은 표준적이지 않으므로 제외하고 [0, 30, 60, 90, 120]만 사용함.
+    2. Missing Values: 결측치가 하나라도 있는 환자 데이터는 품질 보장을 위해 삭제함.
+    3. Parameters: 개별 환자의 BV 등은 계산하지 않고, 시스템 기본 파라미터를 따름.
+    """
+    def __init__(self, file_path, config):
+        self.file_path = file_path
+        self.config = config
+        self.t_points = np.array([0, 30, 60, 90, 120])  # 고정된 시간 지점
+
+
+    def load_data(self):
+        print(f"Loading real OGTT data from {self.file_path}...")
+        try:
+            df = pd.read_excel(self.file_path)
+        except:
+            df = pd.read_csv(self.file_path)
+
+        # column def
+        glu_cols = ['oglu0', 'oglu30', 'oglu60', 'oglu90', 'oglu120']
+        ins_cols = ['oins0', 'oins30', 'oins60', 'oins90', 'oins120']
+        param_cols = ['si', 'sigma']
+
+        required_cols = glu_cols + ins_cols + param_cols
+
+        # Drop NA
+        original_len = len(df)
+        df_clean = df[required_cols].dropna()
+        print(f"Data cleaning: Dropped {original_len - len(df_clean)} rows with missing values.")
+        print(f"Remaining samples: {len(df_clean)}")
+
+        # Numpy 변환
+        glu_data = df_clean[glu_cols].values  # (N, 5)
+        observed_data = glu_data[:, :, np.newaxis] # (N, 5, 1)
+
+        ins_data = df_clean[ins_cols].values  # (N, 5)
+        hidden_data = ins_data[:, :, np.newaxis]  # (N, 5, 1)
+
+        params_data = df_clean[param_cols].values  # (N, 2)
+        return observed_data, hidden_data, params_data, self.t_points
+    
+def create_real_data_loaders(data_tuple, config):
+    X_obs, Y_hid, P_true, t_points = data_tuple
+
+    # 텐서 변환
+    X_tensor = torch.tensor(X_obs, dtype=torch.float32)  # (N, T, 1)
+    Y_tensor = torch.tensor(Y_hid, dtype=torch.float32)  # (N, T, 1)
+    P_tensor = torch.tensor(P_true, dtype=torch.float32) # (N, n_params)
+    
+    # MLP 입력을 위한 평탄화 (N, T, 1) -> (N, T*1)
+    N, T, _ = X_tensor.shape
+    X_flat = X_tensor.reshape(N, -1)
+    Y_flat = Y_tensor.reshape(N, -1) # Y도 필요시 평탄화
+    
+    # 데이터셋 생성
+    dataset = TensorDataset(X_flat, Y_flat, P_tensor)
+    
+    # Train/Test Split
+    train_size = int(0.8 * N)
+    test_size = N - train_size
+    train_d, test_d = random_split(dataset, [train_size, test_size])
+    
+    train_loader = DataLoader(train_d, batch_size=config.BATCH_SIZE, shuffle=True)
+    test_loader = DataLoader(test_d, batch_size=config.BATCH_SIZE, shuffle=False)
+    
+    # 초기 추측값 계산
+    indices = train_d.indices
+    p_initial_guess = P_tensor[indices].mean(dim=0).unsqueeze(0).to(config.DEVICE)
+    
+    return train_loader, test_loader, p_initial_guess
 
