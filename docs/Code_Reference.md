@@ -23,6 +23,8 @@ SDE 확산 항($\sigma_{emp}$)을 결정하기 위해 실제 데이터의 불확
     4. 모든 잔차의 표준편차를 $\sigma_{emp}$로 산출하여, SDE 확산 모델의 인풋으로 사용될 상수를 결정.
 - **결과:** Glucose 및 Insulin에 대한 스칼라 $\sigma_{emp}$ 값.
 
+- **기능 추가 (2025-11-19):** `calibrate_noise()` 실행 시 전체 데이터셋에서 Glucose와 Insulin의 최댓값을 찾아 `bounds` 정보를 함께 `calibrated_sigmas.json`에 저장함.
+
 ## 3. systems/base_system.py (확장)
 - **`def drift_func(t, y, params)`:** SDE의 결정론적 부분. (기존 `ode_func`와 동일)
 - **`def diffusion_func(t, y, params)`:** SDE의 확률적 부분. **(SDE 구현 시 이 메서드를 오버라이딩해야 함)**
@@ -30,3 +32,8 @@ SDE 확산 항($\sigma_{emp}$)을 결정하기 위해 실제 데이터의 불확
 ## 4. systems/ogtt_simul.py (수정)
 - **`def calculate_ogtt_flux(self, t)`:** `scipy.solve_ivp`의 벡터 입력에 대응하기 위해 `if/elif` 구조를 `np.select` 기반의 벡터화 연산으로 수정.
 - **`def simulate(self, ..., t_eval=None)`:** `t_eval` 인자 체크 시 `if t_eval == None`을 `if t_eval is None`으로 수정하여 NumPy 배열과의 비교 에러 방지.
+
+## 5. utils.py (SDE Solver)
+- **`euler_maruyama(..., system=None)`:**
+    - **입력:** `system` 객체를 선택적으로 받아 `state_bounds` 속성에 접근.
+    - **Clamping:** 매 시간 스텝($\Delta t=1$분) 업데이트 직후, 상태 변수를 `[lower, upper]` 범위로 자름(Clip)으로써 수치적 폭주를 원천 차단.

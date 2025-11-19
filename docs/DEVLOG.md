@@ -1,6 +1,6 @@
 # 개발 로그 (Development Log)
 
-## 2025-11-19: NIH 데이터 로더 구현 및 수치해석 이슈 해결 (Final)
+## 2025-11-18: NIH 데이터 로더 구현 및 수치해석 이슈 해결 (Final)
 
 ### 1. 주요 변경 사항 (Phase 2 완료)
 * **RealOGTTDataLoader 구현:** NIH 데이터 로드, 15분 시점 제외, 결측치(NaN) 포함 샘플 삭제 정책 적용.
@@ -16,3 +16,24 @@
     1.  `calculate_ogtt_flux`: `if/elif` 구조를 `np.select` 기반의 벡터화 연산으로 변경하여 해결.
     2.  `simulate`: `if t_eval == None`을 `if t_eval is None`으로 수정하여 해결.
 * **교훈:** NumPy/SciPy 환경에서 조건문과 객체 비교(`==` vs `is`) 사용 시 항상 입력 차원(스칼라/벡터)과 객체 유형(Array/None)을 확인할 것.
+
+
+
+## 2025-11-19: SDE Solver 구현 및 수치 안정화 (Phase 3)
+
+### 1. 변경 사항
+* **SDE Solver Core 구현:**
+  * `utils.py`: Euler-Maruyama Solver 구현 (1분 간격 고해상도 시뮬레이션).
+  * `systems/ogtt_simul.py`: `diffusion_func` 구현 (4x4 대각 확산 행렬, $\sigma(t)$ 선형 보간 적용).
+  * `noise_calibration.py`: 각 시점별(t=0, 30...) 잔차 분포 분석 기능 추가 및 상한값($Y_{max}$) 계산 로직 추가.
+
+### 2. 트러블슈팅 (Troubleshooting) - Numerical Instability
+* **이슈:** SDE Solver 테스트 중 `RuntimeWarning: overflow encountered` 및 결과값 `NaN` 발생.
+* **원인:**
+  * SDE의 확률적 노이즈가 상태 변수(특히 Glucose $G$)를 물리적 범위를 벗어난 값(음수 또는 극단적 양수)으로 밀어냄.
+  * `calculate_GF` 함수의 $(G - shGF)^{16}$ 항이 오버플로우를 일으키며 `inf` 및 `nan`을 유발.
+* **해결:** **물리적 제약 조건(Physical Clamping)** 도입.
+  * **Lower Bound:** $10^{-6}$ (음수 방지 및 0으로 나누기 방지).
+  * **Upper Bound:** 실제 데이터 관측 최댓값의 110% ($1.1 \times Max_{obs}$).
+  * `noise_calibration.py`에서 상한값을 계산하여 `calibrated_sigmas.json`에 저장하고, `euler_maruyama`에서 매 스텝마다 이를 적용.
+* **교훈:** 생물학적/물리적 모델의 SDE 시뮬레이션 시, 상태 변수가 유효 범위 내에 머물도록 강제하는 안전장치(Clamping)가 필수적임.

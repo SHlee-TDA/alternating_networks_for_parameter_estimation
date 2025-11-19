@@ -7,8 +7,8 @@
 | 단계 (Phase) | 역할 (Role) | 구현 상태 (Code Status) | 담당 모듈 및 다음 계획 |
 | :---: | :--- | :---: | :--- |
 | **Phase 1** | **문제 정의 및 기반 마련** | **완료** | `systems/base_system.py`에 `drift_func` 및 `diffusion_func` 인터페이스 정의 완료. |
-| **Phase 2** | **Noise Calibration** | **진행 완료** | 실제 NIH 데이터를 로드하여 결정론적 궤적과 데이터 간의 잔차를 분석, $\sigma_{emp}$를 추정함. |
-| **Phase 3** | **SDE 모델링 및 Solver 구현** | **진행 예정** | Phase 2에서 얻은 $\sigma_{emp}$를 확산 계수로 사용. Euler-Maruyama SDE Solver를 `utils.py`에 구현하고, `systems/ogtt_simul.py`의 `diffusion_func`에 $\sigma_{emp}$를 반영함. |
+| **Phase 2** | **Noise Calibration** | **완료** | 실제 NIH 데이터를 로드하여 결정론적 궤적과 데이터 간의 잔차를 분석, $\sigma_{emp}$를 추정함. |
+| **Phase 3** | **SDE 모델링 및 Solver 구현** | **완료** | **`utils.py`**: Clamping이 적용된 안정적인 Euler-Maruyama Solver 구현. **`ogtt_simul.py`**: $\sigma(t)$ 보간 및 `state_bounds` 로직 구현. |
 | **Phase 4** | **데이터 증강 (Data Augmentation)** | **진행 예정** | `data_loader.py`의 `DataGenerator`를 SDE 모드로 확장하여 확률적 궤적 앙상블($P_{sde}$)을 대량 생성함. |
 | **Phase 5** | **모델 학습 및 검증** | **대기 중** | 확장된 $P_{sde}$ 데이터셋을 이용하여 Inverse Problem Solver (f_theta, g_phi)를 학습하고, Wasserstein Distance ($W_1$)를 사용해 $P_{sde} \approx P_{real}$ 검증을 수행함. |
 
@@ -20,3 +20,7 @@
 | :---: | :--- | :--- |
 | `data_loader.RealOGTTDataLoader` | NIH 데이터를 `(Glucose: Observed, Insulin: Hidden)` 형태로 로드. **정책:** 15분 시점 제외, 결측치 샘플 삭제. `DataGenerator`와 동일한 튜플 구조 반환. | `X_obs`, `Y_hid`, `P_true`, `t_points` |
 | `noise_calibration.py` | `P_true`를 Ground Truth로 간주하고 결정론적 OGTT 모델을 시뮬레이션. 실제 관측값 (`X_obs`, `Y_hid`)과의 잔차를 계산하여 노이즈의 경험적 표준편차 ($\sigma_{emp}$)를 산출. | $\sigma_{emp}^{Glucose}$, $\sigma_{emp}^{Insulin}$ |
+
+## Phase 3 상세: SDE Core Implementation
+* **시간 의존성:** 확산 계수 $\sigma(t)$는 관측 시점 사이를 선형 보간(Linear Interpolation)하여 연속성을 보장함.
+* **수치 안정성:** 발산을 막기 위해 $Y_t \in [10^{-6}, 1.1 \times Y_{max}]$ 범위로 매 스텝 Clamping 적용.

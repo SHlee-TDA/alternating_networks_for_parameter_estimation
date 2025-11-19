@@ -39,69 +39,77 @@ class Normalizer:
         return p_norm
     
 
-def euler_maruyama(drift_func, diffusion_func, 
-                   t_span, y_0, t_eval,
-                   params,
-                   seed=None):
+def euler_maruyama(drift_func, diffusion_func, t_span, y0, t_eval, params, seed=None, dt_sim=1.0, system=None):
     """
-    Euler-Maruyama method for solving SDEs.
-    dY_t = f(t, Y_t) dt + g(t, Y_t) dW_t
-    where f is the drift function and g is the diffusion function.
-
+    Euler-Maruyama method for solving SDEs with fine time steps.
+    
     Args:
-        drift_func: function(t, y, params) -> dy/dt (deterministic)
-        diffusion_func: function(t, y, params) -> noise scale (stochastic)
-        t_span: tuple (t0, tf)
-        y_0: initial condition (numpy array)
-        t_eval: time points to evaluate the solution (numpy array)
-        params: parameters for the SDE functions
-        seed: random seed for reproducibility
+        drift_func: function(t, y, params) -> dy/dt (4-vector)
+        diffusion_func: function(t, y, params) -> diffusion matrix (4x4)
+        t_span: [t_start, t_end]
+        y0: initial state vector (4-vector)
+        t_eval: time points to evaluate (e.g., [0, 30, 60, 90, 120])
+        params: system parameters (si, sigma)
+        seed: random seed
+        dt_sim: Internal simulation time step (e.g., 1.0 minute)
+        system: (Optional) System instance to retrieve state_bounds for clamping.
     
     Returns:
-        y_eval: solution at t_eval points (shape: [n_vars, len(t_eval)])
+        y_full: Solution at every dt_sim step (shape: [n_vars, n_steps])
     """
     if seed is not None:
         np.random.seed(seed)
-
+    
     t_start, t_end = t_span
-    # t_eval 간격보다 더 촘촘한 시뮬레이션 step이 필요할 수 있음 (여기선 간소화)
-    # 실제로는 dt를 t_eval 간격보다 작게 설정하고 보간해야 정밀하지만, 
-    # 데이터 생성용으로는 t_eval 간격을 dt로 써도 무방한 경우가 많음.
+    n_vars = len(y0)
+    
+    # Clamping Bounds 설정
+    lower_bounds = -np.inf
+    upper_bounds = np.inf
 
-    dt_values = np.diff(t_eval)
-    mean_dt = np.mean(dt_values)
-    if not np.allclose(dt_values, mean_dt, rtol=1e-2):
-        # Time step이 불규칙하면 가장 작은 간격을 기준으로 보간 필요 (TODO)
-        pass
+    # 시스템 객체에서 bounds 정보가 있으면 가져옴
+    if system is not None and hasattr(system, 'state_bounds'):
+        lower_bounds, upper_bounds = system.state_bounds
+    else:
+        # 기본 하한 안전장치 (User defined 1e-6)
+        lower_bounds = 1e-6
 
-    dt = mean_dt
-    n_steps = len(t_eval)
-    n_vars = len(y_0)
-
-    y_curr = np.array(y_0)
-    y_res = [y_curr.copy()]
-
-    current_t = t_eval[0]
-
-    for i in range(1, n_steps):
-        target_t = eval[i]
-        dt = target_t - current_t
-
-        # Drift and Diffusion 계산
-        f = np.array(drift_func(current_t, y_curr, params))
-        g = np.array(diffusion_func(current_t, y_curr, params))
-
-        # Brownian Motion increment dW ~ N(0, dt)
-        dW = np.random.normal(0.0, np.sqrt(dt, size=n_vars))
-
-        # Update state
-        y_next = y_curr + f * dt + g * dW
-
+    # 시뮬레이션에 사용할 전체 시간 스텝
+    n_total_steps = int(np.ceil((t_end - t_start) / dt_sim))
+    t_sim_points = np.linspace(t_start, t_end, n_total_steps + 1)
+    dt_actual = t_sim_points[1] - t_sim_points[0]
+    
+    y_curr = np.array(y0)
+    y_res = [y_curr.copy()] # (t=0)
+    
+    for i in range(n_total_steps):
+        t_curr = t_sim_points[i]
+        
+        # Drift & Diffusion 계산
+        f = np.array(drift_func(t_curr, y_curr, params))
+        G = np.array(diffusion_func(t_curr, y_curr, params))
+        
+        # Brownian Motion increment dW ~ N(0, dt_actual)
+        # G가 4x4 행렬이므로, dW는 4개의 독립적인 Wiener Process를 가짐 (4-vector)
+        dW = np.random.normal(0, np.sqrt(dt_actual), size=n_vars)
+        
+        # SDE Update: Y_{t+dt} = Y_t + f*dt + G * dW
+        # G * dW는 행렬-벡터 곱셈 (4x4) * (4x1) -> (4x1)
+        y_next = y_curr + f * dt_actual + G @ dW
+        # Clamping (Physical Constraints)
+        y_next = np.clip(y_next, lower_bounds, upper_bounds)
+        
         y_res.append(y_next.copy())
         y_curr = y_next
-        current_t = target_t
 
-    return np.array(y_res).T  # shape: [n_vars, n_steps]
+    y_full = np.array(y_res).T # (n_vars, n_sim_steps+1)
+    
+    # t_eval 위치로 보간 (Resampling)
+    y_out = np.zeros((n_vars, len(t_eval)))
+    for k in range(n_vars):
+        y_out[k, :] = np.interp(t_eval, t_sim_points, y_full[k, :])
+        
+    return y_out
 
 
 def get_git_hash():

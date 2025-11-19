@@ -22,7 +22,30 @@ config = load_config(CONFIG_FILE_PATH)
 sys_params = load_config(SYS_FILE_PATH)
 ode_params = config['ode_params']
 
+# SDE 확산 계수 관련 로직 (파일 로드)
+# Assumption: calibrated_sigmas.json is in the Project Root (1 level up from systems/)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent 
+SIGMAS_FILE_PATH = PROJECT_ROOT / 'calibrated_sigmas.json'
 
+try:
+    with open(SIGMAS_FILE_PATH, 'r') as f: # 수정된 경로 사용
+        calibrated_sigmas = json.load(f)
+        SIGMA_T_POINTS = np.array(calibrated_sigmas['t_points'])
+        SIGMA_G_T = np.array(calibrated_sigmas['sigma_G'])
+        SIGMA_I_T = np.array(calibrated_sigmas['sigma_I'])
+        BOUNDS_MAP = calibrated_sigmas['bounds']
+except FileNotFoundError:
+    print("Warning: calibrated_sigmas.json not found. Using zero diffusion.")
+    SIGMA_T_POINTS = np.array([0, 120])
+    SIGMA_G_T = np.array([0.0, 0.0])
+    SIGMA_I_T = np.array([0.0, 0.0])
+    BOUNDS_MAP = {'G_max': 1e9, 'I_max': 1e9}
+
+def interpolate_sigma(t, t_points, sigma_t):
+    """
+    1차원 선형 보간을 사용하여 임의의 시간 t에서의 sigma 값을 계산
+    """
+    return np.interp(t, t_points, sigma_t)
 
 class OgttSimul(System):
     """
@@ -69,6 +92,52 @@ class OgttSimul(System):
         dydt = model.GI_ode_universal(t, [G, I, N5, N6])
         return dydt       
 
+    def drift_func(self, t, y, params):
+        return self.ode_func(t, y, params)
+    
+    def diffusion_func(self, t, y, params):
+        """
+        SDE의 확산 행렬 G(t, y). 시간 t에 의존하며, G, I에만 노이즈 적용 (2x2 대각선).
+        상태 변수: (G, I, N5, N6)
+        """
+        # 현재 시간 t에서의 보간된 시그마 값
+        sigma_g_t = interpolate_sigma(t, SIGMA_T_POINTS, SIGMA_G_T)
+        sigma_i_t = interpolate_sigma(t, SIGMA_T_POINTS, SIGMA_I_T)
+        
+        # 4개의 상태 변수와 4개의 Wiener Process (dW_1 to dW_4)가 있다고 가정
+        # SDE 형식 dY_t = f(t, Y_t)dt + G(t, Y_t)dW_t 에서
+        # G(t, Y)는 (n_vars, n_wiener_processes) 행렬.
+        # 여기서는 dW_1=G, dW_2=I, dW_3=N5, dW_4=N6 에 해당하는 노이즈로 간주하고 
+        # 대각 행렬 (4x4)로 가정합니다.
+        
+        n_vars = 4
+        diffusion_matrix = np.zeros((n_vars, n_vars))
+        
+        # G(0, 0)와 I(1, 1)에만 시간 의존적 시그마 적용
+        diffusion_matrix[0, 0] = sigma_g_t # Glucose
+        diffusion_matrix[1, 1] = sigma_i_t # Insulin
+        
+        # N5(2, 2)와 N6(3, 3)는 0 (Steady state로 움직이는 변수의 노이즈 무시)
+        
+        return diffusion_matrix
+    
+    @property
+    def state_bounds(self):
+        """
+        상태 변수의 물리적 하한 및 상한을 정의합니다.
+        Returns:
+            lower_bounds: [G_min, I_min, N5_min, N6_min]
+            upper_bounds: [G_max, I_max, N5_max, N6_max]
+        """
+        # 하한: 10^-6 (0 대신 안전장치)
+        lower = np.array([1e-6, 1e-6, 1e-6, 1e-6])
+        
+        # 상한: G, I는 데이터 기반 10% 마진 적용, N5, N6는 충분히 큰 값(1e9)으로 설정
+        g_max = BOUNDS_MAP.get('G_max', 1e9)
+        i_max = BOUNDS_MAP.get('I_max', 1e9)
+        upper = np.array([g_max, i_max, 1e9, 1e9])
+        
+        return lower, upper
 
 class OGTTModel:
     """
