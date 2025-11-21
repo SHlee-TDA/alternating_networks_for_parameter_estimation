@@ -6,6 +6,8 @@ import pandas as pd
 import uuid
 from datetime import datetime
 import git
+from abc import ABC, abstractmethod
+from scipy.interpolate import UnivariateSpline, lagrange
 
 class Normalizer:
     """
@@ -39,6 +41,109 @@ class Normalizer:
         return p_norm
     
 
+class DerivativeEstimator(ABC):
+    """
+    관측된 OGTT 데이터로부터 미분값(기울기)을 추정하는 추상 클래스.
+    구체적인 추정 방법은 서브클래스에서 구현해야 합니다.
+    """
+    @abstractmethod
+    def estimate(self, t, y):
+        """        
+        Args:
+            t (np.array): 시간 축 (Time points)
+            y (np.array): 관측 값 (Observed values)
+        Returns:
+            dydt (np.array): 추정된 미분값 배열
+        """
+        pass
+
+class SplineDerivative(DerivativeEstimator):
+    """
+    Smoothing Spline(Reinsch)을 사용하여 미분
+    - s: Smoothing factor (None이면 interpolation)
+    - k: Degree of spline (default=3, cubic)
+    """
+    def __init__(self, s=None, k=3):
+        self.s = s
+        self.k = k
+
+    def estimate(self, t, y):
+        try:
+            # 데이터 개수가 k보다 작으면 에러가 발생하므로 방어 코드 작성
+            if len(t) <= self.k:
+                k_safe = len(t) - 1
+            else:
+                k_safe = self.k
+            
+            spline = UnivariateSpline(t, y, s=self.s, k=k_safe)
+            return spline.derivative()(t)
+        except Exception as e:
+            print(f"[SplineDerivative] Error in spline fitting: {e}. Returning zeros.")
+            return np.zeros_like(y)
+
+class PolynomialDerivative(DerivativeEstimator):
+    """
+    Polynomial regression을 이용한 미분
+    - order: 다항식 차수 (defaut=3)
+    """
+    def __init__(self, order=3):
+        self.order = order
+    
+    def estimate(self, t, y):
+        try:
+            order_safe = min(self.order, len(t) - 1)
+            poly_coeffs = np.polyfit(t, y, order_safe)
+            deriv_coeffs = np.polyder(poly_coeffs)
+            return np.polyval(deriv_coeffs, t)
+        except Exception as e:
+            print(f"[PolynomialDerivative] Error in polynomial fitting: {e}. Returning zeros.")
+            return np.zeros_like(y)  
+        
+class LagrangeDerivative(DerivativeEstimator):
+    """
+    Lagrange 보간법을 이용한 미분
+    """
+    def estimate(self, t, y):
+        try:
+            poly = lagrange(t, y)
+            deriv_poly = np.polyder(poly)
+            return deriv_poly(t)
+        except Exception as e:
+            print(f"[LagrangeDerivative] Error in Lagrange fitting: {e}. Returning zeros.")
+            return np.zeros_like(y)
+
+class FiniteDifferenceDerivative(DerivativeEstimator):
+    """
+    유한차분법을 이용한 미분
+    """
+    def estimate(self, t, y):
+        return np.gradient(y, t)
+    
+# Factory Function
+def get_derivative_estimator(method='spline', **kwargs):
+    """
+    미분 추정기 객체를 생성하는 팩토리 함수.
+    
+    Args:
+        method (str): 'spline', 'poly', 'lagrange', 'finite_diff' 중 하나.
+        kwargs: 각 추정기별 추가 파라미터.
+        
+    Returns:
+        DerivativeEstimator 인스턴스
+    """
+    estimators = {
+        'spline': SplineDerivative,
+        'poly': PolynomialDerivative,
+        'lagrange': LagrangeDerivative,
+        'finite_diff': FiniteDifferenceDerivative
+    }
+    
+    if method not in estimators:
+        raise ValueError(f"Unknown derivative method: {method_name}. Choose from {list(estimators.keys())}")
+    
+    return estimators[method](**kwargs)
+    
+# Euler-Maruyama SDE Solver
 def euler_maruyama(drift_func, diffusion_func, t_span, y0, t_eval, params, seed=None, dt_sim=1.0, system=None):
     """
     Euler-Maruyama method for solving SDEs with fine time steps.

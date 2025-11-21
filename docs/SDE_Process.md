@@ -9,7 +9,8 @@
 | **Phase 1** | **문제 정의 및 기반 마련** | **완료** | `systems/base_system.py`에 `drift_func` 및 `diffusion_func` 인터페이스 정의 완료. |
 | **Phase 2** | **Noise Calibration** | **완료** | 실제 NIH 데이터를 로드하여 결정론적 궤적과 데이터 간의 잔차를 분석, $\sigma_{emp}$를 추정함. |
 | **Phase 3** | **SDE 모델링 및 Solver 구현** | **완료** | Clamping 적용된 Euler-Maruyama Solver 구현 완료. |
-| **Phase 4** | **데이터 증강 (Data Augmentation)** | **완료 (Verified)** | **`data_loader.py`**: SDE Solver 통합, Rejection Sampling, `.npz` 저장/로드 구현 완료. **`distribution_analysis.py`**: 데이터 분포 분석 도구 구현. |
+| **Phase 4** | **데이터 증강 (Data Augmentation)** | **완료** | **`data_loader.py`**: SDE Solver 통합, Rejection Sampling, `.npz` 저장/로드 구현 완료. **`distribution_analysis.py`**: 데이터 분포 분석 도구 구현. |
+| **Phase 5 (Prep)** | **Real Data 차원 일치화** | **완료** (Spline 적용) |
 | **Phase 5** | **모델 학습 및 검증** | **대기 중** | 확장된 데이터셋($P_{sde}$)으로 학습 수행 및 Wasserstein Distance 검증. |
 
 ---

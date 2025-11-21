@@ -8,12 +8,14 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 from scipy.integrate import solve_ivp
+from scipy.interpolate import UnivariateSpline
 from scipy import stats
 from torch.utils.data import TensorDataset, DataLoader, random_split
 import torch
 
-from utils import euler_maruyama
+from utils import euler_maruyama, get_derivative_estimator
 from systems.ogtt_simul import OgttSimul
+
 
 # --- Helper Functions ---
 
@@ -836,7 +838,50 @@ class RealOGTTDataLoader:
         self.config = config
         self.t_points = np.array([0, 30, 60, 90, 120])  # 고정된 시간 지점
 
-
+        # Derivative estimation logic
+        root_path = Path(__file__).resolve().parent
+        sigma_path = root_path / 'calibrated_sigmas.json'
+        
+        try:
+            with open(sigma_path, 'r') as f:
+                calib_data = json.load(f)
+                self.s_glucose = np.sum(np.array(calib_data['sigma_G'])**2)
+                self.s_insulin = np.sum(np.array(calib_data['sigma_I'])**2)
+                print(f"[RealLoader] Loaded sigma for smoothing: s_G={self.s_glucose:.2f}, s_I={self.s_insulin:.2f}")
+        except FileNotFoundError:
+            print("[RealLoader] Warning: 'calibrated_sigmas.json' not found. Using default smoothing (s=None).")
+            self.s_glucose = None
+            self.s_insulin = None
+            
+        method = getattr(config, 'DERIVATIVE_METHOD', 'spline')
+        
+        # 메서드별 파라미터 설정
+        kwargs = {}
+        if method == 'spline':
+            pass
+        elif method == 'poly':
+            kwargs['order'] = 3
+            
+        self.derivative_method = method
+        self.derivative_kwargs = kwargs
+        print(f"[RealLoader] Derivative Method: {self.derivative_method}")
+            
+            
+    def _add_derivative_feature(self, t, y, s_val):
+        N, T = y.shape
+        y_aug = np.zeros((N, T, 2))
+        
+        if self.derivative_method == 'spline':
+            estimator = get_derivative_estimator('spline', s=s_val)
+        else:
+            estimator = get_derivative_estimator(self.derivative_method, **self.derivative_kwargs)
+        
+        for i in range(N):
+            y_aug[i, :, 0] = y[i, :]
+            y_aug[i, :, 1] = estimator.estimate(t, y[i, :])
+        
+        return y_aug
+        
     def load_data(self):
         print(f"Loading real OGTT data from {self.file_path}...")
         try:
@@ -857,14 +902,19 @@ class RealOGTTDataLoader:
         print(f"Data cleaning: Dropped {original_len - len(df_clean)} rows with missing values.")
         print(f"Remaining samples: {len(df_clean)}")
 
-        # Numpy 변환
-        glu_data = df_clean[glu_cols].values  # (N, 5)
-        observed_data = glu_data[:, :, np.newaxis] # (N, 5, 1)
-
-        ins_data = df_clean[ins_cols].values  # (N, 5)
-        hidden_data = ins_data[:, :, np.newaxis]  # (N, 5, 1)
-
+        glucose_raw = df_clean[glu_cols].values  # (N, 5)
+        insulin_raw = df_clean[ins_cols].values  # (N, 5)
         params_data = df_clean[param_cols].values  # (N, 2)
+        
+        if getattr(self.config, 'USE_LAGRANGIAN', False):
+            # (N, 5) -> (N, 5, 2)
+            observed_data = self._add_derivative_feature(self.t_points, glucose_raw, self.s_glucose)
+            # Hidden 변수(Insulin)는 DataGenerator와의 호환성을 위해 미분 미포함 (N, 5, 1)
+            hidden_data = insulin_raw[:, :, np.newaxis]
+        else:
+            observed_data = glucose_raw[:, :, np.newaxis]  # (N, 5, 1)
+            hidden_data = insulin_raw[:, :, np.newaxis]  # (N, 5, 1)
+        
         return observed_data, hidden_data, params_data, self.t_points
     
 def create_real_data_loaders(data_tuple, config):

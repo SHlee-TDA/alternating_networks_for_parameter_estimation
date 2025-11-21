@@ -60,3 +60,27 @@
 * **Note (Sim-to-Real Mismatch):**
   * 현재 증강 데이터는 `(N, 5, 2)` (값 + 미분) 형태이나, 실제 NIH 데이터 로더는 `(N, 5, 1)` (값) 형태임.
   * **Action Item:** 추후 학습 단계에서 실제 데이터 로더에도 수치 미분 등을 적용하여 차원을 일치시켜야 함.
+
+
+## 2025-11-21: 데이터 증강 파이프라인 통합 (Phase 4)
+
+### 1. 변경 사항
+* **Data-Driven Sampling:**
+  * `distribution_analysis.py`: 실제 데이터 분포(Log-Normal) 파라미터 추출.
+  * `data_loader.py`: Rejection Sampling을 적용한 데이터 생성 로직 구현.
+* **DataGenerator 업그레이드:**
+  * SDE Solver(Euler-Maruyama) 통합.
+  * `.npz` 파일 저장/로드 시스템 구축.
+
+### 2. 트러블슈팅 (Troubleshooting)
+* **이슈:** 테스트 중 `AssertionError: Found non-positive Glucose values` 발생.
+* **원인:** `DataGenerator`가 반환하는 데이터는 `(농도, 미분)` 2채널인데, 테스트 코드가 미분값(기울기)까지 포함하여 양수 검사를 수행함. (혈당이 떨어질 때 미분값은 음수임)
+* **해결:** 테스트 코드에서 농도(Index 0)와 미분(Index 1)을 분리하여, 농도만 양수 검사를 수행하도록 수정.
+
+## 2025-11-21: 실제 데이터 차원 일치화 (Phase 5 Prep)
+
+### 1. 변경 사항
+* **RealOGTTDataLoader 고도화:**
+  * `utils.get_derivative_estimator`를 통해 미분 전략(Spline, Poly 등)을 선택할 수 있도록 유연성 확보.
+  * `Spline Smoothing`을 기본값으로 적용하여 실제 데이터 차원을 `(N, 5, 2)`로 확장. 증강 데이터와 호환성 확보.
+  * `tests/test_real_loader.py`를 통해 미분값 생성 및 차원 일치 검증 완료.
