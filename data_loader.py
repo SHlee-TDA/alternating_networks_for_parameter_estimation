@@ -21,7 +21,7 @@ from systems.ogtt_simul import OgttSimul
 
 # External function for parallel data generation
 def _generate_one_sample(args):
-    system, config, seed, dist_params = args
+    system, config, seed, dist_params, diff_scale = args
     
     np.random.seed(seed)
     
@@ -60,8 +60,13 @@ def _generate_one_sample(args):
     
     # 2. Simulation (SDE vs ODE)
     sys_instance = system() if isinstance(system, type) else system
+    sys_instance.diffusion_scale = diff_scale
+ 
+        
+    
     if getattr(config, 'USE_SDE', False):
         # SDE Solver: Euler-Maruyama
+        print(f"[DEBUG Worker] diffusion_scale: {getattr(sys_instance, 'diffusion_scale', 'Missing')}")
         y_full = euler_maruyama(
             sys_instance.drift_func,
             sys_instance.diffusion_func,
@@ -170,8 +175,8 @@ class DataGenerator:
             print("Data-driven distribution parameters file not found. Using uniform sampling.")
 
     def generate_data(self):
-            scale_val = getattr(self.config, 'DIFFUSION_SCALE', 'Not Found')
-            print(f"[DEBUG] Config DIFFUSION_SCALE: {scale_val}")
+            #scale_val = getattr(self.config, 'DIFFUSION_SCALE', 'Not Found')
+            #print(f"[DEBUG] Config DIFFUSION_SCALE: {scale_val}")
             # Data Save
             data_root = Path('data')
             save_dir = data_root / self.config.SYSTEM_NAME
@@ -208,7 +213,7 @@ class DataGenerator:
             seeds = np.random.randint(0, 100000, size=num_samples)
             
             # 각 작업에 (system, config, seed, dist_params) 튜플 전달
-            args_list = [(self.system, self.config, seeds[i], self.dist_params) for i in range(num_samples)]
+            args_list = [(self.system, self.config, seeds[i], self.dist_params, scale_factor) for i in range(num_samples)]
             
             observed_data = []
             hidden_data = []
