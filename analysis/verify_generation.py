@@ -159,6 +159,15 @@ def plot_dimension_reduction(real_flat, ode_flat, sde_flat, method='pca', save_p
 def verify_generation():
     print("=== Verifying SDE Data Generation & Distribution ===")
     
+    # [추가] 기존 캐시 파일 삭제 (설정 변경 반영을 위해 필수)
+    cache_dir = project_root / 'data' / 'ogtt_simul'
+    for f in cache_dir.glob("*.npz"):
+        try:
+            os.remove(f)
+            print(f"[Clean] Removed cached file: {f.name}")
+        except:
+            pass
+    
     # 1. 설정 및 데이터 로드
     config = Config()
     print(f"[DEBUG] Verify Config DIFFUSION_SCALE: {getattr(config, 'DIFFUSION_SCALE', 'Not Set')}")
@@ -186,7 +195,7 @@ def verify_generation():
     X_ode, Y_ode, _, _ = gen_ode.generate_data()
     G_ode, I_ode = X_ode[:, :, 0], Y_ode[:, :, 0]
     
-    # C. SDE Data
+    # C. SDE Data 
     print("\n[3] Generating SDE Data...")
     config_sde = copy.deepcopy(config)
     config_sde.USE_SDE = True

@@ -81,7 +81,10 @@ class OgttSimul(System):
     t_points = np.array([0, 30, 60, 90, 120])
     observed_var_idx = 0  # glucose
     hidden_var_idx = 1    # insulin
+    
+    bias_scale = 1.0
     diffusion_scale = 1.0
+    
     
     def sample_initial_conditions(self, params_dict):
         # I found that sampling from log-normal fits better to real NIH OGTT data
@@ -123,9 +126,10 @@ class OgttSimul(System):
         mu_i = np.interp(t, SIGMA_T_POINTS, MU_I_T)
         
         # 3. Bias 추가 (리스트 복사 후 수정)
+        scale = self.bias_scale
         dydt_corrected = list(dydt_ode)
-        dydt_corrected[0] += mu_g # Glucose
-        dydt_corrected[1] += mu_i # Insulin
+        dydt_corrected[0] += scale * mu_g # Glucose
+        dydt_corrected[1] += scale * mu_i # Insulin
         
         return dydt_corrected
     
@@ -315,8 +319,7 @@ class OGTTModel:
 
     def calculate_ogtt_flux(self, t):
         """
-        Calculates the glucose infusion rate during an OGTT at time t.
-        Vectorized version to handle both scalar and array inputs for t.
+        OGTT Flux 계산 (Debug Version)
         """
         p_ode = self.ode_params
         p_sys = self.sys_params
@@ -327,34 +330,45 @@ class OGTTModel:
         a1 = p_ode['a1']
         a2 = p_ode['a2']
         a3 = p_ode['a3']
-
         OGTT_bar = p_sys['OGTT_bar']
+        
+        # [디버깅] 파라미터가 제대로 로드되었는지 확인 (최초 1회만 출력됨)
+        #if not hasattr(self, '_params_checked'):
+        #    print(f"[DEBUG Params] t1={t1}, OGTT_bar={OGTT_bar}")
+        #    self._params_checked = True
 
-        # [Note: Vectorization Fix]
-        # scipy.solve_ivp의 BDF/LSODA 솔버는 Jacobian 계산 등을 위해 시간 t를 
-        # 스칼라가 아닌 벡터(array) 형태로 전달할 수 있습니다.
-        # 따라서 Python 기본 if문 대신 NumPy의 벡터 연산(np.select)을 사용해야 합니다.
-        # 절대 if 0 < t <= t1: 형태로 되돌리지 마세요!
+        flux = 0.0
+        
+        # 스칼라/벡터 분기 처리
+        if np.isscalar(t):
+            if 0 < t <= t1:
+                flux = t * a1 / t1
+            elif t1 < t <= t2:
+                flux = ((t - t2) * (a2 - a1) / (t2 - t1)) + a2
+            elif t2 < t <= t3:
+                flux = (t - t3) * (a3 - a2) / (t3 - t2)
+            else:
+                flux = 0.0
+            
+            # [디버깅] Flux가 0이 아니어야 할 시간대에 0인지 확인
+            #if 0 < t < t3 and flux == 0.0:
+            #    print(f"[WARNING] Flux is 0 at t={t}! Check condition logic.")
+                
+        else:
+            # 벡터 처리 (기존 로직)
+            condlist = [
+                (t > 0) & (t <= t1),
+                (t > t1) & (t <= t2),
+                (t > t2) & (t <= t3)
+            ]
+            choicelist = [
+                t * a1 / t1,
+                ((t - t2) * (a2 - a1) / (t2 - t1)) + a2,
+                (t - t3) * (a3 - a2) / (t3 - t2)
+            ]
+            flux = np.select(condlist, choicelist, default=0.0)
 
-        # 조건을 리스트로 정의 (Vectorized Conditions)
-        condlist = [
-            (t > 0) & (t <= t1),
-            (t > t1) & (t <= t2),
-            (t > t2) & (t <= t3)
-        ]
-
-        # 각 조건별 계산식 정의
-        choicelist = [
-            t * a1 / t1,
-            ((t - t2) * (a2 - a1) / (t2 - t1)) + a2,
-            (t - t3) * (a3 - a2) / (t3 - t2)
-        ]
-
-        # np.select를 사용하여 조건에 맞는 값 선택 (기본값 0)
-        # t가 스칼라일 경우에도 정상 작동하도록 np.select 결과 사용
-        OGTT_flux = np.select(condlist, choicelist, default=0.0)
-
-        return OGTT_bar * OGTT_flux
+        return OGTT_bar * flux
 
     def calculate_HGP(self, I):
         """

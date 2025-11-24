@@ -77,7 +77,7 @@ class Config:
     TEST_SPLIT = 0.2
     BATCH_SIZE = 128
     EPOCHS = 10000
-    LEARNING_RATE = 1e-6
+    LEARNING_RATE = 1e-4
     WEIGHT_DECAY = 1e-5
     
     USE_EARLY_STOPPING = True
@@ -93,7 +93,13 @@ class Config:
     # [Phase 5 설정] Lagrangian 및 미분 방법
     USE_LAGRANGIAN = True         # 미분값(Derivative)을 Feature로 사용
     DERIVATIVE_METHOD = 'spline'  # 실제 데이터 미분 시 Spline Smoothing 사용
-    DIFFUSION_SCALE = 0.0
+    
+    AUGMENTATION_FACTOR = 30
+    SDE_SCALE_FACTORS = {
+        'bias_scale': 1.0,
+        'diffusion_scale': 1.27
+    }
+    
     
     # =========================================================================
     # 5. 모델 구조 설정 (Model Architecture)

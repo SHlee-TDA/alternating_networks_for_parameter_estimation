@@ -139,7 +139,7 @@ def get_derivative_estimator(method='spline', **kwargs):
     }
     
     if method not in estimators:
-        raise ValueError(f"Unknown derivative method: {method_name}. Choose from {list(estimators.keys())}")
+        raise ValueError(f"Unknown derivative method: {method}. Choose from {list(estimators.keys())}")
     
     return estimators[method](**kwargs)
     

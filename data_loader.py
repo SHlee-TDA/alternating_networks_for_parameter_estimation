@@ -21,105 +21,95 @@ from systems.ogtt_simul import OgttSimul
 
 # External function for parallel data generation
 def _generate_one_sample(args):
-    system, config, seed, dist_params, diff_scale = args
+    # [수정] 인자에 aug_factor 추가
+    system, config, seed, dist_params, bias_scale, diffusion_scale, aug_factor = args 
     
     np.random.seed(seed)
     
-    # 1. Samping (Data-Driven or Uniform)
-    # dist_params가 있으면 Data-Driven Log-Normal sampling 사용 (SDE 모드 권장)
+    # 1. Sampling (한 번만 수행 -> 파라미터 고정)
     if dist_params is not None:
         si = sample_from_lognorm(dist_params['si'])
         sigma_p = sample_from_lognorm(dist_params['sigma'])
         params_list = [si, sigma_p]
-
+        
         g0 = sample_from_lognorm(dist_params['G0'])
         i0 = sample_from_lognorm(dist_params['I0'])
-
-        # 간소화: OgttSimul의 find_steady_state_N 로직을 호출하기 위해 임시 모델 생성
+        
         from systems.ogtt_simul import OGTTModel, ode_params, sys_params
         temp_model = OGTTModel(ode_params, sys_params, {'si': si, 'sigma': sigma_p})
         n5, n6 = temp_model.find_steady_state_N(g0)
-        
         y0 = [g0, i0, n5, n6]
-
     else:
-        # Parameter sampling
-        params_dict = {
-            k: np.random.uniform(*v) 
-            for k, v in system.param_ranges.items()
-            }
-        
-        params_list = [
-            params_dict[p] 
-            for p in system.param_names
-            ]
-        # Initial state sampling
+        params_dict = {k: np.random.uniform(*v) for k, v in system.param_ranges.items()}
+        params_list = [params_dict[p] for p in system.param_names]
         y0 = system.sample_initial_conditions(params_dict)
 
     n_vars = len(y0)
     
-    # 2. Simulation (SDE vs ODE)
+    # 2. Simulation Loop (Augmentation)
+    results_obs = []
+    results_hid = []
+    
+    # SDE 모드가 아니면 증강은 의미가 없으므로 1회만 수행
+    actual_aug_factor = aug_factor if getattr(config, 'USE_SDE', False) else 1
+    
     sys_instance = system() if isinstance(system, type) else system
-    sys_instance.diffusion_scale = diff_scale
- 
-        
+    sys_instance.bias_scale = bias_scale
+    sys_instance.diffusion_scale = diffusion_scale # Scale 주입
     
-    if getattr(config, 'USE_SDE', False):
-        # SDE Solver: Euler-Maruyama
-        print(f"[DEBUG Worker] diffusion_scale: {getattr(sys_instance, 'diffusion_scale', 'Missing')}")
-        y_full = euler_maruyama(
-            sys_instance.drift_func,
-            sys_instance.diffusion_func,
-            sys_instance.t_span,
-            y0,
-            sys_instance.t_points,
-            params_list,
-            dt_sim=1.0,
-            system=sys_instance # Clamping bounds 접근용
-        )   # (n_vars, T)
-    # Solve ODE
-    else:
-        sol = solve_ivp(
-            fun=lambda t, y: system.ode_func(t, y, params_list),
-            t_span=system.t_span,
-            y0=y0,
-            t_eval=system.t_points 
-        )
+    for k in range(actual_aug_factor):
+        # 각 반복마다 다른 노이즈가 생성되도록 seed 관리 (Global seed는 위에서 설정됨)
+        # euler_maruyama 내부에서 np.random을 쓰므로, 루프만 돌리면 다른 궤적이 나옴
         
-        if not sol.success:
-            # Fallback: use last y value repeated
-            y_full = np.tile(sol.y[:, -1][:, None], (1, len(system.t_points)))
+        if getattr(config, 'USE_SDE', False):
+            y_full = euler_maruyama(
+                sys_instance.drift_func,
+                sys_instance.diffusion_func,
+                sys_instance.t_span,
+                y0,
+                sys_instance.t_points,
+                params_list,
+                dt_sim=0.01, # [중요] 고해상도 유지
+                system=sys_instance
+            )
         else:
-            y_full = sol.y  # shape (n_vars, T)
+            sol = solve_ivp(
+                fun=lambda t, y: system.ode_func(t, y, params_list),
+                t_span=system.t_span,
+                y0=y0,
+                t_eval=system.t_points 
+            )
+            y_full = sol.y if sol.success else np.tile(sol.y[:, -1][:, None], (1, len(system.t_points)))
+
+        # Lagrangian Feature
+        if getattr(config, 'USE_LAGRANGIAN', False):
+            t_points = sys_instance.t_points
+            T = len(t_points)
+            y_dot_full = np.zeros_like(y_full)
+            for i in range(T):
+                t_i = t_points[i]
+                y_i = y_full[:, i]
+                y_dot_full[:, i] = sys_instance.drift_func(t_i, y_i, params_list)
+            y_full = np.concatenate([y_full, y_dot_full], axis=0)
+
+        # Formatting
+        y_full_T = y_full.T
+        obs_idx = [sys_instance.observed_var_idx]
+        hid_idx = [sys_instance.hidden_var_idx]
+
+        if getattr(config, 'USE_LAGRANGIAN', False):
+            obs_deriv_idx = [idx + n_vars for idx in obs_idx]
+            obs_idx += obs_deriv_idx
         
-    # If Lagrangian method is used, compute derivatives at each time point
-    if getattr(config, 'USE_LAGRANGIAN', False):
-        t_points = system.t_points
-        T = len(t_points)
-        y_dot_full = np.zeros_like(y_full)
-
-        for i in range(T):
-            t_i = t_points[i]
-            y_i = y_full[:, i]
-            # ode_func=drift_func를 직접 호출하여 해당 시점의 도함수를 계산
-            y_dot_full[:, i] = sys_instance.drift_func(t_i, y_i, params_list)
-        y_full = np.concatenate([y_full, y_dot_full], axis=0)  # (n_vars*2, T)
+        X_obs = y_full_T[:, obs_idx]
+        Y_hid = y_full_T[:, hid_idx]
+        
+        results_obs.append(X_obs)
+        results_hid.append(Y_hid)
     
-    # Variable splitting
-    y_full_T = y_full.T  # (T, n_features)
-    
-    obs_idx = [sys_instance.observed_var_idx]
-    hid_idx = [sys_instance.hidden_var_idx]
-
-    if getattr(config, 'USE_LAGRANGIAN', False):
-        # 관측 변수의 도함수 인덱스 추가
-        obs_deriv_idx = [idx + n_vars for idx in obs_idx]
-        obs_idx += obs_deriv_idx
-    
-    X_obs = y_full_T[:, obs_idx] # (T, n_obs)
-    Y_hid = y_full_T[:, hid_idx] # (T, n_hidden)
-    
-    return X_obs, Y_hid, params_list
+    # 리스트 반환 (DataGenerator에서 풀어서 저장)
+    # params_list는 고정이므로 하나만 반환해도 되지만, 데이터 짝을 맞추기 위해 복제해서 반환
+    return results_obs, results_hid, [params_list] * actual_aug_factor
     
 def sample_from_lognorm(dist_params, size=1, max_retries=100):
     """
@@ -175,83 +165,96 @@ class DataGenerator:
             print("Data-driven distribution parameters file not found. Using uniform sampling.")
 
     def generate_data(self):
-            #scale_val = getattr(self.config, 'DIFFUSION_SCALE', 'Not Found')
-            #print(f"[DEBUG] Config DIFFUSION_SCALE: {scale_val}")
-            # Data Save
-            data_root = Path('data')
-            save_dir = data_root / self.config.SYSTEM_NAME
-            os.makedirs(save_dir, exist_ok=True)
+        #scale_val = getattr(self.config, 'DIFFUSION_SCALE', 'Not Found')
+        #print(f"[DEBUG] Config DIFFUSION_SCALE: {scale_val}")
+        # Data Save
+        data_root = Path('data')
+        save_dir = data_root / self.config.SYSTEM_NAME
+        os.makedirs(save_dir, exist_ok=True)
 
-            suffix = "sde" if getattr(self.config, 'USE_SDE', False) else "ode"
-            filename = f"augmented_data_{suffix}_{self.config.NUM_SAMPLES}.npz"
-            save_path = save_dir / filename
+        suffix = "sde" if getattr(self.config, 'USE_SDE', False) else "ode"
+        filename = f"augmented_data_{suffix}_{self.config.NUM_SAMPLES}.npz"
+        save_path = save_dir / filename
 
-            if save_path.exists():
-                print(f"Loading existing data from {save_path}...")
-                try:
-                    with np.load(save_path) as data:
-                        observed_data = data['observed_data']
-                        hidden_data = data['hidden']
-                        params_data = data['params']
-                        t_points = data['t_points']
-                    print(f"Loaded {len(observed_data)} samples")
-                    return observed_data, hidden_data, params_data, t_points
-                except Exception as e:
-                    print(f"Failed to load existing data: {e}. Regenerating data...")
+        if save_path.exists():
+            print(f"Loading existing data from {save_path}...")
+            try:
+                with np.load(save_path) as data:
+                    observed_data = data['observed_data']
+                    hidden_data = data['hidden']
+                    params_data = data['params']
+                    t_points = data['t_points']
+                print(f"Loaded {len(observed_data)} samples")
+                return observed_data, hidden_data, params_data, t_points
+            except Exception as e:
+                print(f"Failed to load existing data: {e}. Regenerating data...")
 
-            # Generating Data
-            print(f"Generating {self.config.NUM_SAMPLES} samples using {suffix.upper()} model...")
-            num_samples = self.config.NUM_SAMPLES
-            t_points = np.asarray(self.system.t_points)
-            
-            scale_factor = getattr(self.config, 'DIFFUSION_SCALE', 1.0)
-            
-            self.system.diffusion_scale = scale_factor
-            print(f"Applied Diffusion Scale: {scale_factor}")
-            
-            # 각 작업에 전달할 고유한 시드 생성
-            seeds = np.random.randint(0, 100000, size=num_samples)
-            
-            # 각 작업에 (system, config, seed, dist_params) 튜플 전달
-            args_list = [(self.system, self.config, seeds[i], self.dist_params, scale_factor) for i in range(num_samples)]
-            
-            observed_data = []
-            hidden_data = []
-            params_data = []
+        # Generating Data
+        print(f"Generating {self.config.NUM_SAMPLES} samples using {suffix.upper()} model...")
+        num_samples = self.config.NUM_SAMPLES
+        t_points = np.asarray(self.system.t_points)
+        
+        # SDE scaling 
+        scale_factor = getattr(self.config, 'SDE_SCALE_FACTORS', {'bias_scale': 1.0, 'diffusion_scale': 1.0})
+        
+        bias_scale = getattr(scale_factor, 'bias_scale', 1.0)
+        diffusion_scale = getattr(scale_factor, 'diffusion_scale', 1.0)
+        
+        self.system.bias_scale = bias_scale
+        self.system.diffusion_scale = diffusion_scale
+        print(f"Applied SDE Scaling: {scale_factor}")
+        
+        
+        # Augmentation Factor
+        aug_factor = getattr(self.config, 'AUGMENTATION_FACTOR', 1)        # 각 작업에 전달할 고유한 시드 생성
+        print(f"Generating samples... (N={self.config.NUM_SAMPLES}, Aug={aug_factor})")
+        print(f"Total # = {self.config.NUM_SAMPLES * aug_factor} ")
+        
+        seeds = np.random.randint(0, 100000, size=num_samples)
+        
+        # 각 작업에 (system, config, seed, dist_params) 튜플 전달
+        args_list = [(self.system, self.config, seeds[i], self.dist_params, bias_scale, diffusion_scale, aug_factor) for i in range(num_samples)]
+        
+        observed_data = []
+        hidden_data = []
+        params_data = []
 
-            # 병렬 처리 실행
-            # 사용할 CPU 코어 수 (None이면 가능한 모든 코어 사용)
-            num_workers = min(8, os.cpu_count() or 1)
-            print(f"Starting data generation with {num_workers} workers...")
+        # 병렬 처리 실행
+        # 사용할 CPU 코어 수 (None이면 가능한 모든 코어 사용)
+        num_workers = min(8, os.cpu_count() or 1)
+        print(f"Starting data generation with {num_workers} workers...")
+        
+        start_time = time.time()
+        with ProcessPoolExecutor(max_workers=num_workers) as executor:
+            # results는 (X_obs, Y_hid, params_list) 튜플의 리스트가 됨
+            results = list(executor.map(_generate_one_sample, args_list))
+        
+        print(f"Generation complete in {time.time() - start_time:.2f} seconds.")   
+
+        # 결과 재조립
+        for res in results:
+            # res[0], res[1], res[2]는 각각 길이가 aug_factor인 리스트임
+            observed_data.extend(res[0])
+            hidden_data.extend(res[1])
+            params_data.extend(res[2])
+
+        observed_data = np.array(observed_data)
+        hidden_data = np.array(hidden_data)
+        params_data = np.array(params_data)
+
+        print(f"Total Generated Samples: {len(observed_data)}")
+
+        # Save
+        print(f"Saving data to {save_path}...")
+        np.savez_compressed(
+            save_path,
+            observed_data=observed_data,
+            hidden=hidden_data,
+            params=params_data,
+            t_points=t_points
+        )
             
-            start_time = time.time()
-            with ProcessPoolExecutor(max_workers=num_workers) as executor:
-                # results는 (X_obs, Y_hid, params_list) 튜플의 리스트가 됨
-                results = list(executor.map(_generate_one_sample, args_list))
-            
-            print(f"Generation complete in {time.time() - start_time:.2f} seconds.")   
-
-            # 결과 재조립
-            for res in results:
-                observed_data.append(res[0])
-                hidden_data.append(res[1])
-                params_data.append(res[2])
-
-            observed_data = np.array(observed_data)
-            hidden_data = np.array(hidden_data)
-            params_data = np.array(params_data)
-
-            # Save
-            print(f"Saving data to {save_path}...")
-            np.savez_compressed(
-                save_path,
-                observed_data=observed_data,
-                hidden=hidden_data,
-                params=params_data,
-                t_points=t_points
-            )
-                
-            return observed_data, hidden_data, params_data, t_points
+        return observed_data, hidden_data, params_data, t_points
 
 
 def create_dataloaders(data_tuple, config):
