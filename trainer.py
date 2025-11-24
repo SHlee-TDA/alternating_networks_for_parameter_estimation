@@ -102,10 +102,13 @@ class Trainer:
                     best_val_loss = current_val_loss
                     patience_counter = 0
                     
-                    # Best 모델 가중치 저장 (선택적이지만 권장)
-                    #print(f"  -> New best validation loss: {best_val_loss:.4f}. Saving best model.")
+                    # Best 모델 가중치 저장
                     os.makedirs(self.results_path, exist_ok=True)
-                    save_path = os.path.join(self.results_path, 'best_model_at_epoch_{}.pth'.format(epoch+1))
+                    
+                    # [수정] 매번 새로운 파일을 만들지 않고 'best_model.pth'로 덮어씌웁니다.
+                    # 이전 코드: save_path = os.path.join(self.results_path, 'best_model_at_epoch_{}.pth'.format(epoch+1))
+                    save_path = os.path.join(self.results_path, 'best_model.pth')
+                    
                     try:
                         torch.save({
                             'f_theta_state_dict': self.f_theta.state_dict(),
@@ -114,6 +117,8 @@ class Trainer:
                             'epoch': epoch + 1,
                             'best_val_loss': best_val_loss
                         }, save_path)
+                        # 저장 확인용 로그가 필요하다면 주석 해제
+                        # print(f"  -> Saved best model (Loss: {best_val_loss:.4f}) at epoch {epoch+1}")
                     except Exception as e:
                         print(f"  -> Warning: Could not save best model due to: {e}")
                     

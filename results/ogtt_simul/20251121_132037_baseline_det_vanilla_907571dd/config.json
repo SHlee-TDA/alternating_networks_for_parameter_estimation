@@ -1,0 +1,8 @@
+{
+    "USE_SDE": false,
+    "USE_LAGRANGIAN": true,
+    "EXPERIMENT_NAME": "baseline_det_vanilla",
+    "USE_SPECTRAL_NORM": false,
+    "USE_CONSISTENCY_LOSS": false,
+    "DEVICE": "cpu"
+}

@@ -1,0 +1,8 @@
+{
+    "USE_SDE": false,
+    "USE_LAGRANGIAN": true,
+    "EXPERIMENT_NAME": "20251121_230809_baseline_det_consistency_loss_ba6dedf7",
+    "USE_SPECTRAL_NORM": false,
+    "USE_CONSISTENCY_LOSS": true,
+    "DEVICE": "None"
+}

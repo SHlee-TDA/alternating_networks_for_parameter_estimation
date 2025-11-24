@@ -1,0 +1,8 @@
+{
+    "USE_SDE": true,
+    "USE_LAGRANGIAN": true,
+    "EXPERIMENT_NAME": "20251123_075209_hybrid_sim_val_spectral_norm_d53ac879",
+    "USE_SPECTRAL_NORM": true,
+    "USE_CONSISTENCY_LOSS": false,
+    "DEVICE": "None"
+}

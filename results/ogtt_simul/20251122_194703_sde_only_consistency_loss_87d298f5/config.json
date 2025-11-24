@@ -1,0 +1,8 @@
+{
+    "USE_SDE": true,
+    "USE_LAGRANGIAN": true,
+    "EXPERIMENT_NAME": "sde_only_consistency_loss",
+    "USE_SPECTRAL_NORM": false,
+    "USE_CONSISTENCY_LOSS": true,
+    "DEVICE": "cpu"
+}

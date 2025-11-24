@@ -1,0 +1,8 @@
+{
+    "USE_SDE": true,
+    "USE_LAGRANGIAN": true,
+    "EXPERIMENT_NAME": "20251122_204242_sde_only_full_method_8ba54b8c",
+    "USE_SPECTRAL_NORM": true,
+    "USE_CONSISTENCY_LOSS": true,
+    "DEVICE": "None"
+}

@@ -1,0 +1,8 @@
+{
+    "USE_SDE": true,
+    "USE_LAGRANGIAN": true,
+    "EXPERIMENT_NAME": "hybrid_sim_val_full_method",
+    "USE_SPECTRAL_NORM": true,
+    "USE_CONSISTENCY_LOSS": true,
+    "DEVICE": "cpu"
+}
