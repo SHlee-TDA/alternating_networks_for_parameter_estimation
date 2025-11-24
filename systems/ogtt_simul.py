@@ -13,6 +13,40 @@ BASE_DIR = current_file_path.resolve().parent
 CONFIG_FILE_PATH = BASE_DIR / 'config.json' # pathlib의 '/' 연산자는 경로를 안전하게 합쳐줍니다.
 SYS_FILE_PATH = BASE_DIR / 'system_params.json'
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent 
+SDE_PARAM_FILE_PATH = PROJECT_ROOT / 'data' / 'parameters' / 'calibrated_sde_params.json'
+
+# --- 2. SDE 파라미터 로드 (전역 변수 초기화) ---
+# 기본값 설정 (파일 없을 시 대비)
+SIGMA_T_POINTS = np.array([0, 120])
+SIGMA_G_T = np.array([0.0, 0.0])
+SIGMA_I_T = np.array([0.0, 0.0])
+MU_G_T = np.array([0.0, 0.0])
+MU_I_T = np.array([0.0, 0.0]) 
+BOUNDS_MAP = {'G_max': 1e9, 'I_max': 1e9}
+
+try:
+    # 파일이 존재하면 로드하여 덮어쓰기
+    with open(SDE_PARAM_FILE_PATH, 'r') as f:
+        calib_data = json.load(f)
+        
+        SIGMA_T_POINTS = np.array(calib_data['t_points'])
+        SIGMA_G_T = np.array(calib_data['sigma_G'])
+        SIGMA_I_T = np.array(calib_data['sigma_I'])
+        
+        # Drift Bias 로드
+        if 'mu_G' in calib_data:
+            MU_G_T = np.array(calib_data['mu_G'])
+            MU_I_T = np.array(calib_data['mu_I'])
+            
+        if 'bounds' in calib_data:
+            BOUNDS_MAP = calib_data['bounds']
+            
+    # print(f"Loaded SDE params from {SDE_PARAM_FILE_PATH}")
+
+except FileNotFoundError:
+    print(f"Warning: {SDE_PARAM_FILE_PATH} not found. Using default (zero) diffusion.")
+    
 def load_config(config_path):
     with open(config_path, 'r') as f:
         config = json.load(f)
@@ -22,24 +56,8 @@ config = load_config(CONFIG_FILE_PATH)
 sys_params = load_config(SYS_FILE_PATH)
 ode_params = config['ode_params']
 
-# SDE 확산 계수 관련 로직 (파일 로드)
-# Assumption: calibrated_sigmas.json is in the Project Root (1 level up from systems/)
-PROJECT_ROOT = Path(__file__).resolve().parent.parent 
-SIGMAS_FILE_PATH = PROJECT_ROOT / 'calibrated_sigmas.json'
 
-try:
-    with open(SIGMAS_FILE_PATH, 'r') as f: # 수정된 경로 사용
-        calibrated_sigmas = json.load(f)
-        SIGMA_T_POINTS = np.array(calibrated_sigmas['t_points'])
-        SIGMA_G_T = np.array(calibrated_sigmas['sigma_G'])
-        SIGMA_I_T = np.array(calibrated_sigmas['sigma_I'])
-        BOUNDS_MAP = calibrated_sigmas['bounds']
-except FileNotFoundError:
-    print("Warning: calibrated_sigmas.json not found. Using zero diffusion.")
-    SIGMA_T_POINTS = np.array([0, 120])
-    SIGMA_G_T = np.array([0.0, 0.0])
-    SIGMA_I_T = np.array([0.0, 0.0])
-    BOUNDS_MAP = {'G_max': 1e9, 'I_max': 1e9}
+
 
 def interpolate_sigma(t, t_points, sigma_t):
     """
@@ -63,7 +81,7 @@ class OgttSimul(System):
     t_points = np.array([0, 30, 60, 90, 120])
     observed_var_idx = 0  # glucose
     hidden_var_idx = 1    # insulin
-
+    diffusion_scale = 1.0
     
     def sample_initial_conditions(self, params_dict):
         # I found that sampling from log-normal fits better to real NIH OGTT data
@@ -93,7 +111,23 @@ class OgttSimul(System):
         return dydt       
 
     def drift_func(self, t, y, params):
-        return self.ode_func(t, y, params)
+        """
+        SDE의 Drift 항: f(t, y) + mu_bias(t)
+        결정론적 모델의 물리적 궤적에 데이터 기반 편향 보정값을 더해줍니다.
+        """
+        # 1. 결정론적 ODE 계산
+        dydt_ode = self.ode_func(t, y, params)
+        
+        # 2. Bias Correction (선형 보간)
+        mu_g = np.interp(t, SIGMA_T_POINTS, MU_G_T)
+        mu_i = np.interp(t, SIGMA_T_POINTS, MU_I_T)
+        
+        # 3. Bias 추가 (리스트 복사 후 수정)
+        dydt_corrected = list(dydt_ode)
+        dydt_corrected[0] += mu_g # Glucose
+        dydt_corrected[1] += mu_i # Insulin
+        
+        return dydt_corrected
     
     def diffusion_func(self, t, y, params):
         """
@@ -109,13 +143,15 @@ class OgttSimul(System):
         # G(t, Y)는 (n_vars, n_wiener_processes) 행렬.
         # 여기서는 dW_1=G, dW_2=I, dW_3=N5, dW_4=N6 에 해당하는 노이즈로 간주하고 
         # 대각 행렬 (4x4)로 가정합니다.
+        # 30분 단위의 diffusion 추정치만 있고, SDE는 1분 단위로 풀기 때문에, 그 스케일 차이를 보정하도록 scaling factor를 곱합니다.
+        scale = self.diffusion_scale
         
         n_vars = 4
         diffusion_matrix = np.zeros((n_vars, n_vars))
         
         # G(0, 0)와 I(1, 1)에만 시간 의존적 시그마 적용
-        diffusion_matrix[0, 0] = sigma_g_t # Glucose
-        diffusion_matrix[1, 1] = sigma_i_t # Insulin
+        diffusion_matrix[0, 0] = sigma_g_t * scale # Glucose
+        diffusion_matrix[1, 1] = sigma_i_t * scale # Insulin
         
         # N5(2, 2)와 N6(3, 3)는 0 (Steady state로 움직이는 변수의 노이즈 무시)
         

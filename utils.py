@@ -168,16 +168,16 @@ def euler_maruyama(drift_func, diffusion_func, t_span, y0, t_eval, params, seed=
     t_start, t_end = t_span
     n_vars = len(y0)
     
-    # Clamping Bounds 설정
-    lower_bounds = -np.inf
-    upper_bounds = np.inf
+    
 
     # 시스템 객체에서 bounds 정보가 있으면 가져옴
     if system is not None and hasattr(system, 'state_bounds'):
         lower_bounds, upper_bounds = system.state_bounds
     else:
         # 기본 하한 안전장치 (User defined 1e-6)
+        # Clamping Bounds 설정
         lower_bounds = 1e-6
+        upper_bounds = 1e+3
 
     # 시뮬레이션에 사용할 전체 시간 스텝
     n_total_steps = int(np.ceil((t_end - t_start) / dt_sim))

@@ -93,6 +93,7 @@ class Config:
     # [Phase 5 설정] Lagrangian 및 미분 방법
     USE_LAGRANGIAN = True         # 미분값(Derivative)을 Feature로 사용
     DERIVATIVE_METHOD = 'spline'  # 실제 데이터 미분 시 Spline Smoothing 사용
+    DIFFUSION_SCALE = 0.0
     
     # =========================================================================
     # 5. 모델 구조 설정 (Model Architecture)

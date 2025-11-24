@@ -161,7 +161,7 @@ class DataGenerator:
         self.dist_params = None
 
         # Data-Driven Sampling용 분포 파라미터 로드
-        dist_file = Path('distribution_params.json')
+        dist_file = Path('data/parameters/distribution_params.json')
         if dist_file.exists():
             with open(dist_file, 'r') as f:
                 self.dist_params = json.load(f)
@@ -170,6 +170,8 @@ class DataGenerator:
             print("Data-driven distribution parameters file not found. Using uniform sampling.")
 
     def generate_data(self):
+            scale_val = getattr(self.config, 'DIFFUSION_SCALE', 'Not Found')
+            print(f"[DEBUG] Config DIFFUSION_SCALE: {scale_val}")
             # Data Save
             data_root = Path('data')
             save_dir = data_root / self.config.SYSTEM_NAME
@@ -196,6 +198,11 @@ class DataGenerator:
             print(f"Generating {self.config.NUM_SAMPLES} samples using {suffix.upper()} model...")
             num_samples = self.config.NUM_SAMPLES
             t_points = np.asarray(self.system.t_points)
+            
+            scale_factor = getattr(self.config, 'DIFFUSION_SCALE', 1.0)
+            
+            self.system.diffusion_scale = scale_factor
+            print(f"Applied Diffusion Scale: {scale_factor}")
             
             # 각 작업에 전달할 고유한 시드 생성
             seeds = np.random.randint(0, 100000, size=num_samples)
@@ -840,7 +847,7 @@ class RealOGTTDataLoader:
 
         # Derivative estimation logic
         root_path = Path(__file__).resolve().parent
-        sigma_path = root_path / 'calibrated_sigmas.json'
+        sigma_path = root_path / 'data' / 'parameters' / 'calibrated_sde_params.json'
         
         try:
             with open(sigma_path, 'r') as f:
@@ -849,7 +856,7 @@ class RealOGTTDataLoader:
                 self.s_insulin = np.sum(np.array(calib_data['sigma_I'])**2)
                 print(f"[RealLoader] Loaded sigma for smoothing: s_G={self.s_glucose:.2f}, s_I={self.s_insulin:.2f}")
         except FileNotFoundError:
-            print("[RealLoader] Warning: 'calibrated_sigmas.json' not found. Using default smoothing (s=None).")
+            print("[RealLoader] Warning: 'calibrated_sde_params.json' not found. Using default smoothing (s=None).")
             self.s_glucose = None
             self.s_insulin = None
             
