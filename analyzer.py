@@ -1,11 +1,18 @@
 # analyzer.py
 import os
+import json
+import itertools
+
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
+import seaborn as sns
 from scipy.integrate import solve_ivp
-import itertools 
-import json
+from scipy.stats import pearsonr
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+
+from utils import euler_maruyama
+from systems.ogtt_simul import OgttSimul, OGTTModel, ode_params, sys_params
 
 class Analyzer:
     """학습된 모델의 성능 분석 및 시각화를 담당하는 클래스"""
@@ -18,6 +25,7 @@ class Analyzer:
         self.normalizer = normalizer
         self.p_initial_guess = p_initial_guess
         self.history = history
+
         # 결과 저장 경로를 시스템 및 실험 이름에 따라 동적으로 설정
         self.results_path = os.path.join(config.RESULTS_DIR, config.SYSTEM_NAME, config.EXPERIMENT_NAME)
         os.makedirs(self.results_path, exist_ok=True)
@@ -28,19 +36,25 @@ class Analyzer:
             return
 
         print("Plotting and saving loss curves...")
-        fig, ax = plt.subplots(figsize=(10, 6))
+        fig, axs = plt.subplots(ncols=2, figsize=(10, 12))
         epochs = range(1, len(self.history['train_total_loss']) + 1)
 
-        ax.plot(epochs, self.history['train_loss_f'], label='Train Loss of f_theta', color='blue')
-        ax.plot(epochs, self.history['train_loss_g'], label='Train Loss of g_phi', color='green')
-        ax.plot(epochs, self.history['val_loss_f'], label='Validation Loss of f_theta', color='orange', linestyle='--')
-        ax.plot(epochs, self.history['val_loss_g'], label='Validation Loss of g_phi', color='red', linestyle='--')
+        axs[0].plot(epochs, self.history['train_loss_f'], label='Train Loss of f_theta', color='blue')
+        axs[1].plot(epochs, self.history['train_loss_g'], label='Train Loss of g_phi', color='green')
+        axs[0].plot(epochs, self.history['val_loss_f'], label='Validation Loss of f_theta', color='orange', linestyle='--')
+        axs[1].plot(epochs, self.history['val_loss_g'], label='Validation Loss of g_phi', color='red', linestyle='--')
 
-        ax.set_xlabel("Epochs")
-        ax.set_ylabel("Loss")
-        ax.set_title(f"Training and Validation Loss ({self.config.EXPERIMENT_NAME})")
-        ax.legend()
-        ax.grid(True)
+        axs[0].set_xlabel("Epochs")
+        axs[0].set_ylabel("Loss")
+        axs[0].set_title(f"Training and Validation Loss of f_theta({self.config.EXPERIMENT_NAME})")
+        axs[0].legend()
+        axs[0].grid(True)
+
+        axs[1].set_xlabel("Epochs")
+        axs[1].set_ylabel("Loss")
+        axs[1].set_title(f"Training and Validation Loss g_phi ({self.config.EXPERIMENT_NAME})")
+        axs[1].legend()
+        axs[1].grid(True)
 
         save_path = os.path.join(self.results_path, 'loss_curves.png')
         plt.tight_layout()
@@ -119,11 +133,13 @@ class Analyzer:
                 all_p_true.append(p_batch.numpy())
         return np.concatenate(all_p_true), np.concatenate(all_p_pred)
 
-    def plot_scatter(self, p_true, p_pred):
+    def plot_scatter(self, p_true, p_pred, prefix="sim"):
         """예측 정확도를 산점도로 시각화합니다."""
         print("Plotting and saving scatter results...")
-        param_names_latex = [f'$\\${name}$' for name in self.system.param_names]
-        num_params = len(param_names_latex)
+        
+        # 사용자 의도 반영: 원래 스타일 유지 및 npz 저장 복구
+        param_names = self.system.param_names
+        num_params = len(param_names)
         
         ncols = 2 if num_params > 1 else 1
         nrows = (num_params + 1) // 2
@@ -131,24 +147,34 @@ class Analyzer:
         axes = axes.flatten()
 
         for i in range(num_params):
-            r_val = np.corrcoef(p_true[:, i], p_pred[:, i])[0, 1]
-            axes[i].scatter(p_true[:, i], p_pred[:, i], alpha=0.5, s=10)
-            axes[i].plot([p_true[:, i].min(), p_true[:, i].max()], [p_true[:, i].min(), p_true[:, i].max()], 'r--')
-            axes[i].set_xlabel(f"Exact {param_names_latex[i]}")
-            axes[i].set_ylabel(f"Predicted {param_names_latex[i]}")
-            axes[i].set_title(f"Parameter: {param_names_latex[i]}, R={r_val:.4f}")
+            true_vals = p_true[:, i]
+            pred_vals = p_pred[:, i]
+            
+            # R2 Score 계산 (합의된 Metric)
+            r2 = r2_score(true_vals, pred_vals)
+            
+            axes[i].scatter(true_vals, pred_vals, alpha=0.5, s=10)
+            
+            # y=x line
+            min_val = min(true_vals.min(), pred_vals.min())
+            max_val = max(true_vals.max(), pred_vals.max())
+            axes[i].plot([min_val, max_val], [min_val, max_val], 'r--')
+            
+            axes[i].set_xlabel(f"Exact {param_names[i]}")
+            axes[i].set_ylabel(f"Predicted {param_names[i]}")
+            axes[i].set_title(f"Parameter: {param_names[i]}, R2={r2:.4f}")
             axes[i].grid(True)
         
         for j in range(num_params, len(axes)):
             axes[j].set_visible(False)
             
-        save_path = os.path.join(self.results_path, 'scatter_plot.png')
+        save_path = os.path.join(self.results_dir, f'{prefix}_scatter_plot.png')
         plt.tight_layout()
         plt.savefig(save_path)
         plt.close(fig)
 
-        # Save values
-        data_path = os.path.join(self.results_path, 'predictions.npz')
+        # [복원됨] 데이터 저장 로직
+        data_path = os.path.join(self.results_dir, f'{prefix}_predictions.npz')
         np.savez(data_path, p_true=p_true, p_pred=p_pred)
         print(f"Saved prediction data to {data_path}")
         
@@ -312,3 +338,131 @@ class Analyzer:
         ax.set_title(f"Phase Portrait on (${p1_name}$, ${p2_name}$) Plane")
         ax.legend()
         ax.grid(True)
+
+    def evaluate_real_data(self, real_data_loader, split_file_path, num_vis=5):
+        """
+        Real Test Set에 대한 평가.
+        여기서도 Iterative Inference를 사용하여 파라미터를 추정합니다.
+        """
+        print(f"\n=== Evaluating on REAL Data (Test Set) with {self.iterations} iterations ===")
+        
+        # 1. Test Indices 로드
+        with open(split_file_path, 'r') as f:
+            split_data = json.load(f)
+            test_indices = split_data['test_indices']
+        
+        # 2. 데이터 로드
+        X_obs, Y_hid, P_ref, t_points = real_data_loader.load_data()
+        
+        # Test Set 추출
+        X_test = X_obs[test_indices] 
+        Y_test = Y_hid[test_indices] # 검증용으로만 사용 (모델 입력 X)
+        P_ref_test = P_ref[test_indices]
+        
+        # 3. Iterative Inference 수행
+        self.f_theta.eval()
+        self.g_phi.eval()
+        
+        N_test = X_test.shape[0]
+        X_flat = X_test.reshape(N_test, -1)
+        X_tensor = torch.tensor(X_flat, dtype=torch.float32).to(self.device)
+        
+        # 초기 추측값 설정
+        p_n_norm = self.normalizer.normalize(self.p_initial_guess.repeat(N_test, 1))
+        
+        with torch.no_grad():
+            for _ in range(self.iterations):
+                # Forward: P -> Y_hat (Hidden Variable Prediction)
+                p_n = self.normalizer.denormalize(p_n_norm)
+                y_hat = self.f_theta(X_tensor, p_n)
+                
+                # Inverse: (X, Y_hat) -> P_new
+                p_n_norm = self.g_phi(X_tensor, y_hat)
+            
+            # 최종 파라미터
+            p_pred = self.normalizer.denormalize(p_n_norm).cpu().numpy()
+            
+        # 4. [Type A] 파라미터 비교 ($R^2$ 검증)
+        print(f"  -> [Type A] Parameter Correlation (N={N_test})...")
+        self.plot_scatter(P_ref_test, p_pred, prefix="real_test")
+        
+        # 5. [Type B] 재구성 검증 (SDE Reconstruction)
+        print(f"  -> [Type B] SDE Reconstruction & Coverage Check ({num_vis} samples)...")
+        save_path_recon = os.path.join(self.results_dir, "real_reconstructions")
+        os.makedirs(save_path_recon, exist_ok=True)
+        
+        aug_factor = getattr(self.config, 'AUGMENTATION_FACTOR', 30)
+        coverage_stats = []
+        r2_stats = []
+        
+        # 무작위 샘플링
+        sample_indices = np.random.choice(len(test_indices), num_vis, replace=False)
+        
+        for i, idx_in_test in enumerate(sample_indices):
+            original_idx = test_indices[idx_in_test]
+            real_G = X_test[idx_in_test, :, 0]
+            real_I = Y_test[idx_in_test, :, 0]
+            pred_params = p_pred[idx_in_test]
+            
+            # 초기값 설정
+            g0 = real_G[0]
+            i0 = real_I[0]
+            
+            # Steady State 계산
+            temp_theta = {'si': pred_params[0], 'sigma': pred_params[1]}
+            temp_model = OGTTModel(ode_params, sys_params, temp_theta)
+            n5, n6 = temp_model.find_steady_state_N(g0)
+            y0 = [g0, i0, n5, n6]
+            
+            # Ensemble Generation
+            sim_G_ensemble = []
+            for _ in range(aug_factor):
+                sys_instance = OgttSimul()
+                y_sim = euler_maruyama(
+                    sys_instance.drift_func,
+                    sys_instance.diffusion_func,
+                    sys_instance.t_span,
+                    y0,
+                    t_points,
+                    pred_params,
+                    dt_sim=0.01,
+                    system=sys_instance
+                )
+                sim_G_ensemble.append(y_sim[0, :])
+                
+            sim_G_ensemble = np.array(sim_G_ensemble)
+            
+            # Statistics
+            mean_traj = np.mean(sim_G_ensemble, axis=0)
+            lower_bound = np.percentile(sim_G_ensemble, 5, axis=0)
+            upper_bound = np.percentile(sim_G_ensemble, 95, axis=0)
+            
+            # Coverage
+            is_covered = (real_G >= lower_bound) & (real_G <= upper_bound)
+            cov_ratio = np.mean(is_covered)
+            coverage_stats.append(cov_ratio)
+            
+            # R2 Score (Reconstruction)
+            recon_r2 = r2_score(real_G, mean_traj)
+            r2_stats.append(recon_r2)
+            
+            # Visualization
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.fill_between(t_points, lower_bound, upper_bound, color='orange', alpha=0.3, label='Reconstructed SDE (90% CI)')
+            ax.plot(t_points, mean_traj, 'orange', linestyle='--', label='Reconstructed Mean')
+            ax.plot(t_points, real_G, 'k-o', label='Real Patient Data', linewidth=2)
+            
+            ax.set_title(f"Patient {original_idx} Reconstruction\nParams: si={pred_params[0]:.2f}, sigma={pred_params[1]:.2f}\nCoverage: {cov_ratio*100:.0f}% | Recon $R^2$: {recon_r2:.3f}")
+            ax.set_xlabel("Time (min)")
+            ax.set_ylabel("Glucose (mg/dL)")
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            
+            plt.savefig(os.path.join(save_path_recon, f"recon_patient_{original_idx}.png"))
+            plt.close()
+            
+        avg_cov = np.mean(coverage_stats)
+        avg_r2 = np.mean(r2_stats)
+        print(f"  -> Evaluation Summary:")
+        print(f"     - Avg Coverage (90% CI): {avg_cov*100:.1f}%")
+        print(f"     - Avg Reconstruction R2: {avg_r2:.4f}")
