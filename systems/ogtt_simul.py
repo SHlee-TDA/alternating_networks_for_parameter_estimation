@@ -1,11 +1,13 @@
 # systems/ogtt_simul.py
 import os
 import json
+from pathlib import Path
+
 import numpy as np
-from .base_system import System
 from scipy.integrate import solve_ivp
 import scipy.stats as stats
-from pathlib import Path
+
+from .base_system import System
 
 
 current_file_path = Path(__file__)
@@ -68,6 +70,7 @@ def interpolate_sigma(t, t_points, sigma_t):
 class OgttSimul(System):
     """
     OGTT(Oral Glucose Tolerance Test) 시뮬레이션 시스템의 상세 명세
+    [Optimization]: OGTTModel 인스턴스를 재사용하여 시뮬레이션 속도를 향상시킴.
     """
     name='ogtt_simul'
     param_names = ['si', 'sigma']
@@ -85,7 +88,12 @@ class OgttSimul(System):
     bias_scale = 1.0
     diffusion_scale = 1.0
     
-    
+    def __init__(self):
+        super().__init__()
+        # [Optimization] 모델 인스턴스를 미리 생성 (Dummy theta로 초기화)
+        # 매 step마다 생성하는 오버헤드를 제거함.
+        self.model = OGTTModel(ode_params, sys_params, {'si': 0.0, 'sigma': 0.0})
+
     def sample_initial_conditions(self, params_dict):
         # I found that sampling from log-normal fits better to real NIH OGTT data
         s_oglu0 = 0.1196
@@ -103,15 +111,18 @@ class OgttSimul(System):
         
         return [oglu0, oins0, n5_ss, n6_ss]  # G(0), I(0), N5(0), N6(0)
     
-    @staticmethod
-    def ode_func(t, y, params):
+    # [Optimization] @staticmethod 제거 -> Instance method로 변경
+    def ode_func(self, t, y, params):
         si, sigma = params
-        theta = {'si': si, 'sigma': sigma}
-        model = OGTTModel(ode_params, sys_params, theta)
+        
+        # [Optimization] 기존 인스턴스의 파라미터만 업데이트 (객체 생성 X)
+        # Python의 딕셔너리는 Mutable이므로 직접 수정이 빠름
+        self.model.theta['si'] = si
+        self.model.theta['sigma'] = sigma
 
         G, I, N5, N6 = y
-        dydt = model.GI_ode_universal(t, [G, I, N5, N6])
-        return dydt       
+        dydt = self.model.GI_ode_universal(t, [G, I, N5, N6])
+        return dydt
 
     def drift_func(self, t, y, params):
         """
@@ -192,7 +203,7 @@ class OGTTModel:
     Attributes:
         ode_params (dict): ODE 시스템 파라미터
         sys_params (dict): 시스템 파라미터
-        theta (dict): 모델 파라미터 (si, sigma)
+        theta (dict): 모델 파라미터 (si, sigma) [Optimization: Mutable for Reuse]
     """
     def __init__(self, ode_params, sys_params, theta):
         self.ode_params = ode_params

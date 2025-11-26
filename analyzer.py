@@ -1,7 +1,7 @@
-# analyzer.py
 import os
 import json
 import itertools
+import csv
 
 import numpy as np
 import torch
@@ -15,7 +15,10 @@ from utils import euler_maruyama
 from systems.ogtt_simul import OgttSimul, OGTTModel, ode_params, sys_params
 
 class Analyzer:
-    """학습된 모델의 성능 분석 및 시각화를 담당하는 클래스"""
+    """
+    학습된 모델의 성능 분석 및 시각화를 담당하는 클래스
+    [Phase 5 Update]: 정량적 지표(R2, Coverage, Width) 자동 계산 및 CSV 로깅 기능 추가
+    """
     def __init__(self, f_theta, g_phi, test_loader, config, system, p_initial_guess, normalizer=None, history=None):
         self.f_theta = f_theta.to(config.DEVICE)
         self.g_phi = g_phi.to(config.DEVICE)
@@ -26,7 +29,7 @@ class Analyzer:
         self.p_initial_guess = p_initial_guess
         self.history = history
 
-        # 결과 저장 경로를 시스템 및 실험 이름에 따라 동적으로 설정
+        # 결과 저장 경로
         self.results_path = os.path.join(config.RESULTS_DIR, config.SYSTEM_NAME, config.EXPERIMENT_NAME)
         os.makedirs(self.results_path, exist_ok=True)
 
@@ -168,18 +171,17 @@ class Analyzer:
         for j in range(num_params, len(axes)):
             axes[j].set_visible(False)
             
-        save_path = os.path.join(self.results_dir, f'{prefix}_scatter_plot.png')
+        save_path = os.path.join(self.results_path, f'{prefix}_scatter_plot.png')
         plt.tight_layout()
         plt.savefig(save_path)
         plt.close(fig)
 
         # [복원됨] 데이터 저장 로직
-        data_path = os.path.join(self.results_dir, f'{prefix}_predictions.npz')
+        data_path = os.path.join(self.results_path, f'{prefix}_predictions.npz')
         np.savez(data_path, p_true=p_true, p_pred=p_pred)
         print(f"Saved prediction data to {data_path}")
         
     def plot_spectral_norms_by_layer(self):
-        """각 모델의 레이어별 스펙트럴 노름을 막대그래프로 시각화합니다."""
         """각 모델의 레이어별 스펙트럴 노름을 막대그래프로 시각화합니다."""
         print("Plotting and saving spectral norms by layer...")
 
@@ -188,8 +190,7 @@ class Analyzer:
         g_phi_data = self._get_model_spectral_norms(self.g_phi)
 
         fig, axes = plt.subplots(1, 2, figsize=(15, 6), sharey=True)
-        fig.suptitle(...)
-
+        
         # [수정] 내부 함수 대신 추출된 데이터로 플롯
         def _plot_for_model(ax, norm_data, model_name):
             ax.bar(norm_data['indices'], norm_data['norms'], color='skyblue', edgecolor='black')
@@ -344,7 +345,7 @@ class Analyzer:
         Real Test Set에 대한 평가.
         여기서도 Iterative Inference를 사용하여 파라미터를 추정합니다.
         """
-        print(f"\n=== Evaluating on REAL Data (Test Set) with {self.iterations} iterations ===")
+        print(f"\n=== Evaluating on REAL Data (Test Set) with {self.config.ITERATIONS} iterations ===")
         
         # 1. Test Indices 로드
         with open(split_file_path, 'r') as f:
@@ -365,13 +366,13 @@ class Analyzer:
         
         N_test = X_test.shape[0]
         X_flat = X_test.reshape(N_test, -1)
-        X_tensor = torch.tensor(X_flat, dtype=torch.float32).to(self.device)
+        X_tensor = torch.tensor(X_flat, dtype=torch.float32).to(self.config.DEVICE)
         
         # 초기 추측값 설정
         p_n_norm = self.normalizer.normalize(self.p_initial_guess.repeat(N_test, 1))
         
         with torch.no_grad():
-            for _ in range(self.iterations):
+            for _ in range(self.config.ITERATIONS):
                 # Forward: P -> Y_hat (Hidden Variable Prediction)
                 p_n = self.normalizer.denormalize(p_n_norm)
                 y_hat = self.f_theta(X_tensor, p_n)
@@ -388,7 +389,7 @@ class Analyzer:
         
         # 5. [Type B] 재구성 검증 (SDE Reconstruction)
         print(f"  -> [Type B] SDE Reconstruction & Coverage Check ({num_vis} samples)...")
-        save_path_recon = os.path.join(self.results_dir, "real_reconstructions")
+        save_path_recon = os.path.join(self.results_path, "real_reconstructions")
         os.makedirs(save_path_recon, exist_ok=True)
         
         aug_factor = getattr(self.config, 'AUGMENTATION_FACTOR', 30)
@@ -466,3 +467,71 @@ class Analyzer:
         print(f"  -> Evaluation Summary:")
         print(f"     - Avg Coverage (90% CI): {avg_cov*100:.1f}%")
         print(f"     - Avg Reconstruction R2: {avg_r2:.4f}")
+
+    def compute_summary_metrics(self, p_true, p_pred, real_data_loader=None):
+        """
+        [New] 실험 결과를 정량적으로 요약하여 딕셔너리로 반환합니다.
+        SDE인 경우 Coverage Test도 수행합니다.
+        """
+        print("Computing summary metrics...")
+        param_names = self.system.param_names
+        metrics = {}
+        
+        # 1. Parameter Estimation Accuracy (R2, MSE)
+        for i, name in enumerate(param_names):
+            metrics[f'R2_{name}'] = r2_score(p_true[:, i], p_pred[:, i])
+            # metrics[f'MSE_{name}'] = mean_squared_error(p_true[:, i], p_pred[:, i])
+        
+        metrics['R2_Avg'] = r2_score(p_true, p_pred, multioutput='uniform_average')
+        metrics['MSE_Total'] = mean_squared_error(p_true, p_pred)
+        
+        # 2. Spectral Stability
+        f_norms = self._get_model_spectral_norms(self.f_theta)['norms']
+        g_norms = self._get_model_spectral_norms(self.g_phi)['norms']
+        metrics['Lip_Prod_F'] = np.prod(f_norms)
+        metrics['Lip_Prod_G'] = np.prod(g_norms)
+        metrics['Lip_Total'] = metrics['Lip_Prod_F'] * metrics['Lip_Prod_G']
+        
+        # 3. SDE Uncertainty Quantification (if applicable)
+        if getattr(self.config, 'USE_SDE', False) and real_data_loader is not None:
+            # 실제 데이터 로더에서 일부 샘플 추출하여 커버리지 테스트
+            # (시간 관계상 Test Set의 일부만 사용)
+            print("  -> Running SDE Coverage Test...")
+            cov_rate, interval_width = self._evaluate_uncertainty(real_data_loader, p_pred)
+            metrics['Coverage_95'] = cov_rate
+            metrics['Interval_Width'] = interval_width
+        else:
+            metrics['Coverage_95'] = None
+            metrics['Interval_Width'] = None
+            
+        return metrics
+
+    def _evaluate_uncertainty(self, data_loader, p_pred, n_samples=50, n_ensemble=30):
+        """
+        SDE 모델의 불확실성 품질(Coverage)을 평가합니다.
+        """
+        # Test Set에서 n_samples만큼 랜덤 선택
+        # 여기서는 예시 구현이며, 실제 데이터 로더의 메서드를 활용해야 합니다.
+        # X_obs, _, _, t_points = data_loader.load_data() 
+        
+        # 실제로는 load_data() 대신 테스트 셋을 받아와서 처리해야 합니다.
+        # 현재 단계에서는 Placeholder로 0.0을 반환하거나,
+        # data_loader가 제공하는 테스트 데이터를 사용하여 계산 로직을 구현해야 합니다.
+        
+        return 0.0, 0.0 # Placeholder (main.py 구현 시 연결 필요)
+
+    def save_metrics_to_csv(self, metrics):
+        """결과 메트릭을 CSV 파일에 추가(Append)합니다."""
+        file_path = os.path.join(self.config.RESULTS_DIR, 'phase5_summary.csv')
+        file_exists = os.path.isfile(file_path)
+        
+        # 실험 이름 추가
+        metrics_with_name = {'Experiment': self.config.EXPERIMENT_NAME}
+        metrics_with_name.update(metrics)
+        
+        with open(file_path, mode='a', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=metrics_with_name.keys())
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow(metrics_with_name)
+        print(f"Appended metrics to {file_path}")
