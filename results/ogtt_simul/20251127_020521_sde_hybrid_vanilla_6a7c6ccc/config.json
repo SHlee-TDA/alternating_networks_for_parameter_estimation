@@ -1,0 +1,32 @@
+{
+    "EPOCHS": 2,
+    "EXPERIMENT_NAME": "sde_hybrid_vanilla",
+    "USE_SPECTRAL_NORM": false,
+    "USE_CONSISTENCY_LOSS": false,
+    "MODEL_CONFIG": {
+        "f_theta": {
+            "hidden_dims": [
+                128,
+                128,
+                128,
+                128
+            ],
+            "activation": "Tanh"
+        },
+        "g_phi": {
+            "hidden_dims": [
+                128,
+                128,
+                128,
+                128
+            ],
+            "activation": "Tanh"
+        },
+        "initialization": {
+            "type": "xavier",
+            "distribution": "normal"
+        }
+    },
+    "USE_SDE": true,
+    "DEVICE": "cpu"
+}

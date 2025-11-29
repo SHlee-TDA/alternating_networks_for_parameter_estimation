@@ -26,24 +26,30 @@ class Config:
     # 1) 기본 데이터 시나리오 정의
     #    각 시나리오별로 데이터 구성과 검증 방식이 다릅니다.
     BASE_SCENARIOS = [
-        # A. Baseline: Deterministic ODE (SDE X)
-        {'name_prefix': 'baseline_det', 'use_sde': False, 'scenario': 'sim_only', 'val_source': 'sim'},
+        # [시나리오 1] ODE Pure: ODE 데이터만 사용 (Baseline)
+        {'name_prefix': 'ode_pure', 'use_sde': False, 'scenario': 'sim_only', 'val_source': 'sim'},
         
-        # B. Domain Randomization: SDE Simulation Only
-        {'name_prefix': 'sde_only', 'use_sde': True, 'scenario': 'sim_only', 'val_source': 'sim'},
+        # [시나리오 2] SDE Pure: SDE 데이터만 사용 (Domain Randomization 효과 확인)
+        {'name_prefix': 'sde_pure', 'use_sde': True, 'scenario': 'sim_only', 'val_source': 'sim'},
         
-        # C. Hybrid Learning (Sim Val): 연구자님 선택 Option B
-        {'name_prefix': 'hybrid_sim_val', 'use_sde': True, 'scenario': 'hybrid', 'real_ratio': 0.3, 'val_source': 'sim'},
+        # [시나리오 3] ODE Hybrid: ODE 데이터 + Real 데이터 혼합 학습
+        #{'name_prefix': 'ode_hybrid', 'use_sde': False, 'scenario': 'hybrid', 'real_ratio': 0.3, 'val_source': 'sim'},
 
-        # D. Hybrid Learning (Real Val)
-        {'name_prefix': 'hybrid_real_val', 'use_sde': True, 'scenario': 'hybrid', 'real_ratio': 0.3, 'val_source': 'real'}
+        # [시나리오 4] SDE Hybrid: SDE 데이터 + Real 데이터 혼합 학습 (Main Method)
+        #{'name_prefix': 'sde_hybrid', 'use_sde': True, 'scenario': 'hybrid', 'real_ratio': 0.3, 'val_source': 'sim'},
+    
+        # [시나리오 5] Mix Pure: (ODE + SDE) 학습 -> (ODE+SDE) 검증 -> 평가
+        #{'name_prefix': 'mix_pure', 'use_sde': 'mixed', 'scenario': 'sim_only', 'val_source': 'sim'},
+        
+        # [시나리오 6] Mix Hybrid: (ODE + SDE + Real) 학습 -> (ODE+SDE) 검증 -> 평가
+        #{'name_prefix': 'mix_hybrid', 'use_sde': 'mixed', 'scenario': 'hybrid', 'real_ratio': 0.3, 'val_source': 'sim'}
     ]
     
     # 2) Loss/Model 조합 정의 (4가지 경우의 수)
     LOSS_VARIANTS = [
-        {'sn': False, 'cl': False, 'suffix': 'vanilla'},          # 기본 모델
-        {'sn': True,  'cl': False, 'suffix': 'spectral_norm'},    # SN만 적용
-        {'sn': False, 'cl': True,  'suffix': 'consistency_loss'}, # CL만 적용
+        #{'sn': False, 'cl': False, 'suffix': 'vanilla'},          # 기본 모델
+        #{'sn': True,  'cl': False, 'suffix': 'spectral_norm'},    # SN만 적용
+        #{'sn': False, 'cl': True,  'suffix': 'consistency_loss'}, # CL만 적용
         {'sn': True,  'cl': True,  'suffix': 'full_method'}       # 둘 다 적용 (제안 방법)
     ]
     
@@ -76,12 +82,12 @@ class Config:
     NUM_SAMPLES = 10000     # 생성할 증강 데이터 샘플 수
     TEST_SPLIT = 0.2
     BATCH_SIZE = 128
-    EPOCHS = 10000
-    LEARNING_RATE = 1e-4
+    EPOCHS = 20000
+    LEARNING_RATE = 1e-3
     WEIGHT_DECAY = 1e-5
     
     USE_EARLY_STOPPING = True
-    EARLY_STOPPING_PATIENCE = 50
+    EARLY_STOPPING_PATIENCE = 200
     EARLY_STOPPING_MIN_DELTA = 1e-6
     
     # =========================================================================
@@ -106,12 +112,12 @@ class Config:
     # =========================================================================
     MODEL_CONFIG = {
         'f_theta': {
-            'hidden_dims': [128, 128, 128, 128],
-            'activation': 'Tanh'
+            'hidden_dims': [256, 256, 256, 256, 256, 256],
+            'activation': 'SiLU'
         },
         'g_phi': {
-            'hidden_dims': [128, 128, 128, 128],
-            'activation': 'Tanh'
+            'hidden_dims': [256, 256, 256, 256, 256, 256],
+            'activation': 'SiLU'
         },
         'initialization': {
             'type': 'xavier',

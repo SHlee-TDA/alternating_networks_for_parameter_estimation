@@ -1,0 +1,33 @@
+{
+    "EXPERIMENT_NAME": "",
+    "USE_SPECTRAL_NORM": false,
+    "USE_CONSISTENCY_LOSS": false,
+    "MODEL_CONFIG": {
+        "f_theta": {
+            "hidden_dims": [
+                128,
+                128,
+                128,
+                128
+            ],
+            "activation": "Tanh"
+        },
+        "g_phi": {
+            "hidden_dims": [
+                128,
+                128,
+                128,
+                128
+            ],
+            "activation": "Tanh"
+        },
+        "initialization": {
+            "type": "xavier",
+            "distribution": "normal"
+        }
+    },
+    "USE_SDE": "mixed",
+    "RESULTS_DIR": "results\\ogtt_simul\\20251127_071313_mix_pure_vanilla_f40febcb",
+    "SYSTEM_NAME": "",
+    "DEVICE": "None"
+}

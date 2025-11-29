@@ -1,8 +1,0 @@
-{
-    "USE_SDE": false,
-    "USE_LAGRANGIAN": true,
-    "EXPERIMENT_NAME": "20251122_000253_baseline_det_full_method_5eb1e9c7",
-    "USE_SPECTRAL_NORM": true,
-    "USE_CONSISTENCY_LOSS": true,
-    "DEVICE": "None"
-}

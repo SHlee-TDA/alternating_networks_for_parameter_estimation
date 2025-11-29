@@ -32,6 +32,9 @@ class Trainer:
             lr=config.LEARNING_RATE,
             weight_decay=config.WEIGHT_DECAY
         )
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer, mode='min', factor=0.5, patience=100, min_lr=1e-7, verbose=True
+        )
         self.loss_fn = nn.MSELoss()
         
         # 결과 저장 경로
@@ -59,34 +62,37 @@ class Trainer:
                 y_batch = y_batch.to(self.config.DEVICE)
                 p_batch = p_batch.to(self.config.DEVICE)
 
-                p_batch_norm = self.normalizer.normalize(p_batch)
+                # Normalization
+                x_batch_norm = self.normalizer.normalize_inputs(x_batch, variable_type='observed')
+                y_batch_norm = self.normalizer.normalize_inputs(y_batch, variable_type='hidden')
+                p_batch_norm = self.normalizer.normalize_params(p_batch)
+
                 
-                self.optimizer.zero_grad()
                 
                 # 1. Forward Loss
-                y_pred_f = self.f_theta(x_batch, p_batch)
-                loss_f = self.loss_fn(y_pred_f, y_batch)
+                self.optimizer.zero_grad()
+                y_pred_norm = self.f_theta(x_batch_norm, p_batch_norm)
+                loss_f = self.loss_fn(y_pred_norm, y_batch_norm)
                 
                 # 2. Inverse Loss
-                p_pred_g = self.g_phi(x_batch, y_batch)
-                p_pred_g_norm = self.normalizer.normalize(p_pred_g)
-                loss_g = self.loss_fn(p_pred_g_norm, p_batch_norm)
+                p_pred_norm = self.g_phi(x_batch_norm, y_batch_norm)
+                loss_g = self.loss_fn(p_pred_norm, p_batch_norm)
                 
                 total_loss = loss_f + loss_g
                 
                 # 3. Consistency Loss
                 if self.config.USE_CONSISTENCY_LOSS:
-                    p_reconstructed_norm = self.g_phi(x_batch, y_pred_f)
+                    p_reconstructed_norm = self.g_phi(x_batch_norm, y_pred_norm)
                     loss_consistency = self.loss_fn(p_reconstructed_norm, p_batch_norm)
                     total_loss += self.config.CONSISTENCY_LOSS_LAMBDA * loss_consistency
                 
                 # 4. Spectral Norm Penalty
                 # config에 USE_SPECTRAL_PENALTY 옵션이 True일 때만 계산
-                penalty_loss = torch.tensor(0.0, device=self.config.DEVICE)
-                if getattr(self.config, 'USE_SPECTRAL_PENALTY', False):
-                    f_penalty, g_penalty = self.compute_spectral_product_penalty()
-                    penalty_loss = f_penalty + g_penalty
-                    total_loss += penalty_loss
+                #penalty_loss = torch.tensor(0.0, device=self.config.DEVICE)
+                #if getattr(self.config, 'USE_SPECTRAL_PENALTY', False):
+                #    f_penalty, g_penalty = self.compute_spectral_product_penalty()
+                #    penalty_loss = f_penalty + g_penalty
+                #    total_loss += penalty_loss
 
                 
                 
@@ -103,6 +109,9 @@ class Trainer:
 
             # Validation
             val_losses = self.evaluate(self.val_loader)
+            current_val_loss = val_losses['total_loss']
+            # Scheduler update
+            self.scheduler.step(current_val_loss)
             
             for k, v in epoch_train_losses.items():
                 history[f'train_{k}'].append(np.mean(v))
@@ -158,22 +167,24 @@ class Trainer:
             x_batch = x_batch.to(self.config.DEVICE)
             y_batch = y_batch.to(self.config.DEVICE)
             p_batch = p_batch.to(self.config.DEVICE)
-            p_batch_norm = self.normalizer.normalize(p_batch)
+            
+            x_batch_norm = self.normalizer.normalize_inputs(x_batch, variable_type='observed')
+            y_batch_norm = self.normalizer.normalize_inputs(y_batch, variable_type='hidden')
+            p_batch_norm = self.normalizer.normalize_params(p_batch)
 
-            y_pred_f = self.f_theta(x_batch, p_batch)
-            loss_f = self.loss_fn(y_pred_f, y_batch)
+            y_pred_f = self.f_theta(x_batch_norm, p_batch_norm)
+            loss_f = self.loss_fn(y_pred_f, y_batch_norm)
 
-            p_pred_g = self.g_phi(x_batch, y_batch)
-            p_pred_g_norm = self.normalizer.normalize(p_pred_g)
-            loss_g = self.loss_fn(p_pred_g_norm, p_batch_norm)
+            p_pred_g = self.g_phi(x_batch_norm, y_batch_norm)
+            loss_g = self.loss_fn(p_pred_g, p_batch_norm)
 
             total_loss = loss_f + loss_g
             losses['total_loss'].append(total_loss.item())
             losses['loss_f'].append(loss_f.item())
             losses['loss_g'].append(loss_g.item())
 
-            if self.config.USE_CONSISTENCY_LOSS:
-                p_reconstructed_norm = self.g_phi(x_batch, y_pred_f)
+            if getattr(self.config, 'USE_CONSISTENCY_LOSS', False):
+                p_reconstructed_norm = self.g_phi(x_batch_norm, y_pred_f)
                 loss_consistency = self.loss_fn(p_reconstructed_norm, p_batch_norm)
                 # total_loss += self.config.CONSISTENCY_LOSS_LAMBDA * loss_consistency
                 losses['loss_consistency'].append(loss_consistency.item())
@@ -277,38 +288,3 @@ class Trainer:
         config_dict.pop('EXPERIMENTS', None)
         with open(os.path.join(self.results_path, 'config_run.json'), 'w') as f:
             json.dump(config_dict, f, indent=4)
-
-    @torch.no_grad()
-    def evaluate(self, loader):
-        self.f_theta.eval()
-        self.g_phi.eval()
-        losses = defaultdict(list)
-        for x_batch, y_batch, p_batch in loader:
-            x_batch = x_batch.to(self.config.DEVICE)
-            y_batch = y_batch.to(self.config.DEVICE)
-            p_batch = p_batch.to(self.config.DEVICE)
-            p_batch_norm = self.normalizer.normalize(p_batch)
-
-            y_pred_f = self.f_theta(x_batch, p_batch)
-            loss_f = self.loss_fn(y_pred_f, y_batch)
-
-            p_pred_g = self.g_phi(x_batch, y_batch)
-            p_pred_g_norm = self.normalizer.normalize(p_pred_g)
-            loss_g = self.loss_fn(p_pred_g_norm, p_batch_norm)
-
-            total_loss = loss_f + loss_g
-            
-            # Consistency Loss Evaluation
-            if getattr(self.config, 'USE_CONSISTENCY_LOSS', False):
-                p_recon = self.g_phi(x_batch, y_pred_f)
-                loss_cons = self.loss_fn(p_recon, p_batch_norm)
-                losses['loss_consistency'].append(loss_cons.item())
-                # Val loss에는 consistency를 더하지 않는 것이 일반적이나, 설정에 따름.
-                # 여기서는 Pure Performance만 보려면 제외, Optimization Check면 포함.
-                # 일관성을 위해 Train과 동일하게 포함하지 않고 모니터링만 함.
-
-            losses['total_loss'].append(total_loss.item())
-            losses['loss_f'].append(loss_f.item())
-            losses['loss_g'].append(loss_g.item())
-
-        return {k: np.mean(v) for k, v in losses.items()}

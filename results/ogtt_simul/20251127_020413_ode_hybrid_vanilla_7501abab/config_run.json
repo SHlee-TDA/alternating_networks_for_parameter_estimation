@@ -1,0 +1,34 @@
+{
+    "EPOCHS": 2,
+    "EXPERIMENT_NAME": "",
+    "USE_SPECTRAL_NORM": false,
+    "USE_CONSISTENCY_LOSS": false,
+    "MODEL_CONFIG": {
+        "f_theta": {
+            "hidden_dims": [
+                128,
+                128,
+                128,
+                128
+            ],
+            "activation": "Tanh"
+        },
+        "g_phi": {
+            "hidden_dims": [
+                128,
+                128,
+                128,
+                128
+            ],
+            "activation": "Tanh"
+        },
+        "initialization": {
+            "type": "xavier",
+            "distribution": "normal"
+        }
+    },
+    "USE_SDE": false,
+    "RESULTS_DIR": "results\\ogtt_simul\\20251127_020413_ode_hybrid_vanilla_7501abab",
+    "SYSTEM_NAME": "",
+    "DEVICE": "None"
+}

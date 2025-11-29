@@ -1,0 +1,33 @@
+{
+    "EXPERIMENT_NAME": "",
+    "USE_SPECTRAL_NORM": true,
+    "USE_CONSISTENCY_LOSS": false,
+    "MODEL_CONFIG": {
+        "f_theta": {
+            "hidden_dims": [
+                128,
+                128,
+                128,
+                128
+            ],
+            "activation": "Tanh"
+        },
+        "g_phi": {
+            "hidden_dims": [
+                128,
+                128,
+                128,
+                128
+            ],
+            "activation": "Tanh"
+        },
+        "initialization": {
+            "type": "xavier",
+            "distribution": "normal"
+        }
+    },
+    "USE_SDE": false,
+    "RESULTS_DIR": "results\\ogtt_simul\\20251127_101606_ode_pure_spectral_norm_b3ced9ce",
+    "SYSTEM_NAME": "",
+    "DEVICE": "None"
+}

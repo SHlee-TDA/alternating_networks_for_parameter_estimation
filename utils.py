@@ -9,36 +9,102 @@ import git
 from abc import ABC, abstractmethod
 from scipy.interpolate import UnivariateSpline, lagrange
 
-class Normalizer:
-    """
-    파라미터의 Min-Max 정규화 및 역정규화를 담당하는 클래스.
-    모든 파라미터를 [0, 1] 범위로 스케일링합니다.
-    """
-    def __init__(self, system, device):
-        """
-        시스템 객체로부터 파라미터의 최솟값(min)과 범위(range)를 계산합니다.
-        """
-        self.device = device
-        mins = []
-        maxs = []
-        
-        for name in system.param_names:
-            mins.append(system.param_ranges[name][0])
-            maxs.append(system.param_ranges[name][1])
-        
-        self.min = torch.tensor(mins, device=self.device, dtype=torch.float32)
-        self.max = torch.tensor(maxs, device=self.device, dtype=torch.float32)
-        # 0으로 나누는 것을 방지하기 위해 작은 epsilon 추가
-        self.range = self.max - self.min + 1e-8
 
-    def normalize(self, p):
-        """파라미터 텐서를 [0, 1] 범위로 정규화합니다."""
-        #return (p - self.min) / self.range
-        return p
-    def denormalize(self, p_norm):
-        """정규화된 텐서를 원래의 파라미터 스케일로 되돌립니다."""
-        #return p_norm * self.range + self.min
-        return p_norm
+class Normalizer:
+    def __init__(self, system, device, state_scales=None, param_bounds=None):
+        self.device = device
+        
+        # 1. Parameter Normalization (Min-Max to [-1, 1])
+        if param_bounds is not None:
+            # 데이터 기반 범위 사용 ([min1, min2...], [max1, max2...])
+            mins, maxs = param_bounds
+            print(f"[Normalizer] Using Data-Driven Parameter Bounds")
+            print(f"  - Mins: {mins}")
+            print(f"  - Maxs: {maxs}")
+        else:
+            # Fallback: 기존 시스템 정의 범위 사용
+            mins = [system.param_ranges[name][0] for name in system.param_names]
+            maxs = [system.param_ranges[name][1] for name in system.param_names]
+        
+        self.p_min = torch.tensor(mins, device=self.device, dtype=torch.float32)
+        self.p_max = torch.tensor(maxs, device=self.device, dtype=torch.float32)
+        
+        # 범위가 0이 되는 것을 방지 (안전장치)
+        self.p_range = torch.maximum(
+            self.p_max - self.p_min, 
+            torch.tensor(1e-6, device=self.device)
+        )
+
+        # 2. Input State Normalization (Scaling)
+        # 외부에서 계산된 state_scales를 주입받음
+        if state_scales is not None:
+            self.state_scales = torch.tensor(state_scales, device=self.device, dtype=torch.float32)
+            # 0으로 나누기 방지
+            self.state_scales = torch.maximum(self.state_scales, torch.tensor(1e-6, device=self.device))
+        else:
+            # Fallback: 도메인 지식 기반 기본값 (Glucose, Insulin)
+            # 예: Glucose ~600, Insulin ~3000 (단위에 따라 다름)
+            self.state_scales = torch.tensor([600.0, 3000.0], device=self.device, dtype=torch.float32)
+
+    def normalize_params(self, p):
+        """ [min, max] -> [-1, 1] """
+        p_norm = (p - self.p_min) / self.p_range
+        return p_norm * 2.0 - 1.0
+
+    def denormalize_params(self, p_norm):
+        """ [-1, 1] -> [min, max] """
+        p_01 = (p_norm + 1.0) / 2.0
+        return p_01 * self.p_range + self.p_min
+
+    def normalize_inputs(self, x, variable_type=None):
+        """ X -> X / Scale """
+        n_obs = 1
+        n_hid = 1
+        
+        scale_obs = self.state_scales[0] # Glucose Scale
+        scale_hid = self.state_scales[1] # Insulin Scale
+        
+        # 1. 명시적 타입이 지정된 경우 (Trainer에서 사용)
+        if variable_type == 'observed':
+            # x가 관측 변수(Glucose)일 때
+            return x / scale_obs
+        elif variable_type == 'hidden':
+            # x가 숨겨진 변수(Insulin)일 때 -> 올바른 스케일 적용!
+            return x / scale_hid
+        
+        # 입력 차원에 맞춰 스케일 벡터 확장 (Lagrangian 미분항 대응)
+        # x shape: [Batch, Dim]
+        base_dim = len(self.state_scales)
+        
+        if x.shape[1] == base_dim:
+            scale = self.state_scales
+        elif x.shape[1] == 2 * base_dim: # 미분값 포함 시
+            # 미분값도 동일한 스케일로 나누어야 물리적 관계 보존됨 (중요!)
+            scale = torch.cat([self.state_scales, self.state_scales])
+        else:
+            # 예외 처리: 일단 앞부분만이라도 맞춤
+            scale = self.state_scales.repeat(x.shape[1] // base_dim + 1)[:x.shape[1]]
+            
+        return x / scale
+
+    def denormalize_inputs(self, x_norm, variable_type=None):
+        """ X_norm -> X_norm * Scale """
+        # normalize_inputs와 동일한 로직으로 scale 구성 후 곱셈
+        
+        scale_obs = self.state_scales[0]
+        scale_hid = self.state_scales[1]
+        
+        if variable_type == 'observed':
+            return x_norm * scale_obs
+        elif variable_type == 'hidden':
+            return x_norm * scale_hid
+        
+        base_dim = len(self.state_scales)
+        if x_norm.shape[1] == 2 * base_dim:
+            scale = torch.cat([self.state_scales, self.state_scales])
+        else:
+            scale = self.state_scales
+        return x_norm * scale
     
 
 class DerivativeEstimator(ABC):

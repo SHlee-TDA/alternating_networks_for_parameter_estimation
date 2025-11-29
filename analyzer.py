@@ -39,7 +39,7 @@ class Analyzer:
             return
 
         print("Plotting and saving loss curves...")
-        fig, axs = plt.subplots(ncols=2, figsize=(10, 12))
+        fig, axs = plt.subplots(ncols=2, figsize=(12, 6))
         epochs = range(1, len(self.history['train_total_loss']) + 1)
 
         axs[0].plot(epochs, self.history['train_loss_f'], label='Train Loss of f_theta', color='blue')
@@ -120,17 +120,17 @@ class Analyzer:
         with torch.no_grad():
             for x_batch, _, p_batch in self.test_loader:
                 x_batch = x_batch.to(self.config.DEVICE)
+                x_batch_norm = self.normalizer.normalize_inputs(x_batch)
                 
-                p_n_norm = self.normalizer.normalize(self.p_initial_guess.repeat(x_batch.size(0), 1))
+                p_n_norm = self.normalizer.normalize_params(self.p_initial_guess.repeat(x_batch.size(0), 1))
                 
                 for _ in range(self.config.ITERATIONS):
-                    # f_theta에 입력하기 위해 역정규화
-                    p_n = self.normalizer.denormalize(p_n_norm)
-                    y_hat = self.f_theta(x_batch, p_n)
+                    # f_theta에 정규화된 입력을 입력
+                    y_hat_norm = self.f_theta(x_batch_norm, p_n_norm)
                     # g_phi는 정규화된 p_{n+1}을 출력
-                    p_n_norm = self.g_phi(x_batch, y_hat)
+                    p_n_norm = self.g_phi(x_batch_norm, y_hat_norm)
                 
-                p_final_pred = self.normalizer.denormalize(p_n_norm)
+                p_final_pred = self.normalizer.denormalize_params(p_n_norm)
                 
                 all_p_pred.append(p_final_pred.cpu().numpy())
                 all_p_true.append(p_batch.numpy())
@@ -274,20 +274,20 @@ class Analyzer:
         p0_grid_raw[:, p2_idx] = torch.tensor(p2_grid.flatten(), dtype=torch.float32)
         
         # [FIX] 2. 연산을 위해 그리드를 정규화합니다. (p_n_norm)
-        p0_grid_norm = self.normalizer.normalize(p0_grid_raw)
+        p0_grid_norm = self.normalizer.normalize_params(p0_grid_raw)
         
         with torch.no_grad():
             x_batch = x_observed.repeat(p1_grid.size, 1)
             
             # [FIX] 3. f_theta에는 정규화된 p를 denormalize해서 입력
-            y_hat = self.f_theta(x_batch, self.normalizer.denormalize(p0_grid_norm))
+            y_hat = self.f_theta(x_batch, self.normalizer.denormalize_params(p0_grid_norm))
             
             # [FIX] 4. g_phi는 정규화된 p_{n+1}을 출력 (p1_grid_norm)
             p1_grid_norm = self.g_phi(x_batch, y_hat)
         
         # [FIX] 5. 벡터 필드(dp)를 계산합니다.
         # p_{n+1}_raw 와 p_{n}_raw를 구해서 빼야 플롯에 의미가 있습니다.
-        p1_grid_raw = self.normalizer.denormalize(p1_grid_norm).cpu().numpy()
+        p1_grid_raw = self.normalizer.denormalize_params(p1_grid_norm).cpu().numpy()
         dp_raw = p1_grid_raw - p0_grid_raw.cpu().numpy()
 
         # [FIX] 6. 원본 스케일의 그리드(p1_grid, p2_grid)에 원본 스케일의 벡터(dp_raw)를 그립니다.
@@ -305,12 +305,12 @@ class Analyzer:
         trajectory_raw = [p_start_raw.clone()] # 플롯을 위해 원본 스케일 값 저장
         
         # [FIX] 8. 반복은 정규화된(normalized) 값으로 시작
-        p_current_norm = self.normalizer.normalize(p_start_raw)
+        p_current_norm = self.normalizer.normalize_params(p_start_raw)
         
         with torch.no_grad():
             for _ in range(num_iterations):
                 # [FIX] 9. f_theta 입력을 위해 denormalize
-                p_current_raw_for_f = self.normalizer.denormalize(p_current_norm)
+                p_current_raw_for_f = self.normalizer.denormalize_params(p_current_norm)
                 
                 # 10. y_hat 계산
                 y_hat = self.f_theta(x_observed, p_current_raw_for_f)
@@ -319,7 +319,7 @@ class Analyzer:
                 p_next_norm = self.g_phi(x_observed, y_hat)
                 
                 # [FIX] 12. 플롯을 위해 원본(raw) 스케일로 변환하여 저장
-                trajectory_raw.append(self.normalizer.denormalize(p_next_norm).clone())
+                trajectory_raw.append(self.normalizer.denormalize_params(p_next_norm).clone())
                 
                 # [FIX] 13. 상태 업데이트는 정규화된(normalized) 값으로 수행
                 p_current_norm = p_next_norm
@@ -369,19 +369,19 @@ class Analyzer:
         X_tensor = torch.tensor(X_flat, dtype=torch.float32).to(self.config.DEVICE)
         
         # 초기 추측값 설정
-        p_n_norm = self.normalizer.normalize(self.p_initial_guess.repeat(N_test, 1))
+        p_n_norm = self.normalizer.normalize_params(self.p_initial_guess.repeat(N_test, 1))
         
         with torch.no_grad():
             for _ in range(self.config.ITERATIONS):
                 # Forward: P -> Y_hat (Hidden Variable Prediction)
-                p_n = self.normalizer.denormalize(p_n_norm)
+                p_n = self.normalizer.denormalize_params(p_n_norm)
                 y_hat = self.f_theta(X_tensor, p_n)
                 
                 # Inverse: (X, Y_hat) -> P_new
                 p_n_norm = self.g_phi(X_tensor, y_hat)
             
             # 최종 파라미터
-            p_pred = self.normalizer.denormalize(p_n_norm).cpu().numpy()
+            p_pred = self.normalizer.denormalize_params(p_n_norm).cpu().numpy()
             
         # 4. [Type A] 파라미터 비교 ($R^2$ 검증)
         print(f"  -> [Type A] Parameter Correlation (N={N_test})...")

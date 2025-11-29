@@ -1,0 +1,34 @@
+{
+    "EPOCHS": 2,
+    "EXPERIMENT_NAME": "",
+    "USE_SPECTRAL_NORM": false,
+    "USE_CONSISTENCY_LOSS": false,
+    "MODEL_CONFIG": {
+        "f_theta": {
+            "hidden_dims": [
+                128,
+                128,
+                128,
+                128
+            ],
+            "activation": "Tanh"
+        },
+        "g_phi": {
+            "hidden_dims": [
+                128,
+                128,
+                128,
+                128
+            ],
+            "activation": "Tanh"
+        },
+        "initialization": {
+            "type": "xavier",
+            "distribution": "normal"
+        }
+    },
+    "USE_SDE": true,
+    "RESULTS_DIR": "results\\ogtt_simul\\20251127_020301_sde_pure_vanilla_5d734a3d",
+    "SYSTEM_NAME": "",
+    "DEVICE": "None"
+}

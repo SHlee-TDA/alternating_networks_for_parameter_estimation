@@ -325,9 +325,10 @@ class RealOGTTDataLoader:
     2. Missing Values: 결측치가 하나라도 있는 환자 데이터는 품질 보장을 위해 삭제함.
     3. Parameters: 개별 환자의 BV 등은 계산하지 않고, 시스템 기본 파라미터를 따름.
     """
-    def __init__(self, file_path, config):
+    def __init__(self, file_path, config, split_file=None):
         self.file_path = file_path
         self.config = config
+        self.split_file = split_file
         self.t_points = np.array([0, 30, 60, 90, 120])  # 고정된 시간 지점
 
         # Derivative estimation logic
@@ -408,6 +409,46 @@ class RealOGTTDataLoader:
             hidden_data = insulin_raw[:, :, np.newaxis]  # (N, 5, 1)
         
         return observed_data, hidden_data, params_data, self.t_points
+    
+    def get_train_test_datasets(self):
+        """
+        저장된 인덱스 파일을 사용하여 Train/Test Dataset을 정확히 분할하여 반환합니다.
+        """
+        # 1. 전체 데이터 로드
+        X_obs, Y_hid, P_true, t_points = self.load_data()
+        
+        # Tensor 변환 & Flatten
+        N, T, _ = X_obs.shape
+        X_flat = torch.tensor(X_obs.reshape(N, -1), dtype=torch.float32)
+        Y_flat = torch.tensor(Y_hid.reshape(N, -1), dtype=torch.float32)
+        P_tensor = torch.tensor(P_true, dtype=torch.float32)
+        
+        full_dataset = TensorDataset(X_flat, Y_flat, P_tensor)
+        
+        # 2. 인덱스 파일 로드 및 분할
+        if self.split_file and os.path.exists(self.split_file):
+            print(f"[RealLoader] Loading split indices from {self.split_file}")
+            with open(self.split_file, 'r') as f:
+                indices = json.load(f)
+                
+            train_idx = indices['train_indices']
+            test_idx = indices['test_indices']
+            
+            # Subset 생성
+            train_dataset = torch.utils.data.Subset(full_dataset, train_idx)
+            test_dataset = torch.utils.data.Subset(full_dataset, test_idx)
+            
+            print(f"[RealLoader] Split loaded: {len(train_dataset)} Train, {len(test_dataset)} Test")
+        else:
+            print("[RealLoader] Warning: Split file not found! Performing random split (8:2).")
+            train_size = int(0.8 * N)
+            test_size = N - train_size
+            train_dataset, test_dataset = random_split(
+                full_dataset, [train_size, test_size],
+                generator=torch.Generator().manual_seed(self.config.SEED)
+            )
+            
+        return train_dataset, test_dataset
     
 def create_real_data_loaders(data_tuple, config):
     X_obs, Y_hid, P_true, t_points = data_tuple
