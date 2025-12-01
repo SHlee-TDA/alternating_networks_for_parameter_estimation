@@ -1,7 +1,0 @@
-{
-    "USE_LAGRANGIAN": false,
-    "EXPERIMENT_NAME": "spectral_norm",
-    "USE_SPECTRAL_NORM": true,
-    "USE_CONSISTENCY_LOSS": false,
-    "DEVICE": "None"
-}
