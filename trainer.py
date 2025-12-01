@@ -20,13 +20,15 @@ class Trainer:
     def __init__(self, 
                  f_theta, g_phi, 
                  train_loader, val_loader, 
-                 config, normalizer):
+                 config, 
+                 #normalizer
+                 ):
         self.f_theta = f_theta.to(config.DEVICE)
         self.g_phi = g_phi.to(config.DEVICE)
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.config = config
-        self.normalizer = normalizer
+        #self.normalizer = normalizer
         self.optimizer = torch.optim.AdamW(
             list(self.f_theta.parameters()) + list(self.g_phi.parameters()),
             lr=config.LEARNING_RATE,
@@ -63,27 +65,33 @@ class Trainer:
                 p_batch = p_batch.to(self.config.DEVICE)
 
                 # Normalization
-                x_batch_norm = self.normalizer.normalize_inputs(x_batch, variable_type='observed')
-                y_batch_norm = self.normalizer.normalize_inputs(y_batch, variable_type='hidden')
-                p_batch_norm = self.normalizer.normalize_params(p_batch)
+                # x_batch_norm = self.normalizer.normalize_inputs(x_batch, variable_type='observed')
+                # y_batch_norm = self.normalizer.normalize_inputs(y_batch, variable_type='hidden')
+                # p_batch_norm = self.normalizer.normalize_params(p_batch)
 
                 
                 
                 # 1. Forward Loss
                 self.optimizer.zero_grad()
-                y_pred_norm = self.f_theta(x_batch_norm, p_batch_norm)
-                loss_f = self.loss_fn(y_pred_norm, y_batch_norm)
-                
+                # y_pred_norm = self.f_theta(x_batch_norm, p_batch_norm)
+                # loss_f = self.loss_fn(y_pred_norm, y_batch_norm)
+                y_pred = self.f_theta(x_batch, p_batch)
+                loss_f = self.loss_fn(y_pred, y_batch)
+
                 # 2. Inverse Loss
-                p_pred_norm = self.g_phi(x_batch_norm, y_batch_norm)
-                loss_g = self.loss_fn(p_pred_norm, p_batch_norm)
+                # p_pred_norm = self.g_phi(x_batch_norm, y_batch_norm)
+                # loss_g = self.loss_fn(p_pred_norm, p_batch_norm)
+                p_pred = self.g_phi(x_batch, y_batch)
+                loss_g = self.loss_fn(p_pred, p_batch)
                 
                 total_loss = loss_f + loss_g
                 
                 # 3. Consistency Loss
                 if self.config.USE_CONSISTENCY_LOSS:
-                    p_reconstructed_norm = self.g_phi(x_batch_norm, y_pred_norm)
-                    loss_consistency = self.loss_fn(p_reconstructed_norm, p_batch_norm)
+                    # p_reconstructed_norm = self.g_phi(x_batch_norm, y_pred_norm)
+                    # loss_consistency = self.loss_fn(p_reconstructed_norm, p_batch_norm)
+                    p_reconstructed = self.g_phi(x_batch, y_pred)
+                    loss_consistency = self.loss_fn(p_reconstructed, p_batch)
                     total_loss += self.config.CONSISTENCY_LOSS_LAMBDA * loss_consistency
                 
                 # 4. Spectral Norm Penalty
@@ -168,24 +176,31 @@ class Trainer:
             y_batch = y_batch.to(self.config.DEVICE)
             p_batch = p_batch.to(self.config.DEVICE)
             
-            x_batch_norm = self.normalizer.normalize_inputs(x_batch, variable_type='observed')
-            y_batch_norm = self.normalizer.normalize_inputs(y_batch, variable_type='hidden')
-            p_batch_norm = self.normalizer.normalize_params(p_batch)
+            # x_batch_norm = self.normalizer.normalize_inputs(x_batch, variable_type='observed')
+            # y_batch_norm = self.normalizer.normalize_inputs(y_batch, variable_type='hidden')
+            # p_batch_norm = self.normalizer.normalize_params(p_batch)
 
-            y_pred_f = self.f_theta(x_batch_norm, p_batch_norm)
-            loss_f = self.loss_fn(y_pred_f, y_batch_norm)
+            # y_pred_f = self.f_theta(x_batch_norm, p_batch_norm)
+            # loss_f = self.loss_fn(y_pred_f, y_batch_norm)
+            y_pred_f = self.f_theta(x_batch, p_batch)
+            loss_f = self.loss_fn(y_pred_f, y_batch)
+            
+            # p_pred_g = self.g_phi(x_batch_norm, y_batch_norm)
+            # loss_g = self.loss_fn(p_pred_g, p_batch_norm)
 
-            p_pred_g = self.g_phi(x_batch_norm, y_batch_norm)
-            loss_g = self.loss_fn(p_pred_g, p_batch_norm)
-
+            p_pred_g = self.g_phi(x_batch, y_batch)
+            loss_g = self.loss_fn(p_pred_g, p_batch)
+            
             total_loss = loss_f + loss_g
             losses['total_loss'].append(total_loss.item())
             losses['loss_f'].append(loss_f.item())
             losses['loss_g'].append(loss_g.item())
 
             if getattr(self.config, 'USE_CONSISTENCY_LOSS', False):
-                p_reconstructed_norm = self.g_phi(x_batch_norm, y_pred_f)
-                loss_consistency = self.loss_fn(p_reconstructed_norm, p_batch_norm)
+                # p_reconstructed_norm = self.g_phi(x_batch_norm, y_pred_f)
+                # loss_consistency = self.loss_fn(p_reconstructed_norm, p_batch_norm)
+                p_reconstructed = self.g_phi(x_batch, y_pred_f)
+                loss_consistency = self.loss_fn(p_reconstructed, p_batch)
                 # total_loss += self.config.CONSISTENCY_LOSS_LAMBDA * loss_consistency
                 losses['loss_consistency'].append(loss_consistency.item())
 
@@ -280,8 +295,8 @@ class Trainer:
     def _save_final_artifacts(self):
         torch.save(self.f_theta.state_dict(), os.path.join(self.results_path, 'f_theta.pth'))
         torch.save(self.g_phi.state_dict(), os.path.join(self.results_path, 'g_phi.pth'))
-        with open(os.path.join(self.results_path, 'normalizer.pkl'), 'wb') as f:
-            pickle.dump(self.normalizer, f)
+        #with open(os.path.join(self.results_path, 'normalizer.pkl'), 'wb') as f:
+        #    pickle.dump(self.normalizer, f)
         
         config_dict = {k: v for k, v in self.config.__dict__.items() if not k.startswith('__') and not callable(v)}
         config_dict['DEVICE'] = str(config_dict.get('DEVICE'))

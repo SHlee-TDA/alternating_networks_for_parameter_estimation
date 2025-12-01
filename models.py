@@ -109,6 +109,32 @@ class BaseNetwork(nn.Module):
         return self.network(x)
     
 
+class HiddenVarPredictor(nn.Module):
+    def __init__(self, flat_x_dim, flat_y_dim, num_params, model_config, use_spectral_norm=False, initialization_config=None):
+        super().__init__()
+        input_dim = flat_x_dim + num_params
+        output_dim = flat_y_dim
+        
+        self.net = BaseNetwork(input_dim, output_dim, model_config, use_spectral_norm)
+        # (초기화 로직은 그대로 적용하거나 BaseNetwork 내부로 이동 가능)
+
+    def forward(self, x, p):
+        combined = torch.cat([x, p], dim=1)
+        return self.net(combined)
+
+class ParameterEstimator(nn.Module):
+    def __init__(self, flat_x_dim, flat_y_dim, num_params, model_config, use_spectral_norm=False, initialization_config=None):
+        super().__init__()
+        input_dim = flat_x_dim + flat_y_dim
+        output_dim = num_params
+        
+        self.net = BaseNetwork(input_dim, output_dim, model_config, use_spectral_norm)
+        self.final_act = nn.Tanh() # [필수] 정규화된 파라미터 범위
+
+    def forward(self, x, y):
+        combined = torch.cat([x, y], dim=1)
+        return self.final_act(self.net(combined))
+    
 # class HiddenVarPredictor(nn.Module):
 #     """f_theta: 숨겨진 변수를 예측하는 범용 네트워크"""
 #     def __init__(self, 
@@ -189,28 +215,3 @@ class BaseNetwork(nn.Module):
 #        return self.network(combined_input)
     
     
-class HiddenVarPredictor(nn.Module):
-    def __init__(self, flat_x_dim, flat_y_dim, num_params, model_config, use_spectral_norm=False, initialization_config=None):
-        super().__init__()
-        input_dim = flat_x_dim + num_params
-        output_dim = flat_y_dim
-        
-        self.net = BaseNetwork(input_dim, output_dim, model_config, use_spectral_norm)
-        # (초기화 로직은 그대로 적용하거나 BaseNetwork 내부로 이동 가능)
-
-    def forward(self, x, p):
-        combined = torch.cat([x, p], dim=1)
-        return self.net(combined)
-
-class ParameterEstimator(nn.Module):
-    def __init__(self, flat_x_dim, flat_y_dim, num_params, model_config, use_spectral_norm=False, initialization_config=None):
-        super().__init__()
-        input_dim = flat_x_dim + flat_y_dim
-        output_dim = num_params
-        
-        self.net = BaseNetwork(input_dim, output_dim, model_config, use_spectral_norm)
-        self.final_act = nn.Tanh() # [필수] 정규화된 파라미터 범위
-
-    def forward(self, x, y):
-        combined = torch.cat([x, y], dim=1)
-        return self.final_act(self.net(combined))

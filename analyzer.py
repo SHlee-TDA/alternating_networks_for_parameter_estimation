@@ -72,10 +72,16 @@ class Analyzer:
         print(f"Saved loss history data to {data_path}")
     
     def _get_model_spectral_norms(self, model):
+        """
+        모델 내부의 모든 Linear 레이어를 찾아 Spectral Norm을 계산합니다.
+        model.modules()를 사용하여 중첩된 구조(ResidualBlock 등) 내부도 탐색합니다.
+        """
         norms, indices = [], []
         linear_idx = 1
-        for layer in model.network.children():
+        # [수정] model.network.children() -> model.modules()
+        for layer in model.modules():
             if isinstance(layer, torch.nn.Linear):
+                # weight_orig가 있으면(spectral_norm 적용 시) 그것을 사용, 아니면 weight 사용
                 weight = getattr(layer, 'weight_orig', layer.weight)
                 norm = torch.linalg.norm(weight, ord=2).item()
                 norms.append(norm)
@@ -87,7 +93,8 @@ class Analyzer:
         """단일 모델의 스펙트럴 노름을 계산하고 출력합니다."""
         print(f"\n--- Analyzing Spectral Norms for {model_name} ---")
         norms = []
-        for layer in model.network.children():
+        # [수정] model.children() -> model.modules()
+        for layer in model.modules():
             if isinstance(layer, torch.nn.Linear):
                 # spectral_norm 적용 여부에 따라 올바른 가중치를 가져옵니다.
                 weight = getattr(layer, 'weight_orig', layer.weight)
@@ -131,9 +138,10 @@ class Analyzer:
                     p_n_norm = self.g_phi(x_batch_norm, y_hat_norm)
                 
                 p_final_pred = self.normalizer.denormalize_params(p_n_norm)
+                p_true_denorm = self.normalizer.denormalize_params(p_batch)
                 
                 all_p_pred.append(p_final_pred.cpu().numpy())
-                all_p_true.append(p_batch.numpy())
+                all_p_true.append(p_true_denorm.cpu().numpy())
         return np.concatenate(all_p_true), np.concatenate(all_p_pred)
 
     def plot_scatter(self, p_true, p_pred, prefix="sim"):
@@ -241,7 +249,7 @@ class Analyzer:
         
         x_sample, _, p_sample = self.test_loader.dataset[0]
         x_sample_batch = x_sample.unsqueeze(0).to(self.config.DEVICE)
-        true_params = p_sample.numpy()
+        true_params = p_sample.cpu().numpy()
         
         # 4. 선택된 조합에 대해 플롯 생성
         for i, p_dims in enumerate(plot_combinations):
