@@ -3,6 +3,7 @@ import numpy as np
 
 class System(ABC):
     """
+    Abstract base class 
     모든 ODE 시스템의 기본 구조를 정의하는 추상 베이스 클래스
     SDE 확장을 위해 drift와 diffusion 메서드를 분리함
     """

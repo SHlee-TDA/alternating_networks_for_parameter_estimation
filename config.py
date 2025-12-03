@@ -47,7 +47,7 @@ class Config:
     
     # 2) Loss/Model 조합 정의 (4가지 경우의 수)
     LOSS_VARIANTS = [
-        #{'sn': False, 'cl': False, 'suffix': 'vanilla'},          # 기본 모델
+        {'sn': False, 'cl': False, 'suffix': 'vanilla'},          # 기본 모델
         #{'sn': True,  'cl': False, 'suffix': 'spectral_norm'},    # SN만 적용
         #{'sn': False, 'cl': True,  'suffix': 'consistency_loss'}, # CL만 적용
         {'sn': True,  'cl': True,  'suffix': 'full_method'}       # 둘 다 적용 (제안 방법)
@@ -83,8 +83,8 @@ class Config:
     TEST_SPLIT = 0.2
     BATCH_SIZE = 128
     EPOCHS = 20000
-    LEARNING_RATE = 1e-3
-    WEIGHT_DECAY = 1e-5
+    LEARNING_RATE = 1e-2
+    WEIGHT_DECAY = 1e-6
     
     USE_EARLY_STOPPING = True
     EARLY_STOPPING_PATIENCE = 200
@@ -94,7 +94,7 @@ class Config:
     # 4. 방법론 관련 하이퍼파라미터 (Methodology Hyperparameters)
     # =========================================================================
     CONSISTENCY_LOSS_LAMBDA = 1.0
-    ITERATIONS = 10
+    ITERATIONS = 20
     
     # [Phase 5 설정] Lagrangian 및 미분 방법
     USE_LAGRANGIAN = True         # 미분값(Derivative)을 Feature로 사용
@@ -112,11 +112,11 @@ class Config:
     # =========================================================================
     MODEL_CONFIG = {
         'f_theta': {
-            'hidden_dims': [256, 256, 256, 256, 256, 256],
+            'hidden_dims': [128, 128, 128, 128, 128, 128],
             'activation': 'SiLU'
         },
         'g_phi': {
-            'hidden_dims': [256, 256, 256, 256, 256, 256],
+            'hidden_dims': [128, 128, 128, 128, 128, 128],
             'activation': 'SiLU'
         },
         'initialization': {

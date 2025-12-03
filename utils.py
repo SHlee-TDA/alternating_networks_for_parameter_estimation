@@ -11,50 +11,63 @@ from scipy.interpolate import UnivariateSpline, lagrange
 
 
 class Normalizer:
-    def __init__(self, system, device, state_scales=None, param_bounds=None):
+    # 1. 초기화 메서드에 use_log_params 인자 추가
+    def __init__(self, system, device, state_scales=None, param_bounds=None, use_log_params=False):
         self.device = device
-        
-        # 1. Parameter Normalization (Min-Max to [-1, 1])
+        self.use_log_params = use_log_params # [추가] 로그 변환 사용 여부
+
+        # --- Parameter Normalization Init ---
         if param_bounds is not None:
-            # 데이터 기반 범위 사용 ([min1, min2...], [max1, max2...])
             mins, maxs = param_bounds
-            print(f"[Normalizer] Using Data-Driven Parameter Bounds")
-            print(f"  - Mins: {mins}")
-            print(f"  - Maxs: {maxs}")
+            # print(f"[Normalizer] Using Data-Driven Parameter Bounds")
         else:
-            # Fallback: 기존 시스템 정의 범위 사용
             mins = [system.param_ranges[name][0] for name in system.param_names]
             maxs = [system.param_ranges[name][1] for name in system.param_names]
         
         self.p_min = torch.tensor(mins, device=self.device, dtype=torch.float32)
         self.p_max = torch.tensor(maxs, device=self.device, dtype=torch.float32)
-        
-        # 범위가 0이 되는 것을 방지 (안전장치)
+
+        # [핵심 수정] 로그 변환 모드일 경우, Min/Max 경계값도 로그를 취해줌
+        if self.use_log_params:
+            print("[Normalizer] ✅ Enabled Log-Space Normalization for Parameters.")
+            # 0이나 음수가 들어오지 않도록 안전장치(1e-6) 후 로그 변환
+            self.p_min = torch.log(torch.maximum(self.p_min, torch.tensor(1e-6, device=self.device)))
+            self.p_max = torch.log(torch.maximum(self.p_max, torch.tensor(1e-6, device=self.device)))
+
+        # 범위 계산 (로그 변환된 min/max 기반으로 계산됨)
         self.p_range = torch.maximum(
             self.p_max - self.p_min, 
             torch.tensor(1e-6, device=self.device)
         )
 
-        # 2. Input State Normalization (Scaling)
-        # 외부에서 계산된 state_scales를 주입받음
+        # --- Input State Normalization Init (기존과 동일) ---
         if state_scales is not None:
             self.state_scales = torch.tensor(state_scales, device=self.device, dtype=torch.float32)
-            # 0으로 나누기 방지
             self.state_scales = torch.maximum(self.state_scales, torch.tensor(1e-6, device=self.device))
         else:
-            # Fallback: 도메인 지식 기반 기본값 (Glucose, Insulin)
-            # 예: Glucose ~600, Insulin ~3000 (단위에 따라 다름)
             self.state_scales = torch.tensor([600.0, 3000.0], device=self.device, dtype=torch.float32)
 
     def normalize_params(self, p):
-        """ [min, max] -> [-1, 1] """
+        """ [min, max] -> [-1, 1] (Log option applied) """
+        # [핵심 수정] 입력값에 먼저 로그를 취함
+        if self.use_log_params:
+            p = torch.log(torch.maximum(p, torch.tensor(1e-6, device=self.device)))
+            
         p_norm = (p - self.p_min) / self.p_range
         return p_norm * 2.0 - 1.0
-
+        # return p
+    
     def denormalize_params(self, p_norm):
-        """ [-1, 1] -> [min, max] """
+        """ [-1, 1] -> [min, max] (Log option applied) """
         p_01 = (p_norm + 1.0) / 2.0
-        return p_01 * self.p_range + self.p_min
+        p_recovered = p_01 * self.p_range + self.p_min
+        
+        # [핵심 수정] 복원된 값(로그 상태)을 지수(Exp)로 변환
+        if self.use_log_params:
+            return torch.exp(p_recovered)
+            
+        return p_recovered
+        #return p_norm
 
     def normalize_inputs(self, x, variable_type=None):
         """ X -> X / Scale """
@@ -86,6 +99,7 @@ class Normalizer:
             scale = self.state_scales.repeat(x.shape[1] // base_dim + 1)[:x.shape[1]]
             
         return x / scale
+        #return x
 
     def denormalize_inputs(self, x_norm, variable_type=None):
         """ X_norm -> X_norm * Scale """
@@ -105,6 +119,7 @@ class Normalizer:
         else:
             scale = self.state_scales
         return x_norm * scale
+        #return x_norm
     
 
 class DerivativeEstimator(ABC):

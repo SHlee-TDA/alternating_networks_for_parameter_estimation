@@ -88,7 +88,7 @@ class BaseNetwork(nn.Module):
                 layers.append(ResidualBlock(
                     hidden_dims[i], 
                     activation, 
-                    use_layer_norm=True,  # [추천] LayerNorm 켜기
+                    use_layer_norm=True,  
                     use_spectral_norm=use_spectral_norm
                 ))
             else:
@@ -129,14 +129,31 @@ class ParameterEstimator(nn.Module):
         output_dim = num_params
         
         self.net = BaseNetwork(input_dim, output_dim, model_config, use_spectral_norm)
-        self.final_act = nn.Tanh() # [필수] 정규화된 파라미터 범위
-
+        #self.final_act = nn.Tanh() # [필수] 정규화된 파라미터 범위
+        self.final_act = nn.Softplus()
+        self._initialize_last_layer()
+        
     def forward(self, x, y):
         combined = torch.cat([x, y], dim=1)
         return self.final_act(self.net(combined))
     
+    def _initialize_last_layer(self):
+        # 네트워크의 마지막 Linear 레이어를 찾아 Bias를 0.5로 설정
+        # (BaseNetwork -> Sequential -> ... -> Linear)
+        last_layer = None
+        for module in self.net.modules():
+            if isinstance(module, nn.Linear):
+                last_layer = module
+        
+        if last_layer is not None:
+            print(f"[ParameterEstimator] Initializing output bias to 0.5")
+            nn.init.constant_(last_layer.bias, 0.5)
+            # 가중치는 작게 하여 초기 출력이 Bias에 의존하도록 함
+            nn.init.normal_(last_layer.weight, mean=0.0, std=0.001)
+            
+            
 # class HiddenVarPredictor(nn.Module):
-#     """f_theta: 숨겨진 변수를 예측하는 범용 네트워크"""
+#     """f_theta: (Observed X, Params P) -> Hidden Y"""
 #     def __init__(self, 
 #                  flat_x_dim,        # (T * num_features)
 #                  flat_y_dim,        # (T * num_hidden) 
@@ -153,32 +170,34 @@ class ParameterEstimator(nn.Module):
 #         layers = []
 #         input_dim = flat_x_dim + num_params
         
+#         # Hidden Layers
 #         for hidden_dim in hidden_dims:
-#             layers.append(nn.Linear(input_dim, hidden_dim))
+#             linear = nn.Linear(input_dim, hidden_dim)
+#             if use_spectral_norm:
+#                 linear = spectral_norm(linear, n_power_iterations=15)
+#             layers.append(linear)
 #             layers.append(activation)
 #             input_dim = hidden_dim
             
-#         layers.append(nn.Linear(input_dim, flat_y_dim))
+#         # Output Layer (Linear for regression target)
+#         last_linear = nn.Linear(input_dim, flat_y_dim)
+#         # (Optional: Hidden Variable 예측에도 Spectral Norm을 쓸지 결정. 보통 출력층은 제외)
+#         layers.append(last_linear)
         
-#         if use_spectral_norm:
-#             # 마지막 레이어에는 spectral_norm을 적용하지 않음
-#             layers[:-1] = [spectral_norm(l, n_power_iterations=15) if isinstance(l, nn.Linear) else l for l in layers[:-1]]
-            
-
 #         self.network = nn.Sequential(*layers)
+        
+#         # 1. 기본 초기화 적용
 #         self.network.apply(lambda m: init_weights_xavier(m, dist=init_config['distribution']))
 
 #     def forward(self, x_observed, params):
-#         # x_observed: (B, flat_x_dim), params: (B, num_params)
-#         # network : (B, flat_x_dim + num_params) -> (B, flat_y_dim)
 #         combined_input = torch.cat((x_observed, params), dim=1)
 #         return self.network(combined_input)
 
 # class ParameterEstimator(nn.Module):
-#     """g_phi: 파라미터를 예측하는 범용 네트워크"""
+#     """g_phi: (Observed X, Hidden Y) -> Params P"""
 #     def __init__(self, 
-#                  flat_x_dim,      # (T * n_features) 값
-#                  flat_y_dim,      # (T * n_hidden) 값
+#                  flat_x_dim,      # (T * n_features)
+#                  flat_y_dim,      # (T * n_hidden)
 #                  num_params,      # 파라미터 개수
 #                  model_config,    # config.MODEL_CONFIG['g_phi']
 #                  use_spectral_norm=False,
@@ -189,29 +208,48 @@ class ParameterEstimator(nn.Module):
 #         activation = get_activation(model_config['activation'])
 #         init_config = initialization_config or {'type': 'xavier', 'distribution': 'uniform'}
 
-#         # 입력: 평탄화된 X + 평탄화된 Y
 #         input_dim = flat_x_dim + flat_y_dim
         
 #         layers = []
+#         # Hidden Layers
 #         for hidden_dim in hidden_dims:
-#             layers.append(nn.Linear(input_dim, hidden_dim))
+#             linear = nn.Linear(input_dim, hidden_dim)
+#             if use_spectral_norm:
+#                 linear = spectral_norm(linear, n_power_iterations=15)
+#             layers.append(linear)
 #             layers.append(activation)
 #             input_dim = hidden_dim
             
-#         # 출력: 파라미터 개수
-#         layers.append(nn.Linear(input_dim, num_params))
-#         layers.append(nn.Tanh())
-#         #layers.append(nn.Sigmoid()) # 출력을 [0, 1]로 제한
-        
+#         # Output Layer
+#         final_linear = nn.Linear(input_dim, num_params)
 #         if use_spectral_norm:
-#             layers = [spectral_norm(l, n_power_iterations=15) if isinstance(l, nn.Linear) else l for l in layers]
-            
+#             final_linear = spectral_norm(final_linear, n_power_iterations=15)
+#         layers.append(final_linear)
+        
+#         # [수정 1] Tanh 제거 -> Softplus 적용 (양수 보장 + 그라디언트 유지)
+#         layers.append(nn.Softplus()) 
+        
 #         self.network = nn.Sequential(*layers)
+        
+#         # 2. 기본 초기화
 #         self.network.apply(lambda m: init_weights_xavier(m, dist=init_config['distribution']))
         
+#         # [수정 2] Bias Initialization (학습 초기화 이슈 해결)
+#         # 마지막 Linear 레이어의 Bias를 0.5로 설정하여 초기 예측값을 안정화
+#         self._initialize_last_bias(val=0.5)
+
+#     def _initialize_last_bias(self, val=0.5):
+#         # 네트워크의 마지막 모듈들 중 Linear를 찾음
+#         for layer in reversed(self.network):
+#             if isinstance(layer, nn.Linear):
+#                 print(f"[ParameterEstimator] Initializing output bias to {val}")
+#                 if layer.bias is not None:
+#                     torch.nn.init.constant_(layer.bias, val)
+#                 # 가중치를 작게 하여 초기 출력이 Bias에 의존하도록 함
+#                 torch.nn.init.normal_(layer.weight, mean=0.0, std=0.001)
+#                 break
 
 #     def forward(self, x_observed, y_hidden):
 #         combined_input = torch.cat((x_observed, y_hidden), dim=1)
-#        return self.network(combined_input)
-    
+#         return self.network(combined_input)
     

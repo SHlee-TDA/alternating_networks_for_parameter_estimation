@@ -6,20 +6,35 @@ from pathlib import Path
 import numpy as np
 from scipy.integrate import solve_ivp
 import scipy.stats as stats
+from scipy.interpolate import CubicSpline
+
 
 from .base_system import System
 
+# Load OGTT Simulation parameter
+
+def load_config(config_path):
+    with open(config_path, 'r') as f:
+        config = json.load(f)
+    return config
 
 current_file_path = Path(__file__)
 BASE_DIR = current_file_path.resolve().parent
-CONFIG_FILE_PATH = BASE_DIR / 'config.json' # pathlib의 '/' 연산자는 경로를 안전하게 합쳐줍니다.
+CONFIG_FILE_PATH = BASE_DIR / 'config.json' 
 SYS_FILE_PATH = BASE_DIR / 'system_params.json'
+
+config = load_config(CONFIG_FILE_PATH)
+sys_params = load_config(SYS_FILE_PATH)
+ode_params = config['ode_params']
+
+# Load SDE Simulation parameter
+# SDE simulation parameter  `analysis/calibrate_sde_params.py`
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent 
 SDE_PARAM_FILE_PATH = PROJECT_ROOT / 'data' / 'parameters' / 'calibrated_sde_params.json'
 
-# --- 2. SDE 파라미터 로드 (전역 변수 초기화) ---
-# 기본값 설정 (파일 없을 시 대비)
+
+# default
 SIGMA_T_POINTS = np.array([0, 120])
 SIGMA_G_T = np.array([0.0, 0.0])
 SIGMA_I_T = np.array([0.0, 0.0])
@@ -28,7 +43,6 @@ MU_I_T = np.array([0.0, 0.0])
 BOUNDS_MAP = {'G_max': 1e9, 'I_max': 1e9}
 
 try:
-    # 파일이 존재하면 로드하여 덮어쓰기
     with open(SDE_PARAM_FILE_PATH, 'r') as f:
         calib_data = json.load(f)
         
@@ -49,23 +63,7 @@ try:
 except FileNotFoundError:
     print(f"Warning: {SDE_PARAM_FILE_PATH} not found. Using default (zero) diffusion.")
     
-def load_config(config_path):
-    with open(config_path, 'r') as f:
-        config = json.load(f)
-    return config
 
-config = load_config(CONFIG_FILE_PATH)
-sys_params = load_config(SYS_FILE_PATH)
-ode_params = config['ode_params']
-
-
-
-
-def interpolate_sigma(t, t_points, sigma_t):
-    """
-    1차원 선형 보간을 사용하여 임의의 시간 t에서의 sigma 값을 계산
-    """
-    return np.interp(t, t_points, sigma_t)
 
 class OgttSimul(System):
     """
@@ -82,8 +80,8 @@ class OgttSimul(System):
                          [10.0, 20.0])  # [minG(0), maxG(0)]
     t_span = [0, 120]    
     t_points = np.array([0, 30, 60, 90, 120])
-    observed_var_idx = 0  # glucose
-    hidden_var_idx = 1    # insulin
+    observed_var_idx = 0  # Glucose
+    hidden_var_idx = 1    # Insulin
     
     bias_scale = 1.0
     diffusion_scale = 1.0
@@ -93,7 +91,13 @@ class OgttSimul(System):
         # [Optimization] 모델 인스턴스를 미리 생성 (Dummy theta로 초기화)
         # 매 step마다 생성하는 오버헤드를 제거함.
         self.model = OGTTModel(ode_params, sys_params, {'si': 0.0, 'sigma': 0.0})
-
+        
+        # Interpolate SDE parameters via CubicSpline for smoothness.
+        self.sigma_g_spline = CubicSpline(SIGMA_T_POINTS, SIGMA_G_T, bc_type='natural')
+        self.sigma_i_spline = CubicSpline(SIGMA_T_POINTS, SIGMA_I_T, bc_type='natural')
+        self.mu_g_spline = CubicSpline(SIGMA_T_POINTS, MU_G_T, bc_type='natural')
+        self.mu_i_spline = CubicSpline(SIGMA_T_POINTS, MU_I_T, bc_type='natural')
+        
     def sample_initial_conditions(self, params_dict):
         # I found that sampling from log-normal fits better to real NIH OGTT data
         s_oglu0 = 0.1196
@@ -132,9 +136,9 @@ class OgttSimul(System):
         # 1. 결정론적 ODE 계산
         dydt_ode = self.ode_func(t, y, params)
         
-        # 2. Bias Correction (선형 보간)
-        mu_g = np.interp(t, SIGMA_T_POINTS, MU_G_T)
-        mu_i = np.interp(t, SIGMA_T_POINTS, MU_I_T)
+        # 2. Bias Correction (Cubic spline)
+        mu_g = self.mu_g_spline(t)
+        mu_i = self.mu_i_spline(t)
         
         # 3. Bias 추가 (리스트 복사 후 수정)
         scale = self.bias_scale
@@ -150,8 +154,8 @@ class OgttSimul(System):
         상태 변수: (G, I, N5, N6)
         """
         # 현재 시간 t에서의 보간된 시그마 값
-        sigma_g_t = interpolate_sigma(t, SIGMA_T_POINTS, SIGMA_G_T)
-        sigma_i_t = interpolate_sigma(t, SIGMA_T_POINTS, SIGMA_I_T)
+        sigma_g_t = self.sigma_g_spline(t)
+        sigma_i_t = self.sigma_i_spline(t)
         
         # 4개의 상태 변수와 4개의 Wiener Process (dW_1 to dW_4)가 있다고 가정
         # SDE 형식 dY_t = f(t, Y_t)dt + G(t, Y_t)dW_t 에서

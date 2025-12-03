@@ -62,15 +62,26 @@ def get_experiment_dataloaders(exp_config, sim_data_tuple, system, global_config
     # B. 파라미터 범위 (Min/Max)
     p_min = np.min(params_sim, axis=0)
     p_max = np.max(params_sim, axis=0)
-    p_range = p_max - p_min
-    p_bounds = (p_min - 0.1 * p_range, p_max + 0.1 * p_range) # 10% 여유
+    #p_range = p_max - p_min
+    #p_bounds = (p_min - 0.1 * p_range, p_max + 0.1 * p_range) # 10% 여유
+    
+    p_bounds_min = p_min / 1.2
+    p_bounds_max = p_max * 1.2
+    
+    # Multiplicative Margin (로그 스케일에 적합)
+    p_bounds = (p_bounds_min, p_bounds_max)
     
     print(f"  [Normalizer Init] Scale: {calc_scales}")
     print(f"  [Normalizer Init] P-Bounds: \n    Min: {p_bounds[0]}\n    Max: {p_bounds[1]}")
     
     # Normalizer 생성 (이 객체는 나중에 Analyzer에 전달됨)
-    normalizer = Normalizer(system, global_config.DEVICE, 
-                            state_scales=calc_scales, param_bounds=p_bounds)
+    normalizer = Normalizer(
+        system, 
+        global_config.DEVICE, 
+        state_scales=calc_scales, 
+        param_bounds=p_bounds,
+        use_log_params=True  
+    )
     
     # --- 2. Simulation Data 정규화 및 데이터셋 생성 ---
     # Numpy -> Tensor 변환 (Flatten)
@@ -168,7 +179,10 @@ def get_experiment_dataloaders(exp_config, sim_data_tuple, system, global_config
     
     # 초기값 추정용 (Sim 데이터 평균 - 정규화 전의 P_sim 사용 권장하나, 여기서는 편의상 P_sim 사용)
     # Trainer 내부에서 정규화하여 사용할 것이므로 Raw Value 전달
-    p_initial_guess = P_sim.mean(dim=0)
+    #p_initial_guess = P_sim.mean(dim=0)
+    # 로그 공간에서의 평균 사용 (기하 평균)
+    P_sim_safe = torch.maximum(P_sim, torch.tensor(1e-6).to(global_config.DEVICE))
+    p_initial_guess = torch.exp(torch.log(P_sim_safe).mean(dim=0))
         
     # [중요] 생성된 normalizer 객체를 반환해야 함
     return train_loader, val_loader, test_loader, p_initial_guess, normalizer
@@ -274,6 +288,45 @@ def run_experiment_pipeline(global_config):
             exp_config, sim_data_tuple, system, global_config
         )
         
+        real_raw_loader = RealOGTTDataLoader(
+            file_path='data/clean_sumner_n_612.xlsx', 
+            config=global_config,
+            split_file='data/data_split_indices.json'
+        )
+        
+        X_real_np, Y_real_np, P_real_np, t_points = real_raw_loader.load_data()
+        import json
+        with open('data/data_split_indices.json', 'r') as f:
+            split_data = json.load(f)
+            test_indices = split_data['test_indices']
+            
+        # Numpy Slicing (Test Set 추출)
+        X_test_np = X_real_np[test_indices]
+        Y_test_np = Y_real_np[test_indices]
+        P_test_np = P_real_np[test_indices]
+        
+        # Tensor 변환 & Flatten (Batch, Time * Dim)
+        # 모델 입력 차원에 맞게 (N, -1)로 펼쳐줍니다.
+        N_test = len(X_test_np)
+        X_real_t = torch.tensor(X_test_np, dtype=torch.float32).view(N_test, -1).to(global_config.DEVICE)
+        Y_real_t = torch.tensor(Y_test_np, dtype=torch.float32).view(N_test, -1).to(global_config.DEVICE)
+        P_real_t = torch.tensor(P_test_np, dtype=torch.float32).to(global_config.DEVICE)
+        
+        # [핵심] Normalizer를 사용해 전처리 수행 (Glucose, Insulin, Params 모두 적용)
+        # Sim 데이터와 동일한 스케일(예: /100)로 변환됩니다.
+        X_real_norm = normalizer.normalize_inputs(X_real_t, variable_type='observed')
+        Y_real_norm = normalizer.normalize_inputs(Y_real_t, variable_type='hidden')
+        P_real_norm = normalizer.normalize_params(P_real_t)
+        
+        # 정규화된 데이터셋 및 로더 생성
+        real_test_dataset = TensorDataset(X_real_norm, Y_real_norm, P_real_norm)
+        real_test_loader = DataLoader(real_test_dataset, batch_size=global_config.BATCH_SIZE, shuffle=False)
+        
+        # -------------------------------------------------------------------------
+        # 3. Analyzer 생성 및 실행
+        # -------------------------------------------------------------------------
+        # Analyzer 초기화 (Sim Test Loader 사용)
+        
         # # Normalizer setup
         # # sim_data_tuple = (obs, hid, params, t)
         # obs_all = sim_data_tuple[0] # (N, T, n_obs)
@@ -338,6 +391,18 @@ def run_experiment_pipeline(global_config):
         ).to(device)
         
         # 6. 학습 (Trainer)
+        # 2. 파라미터별 분포 통계 출력
+        param_names = system.param_names
+        for i, name in enumerate(param_names):
+            p_vals = sample_p[:, i]
+            print(f"Param '{name}' (Normalized):")
+            print(f"  - Mean: {p_vals.mean().item():.4f}")
+            print(f"  - Median: {p_vals.median().item():.4f}")
+            print(f"  - Min / Max: {p_vals.min().item():.4f} / {p_vals.max().item():.4f}")
+            
+            # 평균이 -1에 가깝다면(예: -0.8 이하) 분포 왜곡 문제입니다.
+            if p_vals.mean() < -0.5:
+                print(f"  ⚠️ WARNING: Distribution is highly skewed towards -1.0!")
         # trainer_config를 넘겨주어 결과가 logger.results_dir에 저장되게 함
         trainer = Trainer(f_theta, g_phi, train_loader, val_loader, trainer_config)
         f_theta, g_phi, history = trainer.train()
@@ -346,38 +411,29 @@ def run_experiment_pipeline(global_config):
         with open(os.path.join(logger.results_dir, 'loss_history.json'), 'w') as f:
             json.dump({k: [float(v) for v in vals] for k, vals in history.items()}, f, indent=4)
 
-        # 7. 분석 (Analyzer)
-        # Analyzer는 내부적으로 savefig를 하므로, trainer_config(경로 수정된 것)를 넘겨줍니다.
-        p_initial_guess = p_initial_guess.to(device) 
 
         analyzer = Analyzer(
             f_theta, g_phi, test_loader, trainer_config, 
             system, p_initial_guess, normalizer, history
         )
-        
+
+        # 기본 분석 (Sim Data)
         analyzer.plot_loss_curves()
         analyzer.plot_phase_portraits()
         p_true, p_pred = analyzer.evaluate_predictions()
         analyzer.plot_scatter(p_true, p_pred)
         
+        # [수정] Real Data 분석 (위에서 만든 정규화된 로더 전달)
+        print("  -> Running specialized evaluation on Real Data...")
+        analyzer.evaluate_real_data(
+            real_test_loader=real_test_loader,
+            num_vis=5 
+        )
         # 예측값 저장
         np.savez(os.path.join(logger.results_dir, 'predictions.npz'), p_true=p_true, p_pred=p_pred)
         # [추가] Real Data 전용 심층 평가 실행 (Scatter + Reconstruction)
         print("  -> Running specialized evaluation on Real Data...")
         
-        # Real Data Loader 재생성 (Analyzer에 넘겨주기 위함)
-        real_eval_loader = RealOGTTDataLoader(
-            file_path='data/clean_sumner_n_612.xlsx', 
-            config=global_config,
-            split_file='data/data_split_indices.json'
-        )
-        
-        # split_file 경로도 함께 전달
-        analyzer.evaluate_real_data(
-            real_data_loader=real_eval_loader,
-            split_file_path='data/data_split_indices.json',
-            num_vis=5 # 재구성 시각화할 환자 수
-        )
         if current_run_config.USE_SPECTRAL_NORM:
             analyzer.analyze_spectral_norms()
             analyzer.plot_spectral_norms_by_layer()

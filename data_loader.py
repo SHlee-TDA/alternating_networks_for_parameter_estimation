@@ -340,7 +340,7 @@ class RealOGTTDataLoader:
                 calib_data = json.load(f)
                 self.s_glucose = np.sum(np.array(calib_data['sigma_G'])**2)
                 self.s_insulin = np.sum(np.array(calib_data['sigma_I'])**2)
-                print(f"[RealLoader] Loaded sigma for smoothing: s_G={self.s_glucose:.2f}, s_I={self.s_insulin:.2f}")
+                print(f"[RealLoader] Loaded SDE  for smoothing: s_G={self.s_glucose:.2f}, s_I={self.s_insulin:.2f}")
         except FileNotFoundError:
             print("[RealLoader] Warning: 'calibrated_sde_params.json' not found. Using default smoothing (s=None).")
             self.s_glucose = None
