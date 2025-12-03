@@ -30,7 +30,7 @@ class Config:
         {'name_prefix': 'ode_pure', 'use_sde': False, 'scenario': 'sim_only', 'val_source': 'sim'},
         
         # [시나리오 2] SDE Pure: SDE 데이터만 사용 (Domain Randomization 효과 확인)
-        {'name_prefix': 'sde_pure', 'use_sde': True, 'scenario': 'sim_only', 'val_source': 'sim'},
+        #{'name_prefix': 'sde_pure', 'use_sde': True, 'scenario': 'sim_only', 'val_source': 'sim'},
         
         # [시나리오 3] ODE Hybrid: ODE 데이터 + Real 데이터 혼합 학습
         #{'name_prefix': 'ode_hybrid', 'use_sde': False, 'scenario': 'hybrid', 'real_ratio': 0.3, 'val_source': 'sim'},
@@ -48,8 +48,8 @@ class Config:
     # 2) Loss/Model 조합 정의 (4가지 경우의 수)
     LOSS_VARIANTS = [
         {'sn': False, 'cl': False, 'suffix': 'vanilla'},          # 기본 모델
-        #{'sn': True,  'cl': False, 'suffix': 'spectral_norm'},    # SN만 적용
-        #{'sn': False, 'cl': True,  'suffix': 'consistency_loss'}, # CL만 적용
+        {'sn': True,  'cl': False, 'suffix': 'spectral_norm'},    # SN만 적용
+        {'sn': False, 'cl': True,  'suffix': 'consistency_loss'}, # CL만 적용
         {'sn': True,  'cl': True,  'suffix': 'full_method'}       # 둘 다 적용 (제안 방법)
     ]
     
@@ -81,9 +81,9 @@ class Config:
     # =========================================================================
     NUM_SAMPLES = 10000     # 생성할 증강 데이터 샘플 수
     TEST_SPLIT = 0.2
-    BATCH_SIZE = 128
+    BATCH_SIZE = 256
     EPOCHS = 20000
-    LEARNING_RATE = 1e-2
+    LEARNING_RATE = 1e-3
     WEIGHT_DECAY = 1e-6
     
     USE_EARLY_STOPPING = True
@@ -112,12 +112,12 @@ class Config:
     # =========================================================================
     MODEL_CONFIG = {
         'f_theta': {
-            'hidden_dims': [128, 128, 128, 128, 128, 128],
-            'activation': 'SiLU'
+            'hidden_dims': [128, 128, 128],
+            'activation': 'Tanh'
         },
         'g_phi': {
-            'hidden_dims': [128, 128, 128, 128, 128, 128],
-            'activation': 'SiLU'
+            'hidden_dims': [128, 128, 128],
+            'activation': 'Tanh'
         },
         'initialization': {
             'type': 'xavier',

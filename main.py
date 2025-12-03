@@ -380,14 +380,14 @@ def run_experiment_pipeline(global_config):
             sample_x.shape[1], sample_y.shape[1], sample_p.shape[1],
             model_config=current_run_config.MODEL_CONFIG['f_theta'],
             use_spectral_norm=current_run_config.USE_SPECTRAL_NORM,
-            initialization_config=current_run_config.MODEL_CONFIG.get('initialization')
+            #initialization_config=current_run_config.MODEL_CONFIG.get('initialization')
         ).to(device)
         
         g_phi = ParameterEstimator(
             sample_x.shape[1], sample_y.shape[1], sample_p.shape[1],
             model_config=current_run_config.MODEL_CONFIG['g_phi'],
             use_spectral_norm=current_run_config.USE_SPECTRAL_NORM,
-            initialization_config=current_run_config.MODEL_CONFIG.get('initialization')
+            #initialization_config=current_run_config.MODEL_CONFIG.get('initialization')
         ).to(device)
         
         # 6. 학습 (Trainer)

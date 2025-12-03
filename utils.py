@@ -4,6 +4,7 @@ import numpy as np
 import os
 import pandas as pd
 import uuid
+import json
 from datetime import datetime
 import git
 from abc import ABC, abstractmethod
@@ -324,14 +325,23 @@ class ExperimentLogger:
         self._save_config()
 
     def _save_config(self):
-        # Config 객체를 dict로 변환하여 저장
-        config_dict = {k: v for k, v in self.config.__dict__.items() 
-                      if not k.startswith('__') and not callable(v)}
-        # 직렬화 불가능한 객체 처리
-        config_dict['DEVICE'] = str(config_dict.get('DEVICE', 'cpu'))
-        if 'EXPERIMENTS' in config_dict: del config_dict['EXPERIMENTS']
+        # [수정] __dict__ 대신 dir()을 사용하여 Class Attribute(DEVICE 등)까지 모두 포괄
+        config_dict = {}
+        for key in dir(self.config):
+            # 매직 메소드(__)와 함수(callable)는 제외
+            if key.startswith('__'): continue
+            val = getattr(self.config, key)
+            if callable(val): continue
+            
+            # 직렬화 불가능한 객체(DEVICE 등) 처리
+            if key == 'DEVICE':
+                val = str(val)
+            
+            config_dict[key] = val
+
+        # EXPERIMENTS 리스트는 너무 길 수 있으므로 제외 (선택 사항)
+        #if 'EXPERIMENTS' in config_dict: del config_dict['EXPERIMENTS']
         
-        import json
         with open(os.path.join(self.results_dir, 'config.json'), 'w') as f:
             json.dump(config_dict, f, indent=4)
 

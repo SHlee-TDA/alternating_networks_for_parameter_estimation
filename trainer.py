@@ -32,10 +32,11 @@ class Trainer:
         self.optimizer = torch.optim.AdamW(
             list(self.f_theta.parameters()) + list(self.g_phi.parameters()),
             lr=config.LEARNING_RATE,
-            weight_decay=config.WEIGHT_DECAY
+            weight_decay=config.WEIGHT_DECAY,
+            betas=(0.5, 0.999)
         )
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode='min', factor=0.5, patience=100, min_lr=1e-7, verbose=True
+            self.optimizer, mode='min', factor=0.9, patience=20, min_lr=1e-8, verbose=True
         )
         self.loss_fn = nn.MSELoss()
         
@@ -51,35 +52,7 @@ class Trainer:
         
         
         print(f"Training models for {self.config.EXPERIMENT_NAME}...")
-                
-        # [디버깅] Forward Hook 정의: 모든 레이어의 입출력 통계 출력
-        # def log_layer_stats(module, input, output):
-        #     # 텐서가 아니면(튜플 등) 첫 번째 요소만 확인
-        #     if isinstance(output, tuple): out_tensor = output[0]
-        #     else: out_tensor = output
-            
-        #     # 레이어 이름 추적 (간단히 클래스 이름 사용)
-        #     layer_name = module.__class__.__name__
-            
-        #     # 통계 계산
-        #     mean = out_tensor.mean().item()
-        #     max_val = out_tensor.max().item()
-        #     min_val = out_tensor.min().item()
-        #     zero_count = (out_tensor == 0).sum().item()
-        #     total_count = out_tensor.numel()
-            
-        #     print(f"   >>> [{layer_name}] Mean: {mean:.6f} | Max: {max_val:.6f} | Min: {min_val:.6f} | Zeros: {zero_count}/{total_count}")
 
-        # # [디버깅] g_phi 모델의 모든 하위 모듈에 Hook 등록
-        # print("\n🔍 Registering Debug Hooks to g_phi...")
-        # handles = []
-        # for name, layer in self.g_phi.named_modules():
-        #     # 컨테이너(Sequential, BaseNetwork 등)는 제외하고 실제 연산 레이어만
-        #     if isinstance(layer, (torch.nn.Linear, torch.nn.ReLU, torch.nn.Tanh, torch.nn.LayerNorm, torch.nn.SiLU)):
-        #         print(f"   -> Hooking {name} ({layer.__class__.__name__})")
-        #         h = layer.register_forward_hook(log_layer_stats)
-        #         handles.append(h)
-        # print("------------------------------------------------\n")
         
         history = defaultdict(list)
         best_val_loss = np.inf
@@ -115,62 +88,7 @@ class Trainer:
                 # loss_g = self.loss_fn(p_pred_norm, p_batch_norm)
                 p_pred = self.g_phi(x_batch, y_batch)
                 loss_g = self.loss_fn(p_pred, p_batch)
-                # [긴급 점검 코드] 첫 번째 배치의 상태를 출력
-                # if epoch == 0 and patience_counter == 0: # 첫 epoch의 첫 배치만
-                #    print("🛑 STOPPING after first batch for diagnosis.")
-                #    # Hook 제거
-                #    for h in handles: h.remove()
-                #    return self.f_theta, self.g_phi, history
-                    
-                    
-                    # print("\n" + "="*40)
-                    # print(" 🚑 Training Sanity Check (Epoch 0, Batch 0)")
-                    # print("="*40)
-                    
-                    # # 1. Target Data 확인
-                    # print(f"[Target p_batch] Mean: {p_batch.mean().item():.4f}, Max: {p_batch.max().item():.4f}")
-                    # if p_batch.mean() == 0: print("  ❌ CRITICAL: Target is ZERO inside Trainer!")
-                    
-                    # # 2. Model Prediction 확인
-                    # print(f"[Pred p_pred]    Mean: {p_pred.mean().item():.4f}, Max: {p_pred.max().item():.4f}")
-                    
-                    # # 3. Loss 확인
-                    # print(f"[Initial Loss]   Loss_G: {loss_g.item():.4f}")
-                    
-                    # # 4. Backward 실행 후 Gradient 확인
-                    # self.optimizer.zero_grad()
-                    # loss_g.backward(retain_graph=True) # 진단을 위해 그래프 유지
-                    
-                    # print("[Gradient Check]")
-                    # total_norm = 0.0
-                    # for name, param in self.g_phi.named_parameters():
-                    #     if param.grad is not None:
-                    #         param_norm = param.grad.data.norm(2)
-                    #         total_norm += param_norm.item()
-                    #         # 첫 레이어와 마지막 레이어만 샘플로 출력
-                    #         if "network.0" in name or "network.6" in name or "last" in name:
-                    #             print(f"  - {name} grad: {param_norm:.6f}")
-                    
-                    # print(f"  -> Total Grad Norm: {total_norm:.6f}")
-                    # if total_norm == 0:
-                    #     print("  ❌ CRITICAL: Gradients are ZERO! Weights won't update.")
-                    
-                    
-                    # # Input Check
-                    # print(f"[Input x_batch]  Mean: {x_batch.mean().item():.4f}, Max: {x_batch.max().item():.4f}")
-                    # if x_batch.abs().max() == 0:
-                    #     print("  ❌ CRITICAL: Input data is ALL ZEROS!")
-                        
-                    # # 첫 번째 레이어의 가중치 값 확인
-                    # first_layer_weight = list(self.g_phi.parameters())[0]
-                    # print(f"[First Layer W]  Mean: {first_layer_weight.data.mean().item():.6f}, Max: {first_layer_weight.data.max().item():.6f}")
-                    
-                    # if first_layer_weight.data.abs().max() == 0:
-                    #     print("  ❌ CRITICAL: Weights are initialized to ALL ZEROS!")
-                        
-                    # # 원래 흐름 복구를 위해 zero_grad (실제 step은 뒤에서 함)
-                    # self.optimizer.zero_grad() 
-                    # print("="*40 + "\n")
+                
                 
                 total_loss = loss_f + loss_g
                 
@@ -200,6 +118,11 @@ class Trainer:
                     epoch_train_losses['loss_consistency'].append(loss_consistency.item())
                 
                 total_loss.backward()
+                
+                # Gradient clipping
+                torch.nn.utils.clip_grad_norm_(self.f_theta.parameters(), max_norm=1.0)
+                torch.nn.utils.clip_grad_norm_(self.g_phi.parameters(), max_norm=1.0)
+                
                 self.optimizer.step()
                 pbar.set_postfix(loss=total_loss.item())
 
@@ -386,8 +309,8 @@ class Trainer:
         #with open(os.path.join(self.results_path, 'normalizer.pkl'), 'wb') as f:
         #    pickle.dump(self.normalizer, f)
         
-        config_dict = {k: v for k, v in self.config.__dict__.items() if not k.startswith('__') and not callable(v)}
-        config_dict['DEVICE'] = str(config_dict.get('DEVICE'))
-        config_dict.pop('EXPERIMENTS', None)
-        with open(os.path.join(self.results_path, 'config_run.json'), 'w') as f:
-            json.dump(config_dict, f, indent=4)
+        #config_dict = {k: v for k, v in self.config.__dict__.items() if not k.startswith('__') and not callable(v)}
+        #config_dict['DEVICE'] = str(config_dict.get('DEVICE'))
+        #config_dict.pop('EXPERIMENTS', None)
+        #with open(os.path.join(self.results_path, 'config_run.json'), 'w') as f:
+        #    json.dump(config_dict, f, indent=4)

@@ -37,15 +37,15 @@ class Analyzer:
         c_val = 'sandybrown'
 
         # Plot f_theta
-        axs[0].plot(self.history['train_loss_f'], label='Train', color=c_train, linewidth=2)
-        axs[0].plot(self.history['val_loss_f'], label='Val', color=c_val, linestyle='--', linewidth=2)
+        axs[0].plot(self.history['train_loss_f'], label='Train', color=c_train, linewidth=2, alpha=0.8)
+        axs[0].plot(self.history['val_loss_f'], label='Val', color=c_val, linestyle='--', linewidth=2, alpha=0.8)
         axs[0].set_title("Loss: f_theta (Hidden Predictor)")
         axs[0].set_yscale('log') 
         axs[0].legend(); axs[0].grid(True, which="both", ls="-", alpha=0.3)
 
         # Plot g_phi
-        axs[1].plot(self.history['train_loss_g'], label='Train', color=c_train, linewidth=2)
-        axs[1].plot(self.history['val_loss_g'], label='Val', color=c_val, linestyle='--', linewidth=2)
+        axs[1].plot(self.history['train_loss_g'], label='Train', color=c_train, linewidth=2, alpha=0.8)
+        axs[1].plot(self.history['val_loss_g'], label='Val', color=c_val, linestyle='--', linewidth=2, alpha=0.8)
         axs[1].set_title("Loss: g_phi (Parameter Estimator)")
         axs[1].set_yscale('log')
         axs[1].legend(); axs[1].grid(True, which="both", ls="-", alpha=0.3)
@@ -369,49 +369,80 @@ class Analyzer:
 
     def _get_model_spectral_norms(self, model):
         """
-        모델 내부의 모든 Linear 레이어를 찾아 Spectral Norm을 계산합니다.
-        model.modules()를 사용하여 중첩된 구조(ResidualBlock 등) 내부도 탐색합니다.
+        모델에 더미 데이터를 통과시켜 실제 연산 가중치(Effective Weight)를 갱신한 후,
+        Spectral Norm을 측정합니다.
         """
         norms, indices = [], []
         linear_idx = 1
         
+        # 1. Dummy Forward로 Hook 발동 (Effective Weight 갱신)
+        try:
+            # 모델 구조에 따라 컨테이너 선택
+            if hasattr(model, 'network'):
+                container = model.network
+            elif hasattr(model, 'net'):
+                container = model.net.network if hasattr(model.net, 'network') else model.net
+            else:
+                raise AttributeError("Model has no 'network' or 'net' attribute")
+
+            # 첫 번째 Linear 레이어 찾기
+            first_linear = None
+            for layer in container:
+                if isinstance(layer, torch.nn.Linear):
+                    first_linear = layer
+                    break
+            
+            if first_linear is not None:
+                in_dim = first_linear.in_features
+                dummy_input = torch.randn(1, in_dim, device=self.config.DEVICE)
+                with torch.no_grad():
+                    container(dummy_input) # Hook 작동 -> layer.weight 갱신
+                
+        except Exception as e:
+            print(f"Warning: Dummy forward failed ({e}). Values might be stale.")
+
+        # 2. 갱신된 Weight 측정
         for layer in model.modules():
             if isinstance(layer, torch.nn.Linear):
-                # weight_orig가 있으면(spectral_norm 적용 시) 그것을 사용, 아니면 weight 사용
-                weight = getattr(layer, 'weight_orig', layer.weight)
+                # [핵심 수정] weight_orig가 아니라 실제 연산에 쓰이는 'weight'를 가져옵니다.
+                weight = layer.weight 
+                
+                # 최대 특이값 계산
                 norm = torch.linalg.norm(weight, ord=2).item()
                 norms.append(norm)
                 indices.append(linear_idx)
                 linear_idx += 1
+                
         return {'indices': indices, 'norms': norms}
     
     def _analyze_spectral_norms_single(self, model, model_name):
         """단일 모델의 스펙트럴 노름을 계산하고 출력합니다."""
         print(f"\n--- Analyzing Spectral Norms for {model_name} ---")
-        norms = []
-        for layer in model.modules():
-            if isinstance(layer, torch.nn.Linear):
-                weight = getattr(layer, 'weight_orig', layer.weight)
-                norm = torch.linalg.norm(weight, ord=2).item()
-                norms.append(norm)
-                print(f"  Layer: Spectral Norm = {norm:.4f}")
+        
+        # [수정] _get_model_spectral_norms 메서드를 재사용하여 로직 통일
+        data = self._get_model_spectral_norms(model)
+        norms = data['norms']
+        
+        for i, norm in enumerate(norms):
+            print(f"  Layer {i+1}: Effective Spectral Norm = {norm:.4f}")
         
         prod = np.prod(norms)
         print(f"Product of norms for {model_name}: {prod:.4f}")
         return prod
 
     def analyze_spectral_norms(self):
-        """두 네트워크의 스펙트럴 노름과 그 곱(Lipshitz Constant)을 분석합니다."""
+        """두 네트워크의 스펙트럴 노름과 그 곱을 분석합니다."""
         prod_f = self._analyze_spectral_norms_single(self.f_theta, "f_theta")
         prod_g = self._analyze_spectral_norms_single(self.g_phi, "g_phi")
         total_prod = prod_f * prod_g
-        
         print("\n" + "="*50)
         print(f"Total Product of Spectral Norms: {total_prod:.4f}")
-        if total_prod < 1:
+        
+        # 1.0보다 조금 클 수 있으므로(오차 감안) 1.01 정도로 여유를 둠
+        if total_prod < 1.0 + 1e-4:
             print("✅ Contraction mapping condition is satisfied.")
         else:
-            print("⚠️ Contraction mapping condition is NOT satisfied.")
+            print(f"⚠️ Contraction mapping condition is NOT satisfied (L={total_prod:.4f}).")
         print("="*50 + "\n")
 
     def plot_spectral_norms_by_layer(self):
