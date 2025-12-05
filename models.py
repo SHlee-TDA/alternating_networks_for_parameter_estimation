@@ -5,30 +5,159 @@ import torch.nn as nn
 from torch.nn.utils import spectral_norm
 
 def get_activation(name):
-    """문자열 이름으로부터 활성화 함수 객체를 반환합니다."""
     if name == 'Tanh':
         return nn.Tanh()
     elif name == 'ReLU':
         return nn.ReLU()
     elif name == 'SiLU':
         return nn.SiLU()
+    elif name == 'Sigmoid':
+        return nn.Sigmoid()
     else:
         raise ValueError(f"Unknown activation function: {name}")
 
-def init_weights_xavier(m, dist='uniform'):
+def init_weights(m, activation='Tanh'):
     """
-    nn.Linear 레이어의 가중치를 Xavier Uniform 방식으로 초기화하고,
-    편향은 0으로 초기화합니다.
+    Initializes weights based on the activation type.
+    
+    Note:
+        - Tanh/Sigmoid: Xavier Uniform
+        - ReLU/SiLU: Kaiming Normal
+        - Bias: 0
     """
     if isinstance(m, nn.Linear):
-        if dist == 'uniform':
+        if activation in ['Tanh', 'Sigmoid']:
             torch.nn.init.xavier_uniform_(m.weight)
-        elif dist == 'normal':
-            torch.nn.init.xavier_normal_(m.weight)
-        else:
-            raise ValueError(f"Unknown distribution for Xavier initialization: {dist}")
-        if m.bias is not None:
-            torch.nn.init.constant_(m.bias, 0)
+            if m.bias is not None:
+                torch.nn.init.constant_(m.bias, 0)
+                
+        elif activation in ['ReLU', 'SiLU', 'Softplus']:
+            torch.nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='relu')
+            if m.bias is not None:
+                torch.nn.init.constant_(m.bias, 0)
+                
+class ExcludeLambda(nn.Module):
+    """
+    Scales the output by a constant factor.
+    
+    Note:
+        Used to enforce strict contraction mapping (Lipschitz constant < 1) 
+        and compensate for numerical approximation errors in spectral norm.
+    """    
+    def __init__(self, scale=0.95):
+        super().__init__()
+        self.scale = scale
+    def forward(self, x):
+        return x * self.scale
+  
+            
+class HiddenVarPredictor(nn.Module):
+    """
+    f_theta: Predicts hidden variables (Y) from observed variables (X) and parameters (P).
+    
+    Args:
+        flat_x_dim (int): Dimension of flattened observed variables.
+        flat_y_dim (int): Dimension of flattened hidden variables.
+        num_params (int): Number of system parameters.
+        model_config (dict): Configuration for hidden dims and activation.
+        use_spectral_norm (bool): Whether to apply spectral normalization.
+    """
+    def __init__(self, 
+                 flat_x_dim, 
+                 flat_y_dim, 
+                 num_params,
+                 model_config,
+                 use_spectral_norm=False,
+                 ): 
+        super().__init__()
+        
+        hidden_dims = model_config['hidden_dims']
+        activation = get_activation(model_config['activation'])
+        
+        layers = []
+        input_dim = flat_x_dim + num_params
+        spectral_scale = 0.95
+        
+        for hidden_dim in hidden_dims:
+            linear = nn.Linear(input_dim, hidden_dim)
+            if use_spectral_norm:
+                linear = spectral_norm(linear, n_power_iterations=5)
+            layers.append(linear)
+            
+            if use_spectral_norm:
+                layers.append(ExcludeLambda(spectral_scale))
+                
+            layers.append(activation)
+            input_dim = hidden_dim
+            
+        # Output Layer
+        last_linear = nn.Linear(input_dim, flat_y_dim)
+        if use_spectral_norm:
+            last_linear = spectral_norm(last_linear, n_power_iterations=5)
+        layers.append(last_linear)
+                
+        self.network = nn.Sequential(*layers)
+        self.network.apply(lambda m: init_weights(m, activation))
+
+    def forward(self, x_observed, params):
+        combined_input = torch.cat((x_observed, params), dim=1)
+        return self.network(combined_input)
+
+class ParameterEstimator(nn.Module):
+    """
+    g_phi: Estimates parameters (P) from observed (X) and hidden variables (Y).
+    
+    Note:
+        The output is bounded by Tanh to match the normalized parameter range [-1, 1].
+    """    
+    def __init__(self, 
+                 flat_x_dim, 
+                 flat_y_dim,
+                 num_params, 
+                 model_config, 
+                 use_spectral_norm=False,
+                 ):
+        super().__init__()
+        
+        hidden_dims = model_config['hidden_dims']
+        activation = get_activation(model_config['activation'])
+
+        input_dim = flat_x_dim + flat_y_dim
+        layers = []
+        spectral_scale = 0.95
+
+        for hidden_dim in hidden_dims:
+            linear = nn.Linear(input_dim, hidden_dim)
+            if use_spectral_norm:
+                linear = spectral_norm(linear, n_power_iterations=5)
+            layers.append(linear)
+            
+            if use_spectral_norm:
+                layers.append(ExcludeLambda(spectral_scale))
+                
+            layers.append(activation)
+            input_dim = hidden_dim
+            
+        # Output Layer
+        final_linear = nn.Linear(input_dim, num_params)
+        if use_spectral_norm:
+            final_linear = spectral_norm(final_linear, n_power_iterations=5)
+        layers.append(final_linear)
+        
+        if use_spectral_norm:
+             layers.append(ExcludeLambda(spectral_scale))
+        
+        # Enforce range [-1, 1]
+        layers.append(nn.Tanh())
+        
+        self.network = nn.Sequential(*layers)
+        self.network.apply(lambda m: init_weights(m, activation))
+
+    def forward(self, x_observed, y_hidden):
+        combined_input = torch.cat((x_observed, y_hidden), dim=1)
+        return self.network(combined_input)
+
+                
 
 
 # class ResidualBlock(nn.Module):
@@ -150,141 +279,3 @@ def init_weights_xavier(m, dist='uniform'):
 #             nn.init.constant_(last_layer.bias, 0.5)
 #             # 가중치는 작게 하여 초기 출력이 Bias에 의존하도록 함
 #             nn.init.normal_(last_layer.weight, mean=0.0, std=0.001)
-            
-            
-class HiddenVarPredictor(nn.Module):
-    """f_theta: (Observed X, Params P) -> Hidden Y"""
-    def __init__(self, 
-                 flat_x_dim, 
-                 flat_y_dim, 
-                 num_params,
-                 model_config,
-                 use_spectral_norm=False,
-                 #initialization_config=None
-                 ): 
-        super().__init__()
-        
-        hidden_dims = model_config['hidden_dims']
-        activation = get_activation(model_config['activation'])
-        #init_config = initialization_config or {'type': 'xavier', 'distribution': 'uniform'}
-        
-        layers = []
-        input_dim = flat_x_dim + num_params
-        
-        # [패치] Spectral Scaling Factor (Lipschitz < 1 강제)
-        spectral_scale = 0.95
-        
-        # Hidden Layers
-        for hidden_dim in hidden_dims:
-            linear = nn.Linear(input_dim, hidden_dim)
-            if use_spectral_norm:
-                linear = spectral_norm(linear, n_power_iterations=5)
-            layers.append(linear)
-            
-            # [패치] Scaling 적용
-            if use_spectral_norm:
-                layers.append(ExcludeLambda(spectral_scale))
-                
-            layers.append(activation)
-            input_dim = hidden_dim
-            
-        # Output Layer
-        last_linear = nn.Linear(input_dim, flat_y_dim)
-        if use_spectral_norm:
-            last_linear = spectral_norm(last_linear, n_power_iterations=5)
-        layers.append(last_linear)
-        
-        # Output에는 Scaling을 적용하지 않거나 선택적으로 적용 (여기서는 미적용)
-        
-        self.network = nn.Sequential(*layers)
-        
-        # 초기화 적용
-        self.network.apply(lambda m: init_weights(m, activation))
-
-    def forward(self, x_observed, params):
-        combined_input = torch.cat((x_observed, params), dim=1)
-        return self.network(combined_input)
-
-class ParameterEstimator(nn.Module):
-    """g_phi: (Observed X, Hidden Y) -> Params P"""
-    def __init__(self, 
-                 flat_x_dim, 
-                 flat_y_dim,
-                 num_params, 
-                 model_config, 
-                 use_spectral_norm=False,
-                 #initialization_config=None
-                 ):
-        super().__init__()
-        
-        hidden_dims = model_config['hidden_dims']
-        activation = get_activation(model_config['activation'])
-        #init_config = initialization_config or {'type': 'xavier', 'distribution': 'uniform'}
-
-        input_dim = flat_x_dim + flat_y_dim
-        
-        layers = []
-        
-        # [패치] Spectral Scaling Factor
-        spectral_scale = 0.95
-
-        # Hidden Layers
-        for hidden_dim in hidden_dims:
-            linear = nn.Linear(input_dim, hidden_dim)
-            if use_spectral_norm:
-                linear = spectral_norm(linear, n_power_iterations=5)
-            layers.append(linear)
-            
-            # [패치] Scaling 적용
-            if use_spectral_norm:
-                layers.append(ExcludeLambda(spectral_scale))
-                
-            layers.append(activation)
-            input_dim = hidden_dim
-            
-        # Output Layer
-        final_linear = nn.Linear(input_dim, num_params)
-        if use_spectral_norm:
-            final_linear = spectral_norm(final_linear, n_power_iterations=5)
-        layers.append(final_linear)
-        
-        if use_spectral_norm:
-             layers.append(ExcludeLambda(spectral_scale))
-        
-        # [패치] 중요: Tanh 적용 (Normalizer Range [-1, 1] 일치)
-        # Softplus 제거 -> Tanh 복구
-        layers.append(nn.Tanh())
-        
-        self.network = nn.Sequential(*layers)
-        
-        # 초기화 적용
-        self.network.apply(lambda m: init_weights(m, activation))
-
-    def forward(self, x_observed, y_hidden):
-        combined_input = torch.cat((x_observed, y_hidden), dim=1)
-        return self.network(combined_input)
-
-class ExcludeLambda(nn.Module):
-    """Spectral Norm 적용 후 값을 강제로 줄여주기 위한 스케일링 레이어"""
-    def __init__(self, scale=0.95):
-        super().__init__()
-        self.scale = scale
-    def forward(self, x):
-        return x * self.scale
-    
-def init_weights(m, activation='Tanh'):
-    """
-    활성화 함수에 따라 적절한 초기화 방법을 적용합니다.
-    - Tanh/Sigmoid -> Xavier (Glorot) Initialization
-    - ReLU/SiLU/Softplus -> He (Kaiming) Initialization
-    """
-    if isinstance(m, nn.Linear):
-        if activation in ['Tanh', 'Sigmoid']:
-            torch.nn.init.xavier_uniform_(m.weight)
-            if m.bias is not None:
-                torch.nn.init.constant_(m.bias, 0)
-                
-        elif activation in ['ReLU', 'SiLU', 'Swish', 'Softplus']:
-            torch.nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='relu')
-            if m.bias is not None:
-                torch.nn.init.constant_(m.bias, 0)
