@@ -1,16 +1,31 @@
 # config.py
+"""
+Project Configuration Registry
+
+This module centralizes all hyperparameters and settings for:
+1. System & Environment (Device, Seeds)
+2. Data Generation (ODE/SDE settings, Augmentation)
+3. Model Architecture (Hidden dims, Activation)
+4. Training Protocol (LR, Epochs, Early Stopping)
+5. Experiment Scenarios (List of experiments to run)
+"""
 import torch
 
 class Config:
-    """실험 전체의 하이퍼파라미터와 설정을 관리하는 중앙 통제실"""
+    """
+    Main Configuration Class.
+    Usage:
+        config = Config()
+        print(config.LEARNING_RATE)
+    """
 
-    # =========================================================================
-    # 1. 실험 선택 (Experiment Selection)
-    # =========================================================================
-    SYSTEM_NAME = 'ogtt_simul'
+    # --------------------------------------------------------------------------
+    # 1. System & Environment
+    # --------------------------------------------------------------------------
+    SYSTEM_NAME = 'ogtt_simul' # 'lotka_volterra', 'sir', 'nc_sir', 'ogtt_simul'
     
     # =========================================================================
-    # 2. 실행 관리 (Execution Management) - [Phase 5 업데이트]
+    # 2. Execution Management
     # =========================================================================
     # main.py의 get_experiment_dataloaders 함수가 이 설정을 읽어 동작합니다.
     #
@@ -53,11 +68,10 @@ class Config:
         {'sn': True,  'cl': True,  'suffix': 'full_method'}       # 둘 다 적용 (제안 방법)
     ]
     
-    # 3) 실험 리스트 자동 생성 (Cartesian Product)
+    # 3) 실험 리스트 자동 생성
     EXPERIMENTS = []
     for scen in BASE_SCENARIOS:
         for loss_setting in LOSS_VARIANTS:
-            # 기본 설정 복사
             exp = scen.copy()
             
             # Loss/Model 설정 주입
@@ -65,7 +79,6 @@ class Config:
             exp['use_consistency_loss'] = loss_setting['cl']
             
             # 실험 이름 생성 (예: hybrid_sim_val_full_method)
-            # name_prefix는 삭제 (깔끔하게)
             prefix = exp.pop('name_prefix')
             exp['name'] = f"{prefix}_{loss_setting['suffix']}"
             
@@ -91,12 +104,12 @@ class Config:
     EARLY_STOPPING_MIN_DELTA = 1e-6
     
     # =========================================================================
-    # 4. 방법론 관련 하이퍼파라미터 (Methodology Hyperparameters)
+    # 4. Methodology Hyperparameters
     # =========================================================================
     CONSISTENCY_LOSS_LAMBDA = 1.0
     ITERATIONS = 20
     
-    # [Phase 5 설정] Lagrangian 및 미분 방법
+    # 미분 방법
     USE_LAGRANGIAN = True         # 미분값(Derivative)을 Feature로 사용
     DERIVATIVE_METHOD = 'spline'  # 실제 데이터 미분 시 Spline Smoothing 사용
     

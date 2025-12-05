@@ -15,6 +15,9 @@ plt.style.use('seaborn-v0_8-whitegrid')
 sns.set_palette("deep")
 
 class Analyzer:
+    """
+    Encapsulates evaluation metrics and visualization routines.
+    """
     def __init__(self, f_theta, g_phi, test_loader, config, system, p_initial_guess, normalizer=None, history=None):
         self.f_theta = f_theta.to(config.DEVICE)
         self.g_phi = g_phi.to(config.DEVICE)
@@ -28,11 +31,13 @@ class Analyzer:
         os.makedirs(self.results_path, exist_ok=True)
 
     def plot_loss_curves(self):
-        if self.history is None: return
-        print("Plotting loss curves...")
+        """
+        Visualizes the convergence of training and validation losses.
+        """
+        if self.history is None: 
+            return
         fig, axs = plt.subplots(ncols=2, figsize=(12, 6))
         
-        # 부드러운 색상 사용
         c_train = 'cornflowerblue'
         c_val = 'sandybrown'
 
@@ -57,42 +62,14 @@ class Analyzer:
         with open(os.path.join(self.results_path, 'loss_history.json'), 'w') as f:
             json.dump(self.history, f, indent=4)
 
-    def evaluate_predictions(self):
-        """Sim Test Set 평가"""
-        print("Evaluating predictions on Sim Test Set...")
-        self.f_theta.eval(); self.g_phi.eval()
-        all_p_true, all_p_pred = [], []
-        
-        with torch.no_grad():
-            for x_batch, _, p_batch in self.test_loader:
-                x_batch = x_batch.to(self.config.DEVICE)
-                p_batch = p_batch.to(self.config.DEVICE)
-                
-                # 초기값 정규화
-                p_curr_norm = self.normalizer.normalize_params(
-                    self.p_initial_guess.repeat(x_batch.size(0), 1)
-                )
-                
-                for _ in range(self.config.ITERATIONS):
-                    y_hat_norm = self.f_theta(x_batch, p_curr_norm)
-                    p_curr_norm = self.g_phi(x_batch, y_hat_norm)
-                
-                # 역정규화
-                p_pred = self.normalizer.denormalize_params(p_curr_norm)
-                p_true = self.normalizer.denormalize_params(p_batch)
-                
-                all_p_pred.append(p_pred.cpu().numpy())
-                all_p_true.append(p_true.cpu().numpy())
-                
-        return np.concatenate(all_p_true), np.concatenate(all_p_pred)
-
     def plot_scatter(self, p_true, p_pred, prefix="sim"):
-        """MSE용 그림과 Trend(Pearson)용 그림 분리 저장 + NaN 필터링"""
-        print(f"Plotting scatter ({prefix})...")
+        """
+        Generates parity plots (True vs Predicted) for each system parameter.
+        Includes RMSE and Pearson correlation metrics.
+        """
         param_names = self.system.param_names
         num_params = len(param_names)
         
-        # 부드러운 색상 (파랑, 초록 계열)
         scatter_colors = ['steelblue', 'mediumseagreen', 'indianred']
         
         for i in range(num_params):
@@ -100,15 +77,12 @@ class Analyzer:
             true_vals = p_true[:, i]
             pred_vals = p_pred[:, i]
             
-            # [안전장치] NaN / Inf 제거
             mask = np.isfinite(true_vals) & np.isfinite(pred_vals)
             if not np.all(mask):
-                print(f"  ⚠️ Warning: Dropping {len(true_vals) - np.sum(mask)} NaN/Inf samples in {name}")
                 true_vals = true_vals[mask]
                 pred_vals = pred_vals[mask]
             
             if len(true_vals) < 2:
-                print(f"  ❌ Not enough valid samples for {name}. Skipping.")
                 continue
 
             # Common Range
@@ -120,7 +94,7 @@ class Analyzer:
             pearson_r, _ = pearsonr(true_vals, pred_vals)
             slope, intercept, _, _, _ = linregress(true_vals, pred_vals)
             
-            # --- 1. Accuracy Plot (MSE Focus) ---
+            # --- 1. Accuracy Plot (MSE) ---
             fig1, ax1 = plt.subplots(figsize=(6, 6))
             ax1.scatter(true_vals, pred_vals, alpha=0.6, s=20, label='Samples', 
                        color=scatter_colors[0], edgecolors='white', linewidth=0.5)
@@ -137,12 +111,12 @@ class Analyzer:
             plt.savefig(os.path.join(self.results_path, save_name1), dpi=150)
             plt.close(fig1)
             
-            # --- 2. Trend Plot (Pearson R Focus) ---
+            # --- 2. Trend Plot (Pearson R) ---
             fig2, ax2 = plt.subplots(figsize=(6, 6))
             ax2.scatter(true_vals, pred_vals, alpha=0.6, s=20, label='Samples', 
                        color=scatter_colors[1], edgecolors='white', linewidth=0.5)
             
-            # Trend Line (Red Dashed - 요청사항)
+            # Trend Line (Red Dashed)
             x_trend = np.array([min_val, max_val])
             y_trend = slope * x_trend + intercept
             ax2.plot(x_trend, y_trend, 'r--', linewidth=2, label=f'Trend ($r$={pearson_r:.3f})')
@@ -161,21 +135,87 @@ class Analyzer:
         
         np.savez(os.path.join(self.results_path, f'{prefix}_predictions.npz'), 
                  p_true=p_true, p_pred=p_pred)
+        
+    def evaluate_predictions(self):
+        """
+        Quantifies parameter estimation accuracy on the synthetic test set.
+        
+        Returns:
+            p_true (np.array): Ground truth parameters (Physical Scale).
+            p_pred (np.array): Estimated parameters (Physical Scale).
+        """
+        self.f_theta.eval()
+        self.g_phi.eval()
+        all_p_true = [] 
+        all_p_pred = []
+        
+        with torch.no_grad():
+            for x_batch, _, p_batch in self.test_loader:
+                x_batch = x_batch.to(self.config.DEVICE)
+                p_batch = p_batch.to(self.config.DEVICE)
+                
+                # Inverse Map: g_phi(X, Y) -> P_hat
+                p_pred_norm = self.g_phi(x_batch, p_batch)
+                
+                # Iteration Method
+                for _ in range(self.config.ITERATIONS):
+                    y_hat_norm = self.f_theta(x_batch, p_pred_norm)
+                    p_pred_norm = self.g_phi(x_batch, y_hat_norm)
+                
+                # Denormalize
+                p_pred = self.normalizer.denormalize_params(p_pred_norm)
+                p_true = self.normalizer.denormalize_params(p_batch)
+                
+                all_p_pred.append(p_pred.cpu().numpy())
+                all_p_true.append(p_true.cpu().numpy())
+                
+        return np.concatenate(all_p_true), np.concatenate(all_p_pred)
+
+    def evaluate_real_data(self, real_test_loader):
+        print(f"\n=== Real Data Evaluation ({len(real_test_loader.dataset)} samples) ===")
+        self.f_theta.eval()
+        self.g_phi.eval()
+        
+        all_p_true = []
+        all_p_pred = []
+        
+        with torch.no_grad():
+            for x_batch, _, p_batch in self.test_loader:
+                x_batch = x_batch.to(self.config.DEVICE)
+                p_batch = p_batch.to(self.config.DEVICE)
+                
+                # Inverse Map: g_phi(X, Y) -> P_hat
+                p_pred_norm = self.g_phi(x_batch, p_batch)
+                
+                # Iteration Method
+                for _ in range(self.config.ITERATIONS):
+                    y_hat_norm = self.f_theta(x_batch, p_pred_norm)
+                    p_pred_norm = self.g_phi(x_batch, y_hat_norm)
+                
+                # Denormalize
+                p_pred = self.normalizer.denormalize_params(p_pred_norm)
+                p_true = self.normalizer.denormalize_params(p_batch)
+                
+                all_p_pred.append(p_pred.cpu().numpy())
+                all_p_true.append(p_true.cpu().numpy())
+    
+
+        pred_params = np.concatenate(all_p_pred)
+        true_params = np.concatenate(all_p_true)
+        
+        print(f"  -> Plotting Real Data Scatter ({np.sum(valid_mask)} valid samples)...")
+        self.plot_scatter(true_params, pred_params, prefix="real_data")
 
     def plot_phase_portraits(self):
-        print("Plotting phase portraits (Single Sample Dynamics)...")
         num_params = len(self.system.param_names)
         if num_params < 2: return
 
-        # [수정] 평균 대신 '첫 번째 샘플'을 사용하여 Ground Truth와의 관계 확인
         x_sample = None
         p_true_raw = None
         
         for x, _, p in self.test_loader:
-            # 배치 중 첫 번째 샘플 선택
             x_sample = x[0:1].to(self.config.DEVICE) # (1, Dim)
             
-            # 정답 파라미터 (Normalized 상태일 수 있으므로 복원)
             p_vec = p[0].to(self.config.DEVICE)
             p_true_raw = self.normalizer.denormalize_params(p_vec).cpu().numpy()
             break
@@ -184,7 +224,6 @@ class Analyzer:
         fig, axes = plt.subplots(1, len(combos), figsize=(6 * len(combos), 6), squeeze=False)
         
         for i, (p1, p2) in enumerate(combos):
-            # p_true_raw를 중심점이자 Target으로 전달
             self._plot_single_portrait(axes.flatten()[i], x_sample, p_true_raw, (p1, p2))
             
         plt.savefig(os.path.join(self.results_path, 'phase_portraits.png'), dpi=150)
@@ -195,24 +234,19 @@ class Analyzer:
         name1 = self.system.param_names[p1_idx]
         name2 = self.system.param_names[p2_idx]
         
-        # Grid 생성 (Target p_target을 중심으로)
         center1, center2 = p_target[p1_idx], p_target[p2_idx]
         
-        # 범위 설정 (중심에서 ±50% ~ ±80%)
         range1 = np.linspace(max(0.01, center1 * 0.2), center1 * 1.8, 20)
         range2 = np.linspace(max(0.01, center2 * 0.2), center2 * 1.8, 20)
         grid1, grid2 = np.meshgrid(range1, range2)
         
-        # 전체 파라미터 벡터 구성 (나머지 파라미터는 정답 값으로 고정)
         p_grid_raw = torch.tensor(p_target, dtype=torch.float32).repeat(grid1.size, 1).to(self.config.DEVICE)
         p_grid_raw[:, p1_idx] = torch.tensor(grid1.flatten(), dtype=torch.float32)
         p_grid_raw[:, p2_idx] = torch.tensor(grid2.flatten(), dtype=torch.float32)
         
-        # 모델 입력용 정규화
         p_grid_norm = self.normalizer.normalize_params(p_grid_raw)
         x_batch = x_observed.repeat(grid1.size, 1) 
         
-        # Vector Field 계산
         with torch.no_grad():
             y_hat = self.f_theta(x_batch, p_grid_norm)
             p_next_norm = self.g_phi(x_batch, y_hat)
@@ -226,11 +260,9 @@ class Analyzer:
         
         # Streamplot
         ax.streamplot(grid1, grid2, u, v, color=speed, cmap='autumn_r', linewidth=1, density=1.0, arrowsize=1.0)
-        
-        # [추가] Ground Truth 표시 (파란색 X)
         ax.plot(center1, center2, 'bx', markersize=12, markeredgewidth=3, label='Ground Truth', zorder=10)
 
-        # Trajectories (다중 시작점)
+        # Trajectories (multiple-inits)
         start_points = [
             [range1[2], range2[2]], [range1[2], range2[-3]], 
             [range1[-3], range2[2]], [range1[-3], range2[-3]], 
@@ -238,7 +270,6 @@ class Analyzer:
         ]
         
         for start in start_points:
-            # float 변환
             p_start = torch.tensor(p_target, dtype=torch.float32).unsqueeze(0).to(self.config.DEVICE)
             p_start[0, p1_idx] = float(start[0])
             p_start[0, p2_idx] = float(start[1])
@@ -247,153 +278,37 @@ class Analyzer:
             p_curr = self.normalizer.normalize_params(p_start)
             
             with torch.no_grad():
-                for _ in range(15): # 15 steps
+                for _ in range(self.config.ITERATIONS): 
                     y = self.f_theta(x_observed, p_curr)
                     p_curr = self.g_phi(x_observed, y)
                     traj.append(self.normalizer.denormalize_params(p_curr).cpu().numpy())
             
             traj_np = np.concatenate(traj, axis=0)
             
-            # 궤적 그리기
             ax.plot(traj_np[:, p1_idx], traj_np[:, p2_idx], 'k-o', linewidth=1.5, markersize=3, alpha=0.6)
-            # 최종 수렴점 (빨간 별)
             ax.plot(traj_np[-1, p1_idx], traj_np[-1, p2_idx], 'r*', markersize=10, zorder=11, label='Converged' if start == start_points[0] else "")
 
         ax.set_xlabel(name1)
         ax.set_ylabel(name2)
         ax.set_title(f"Dynamics: {name1} vs {name2}")
-        # 범례는 중복 방지를 위해 하나만 표시
+
         handles, labels = ax.get_legend_handles_labels()
         by_label = dict(zip(labels, handles))
         ax.legend(by_label.values(), by_label.keys(), loc='upper right')
         ax.grid(True, alpha=0.3)
 
-    def evaluate_real_data(self, real_test_loader, num_vis=5):
-        print(f"\n=== Real Data Evaluation ({len(real_test_loader.dataset)} samples) ===")
-        self.f_theta.eval(); self.g_phi.eval()
-        
-        all_p_pred = []
-        all_x_denorm = [] 
-        all_y_denorm = []
-        all_p_ref = [] 
-
-        with torch.no_grad():
-            for x_batch, y_batch, p_batch in real_test_loader:
-                x_batch = x_batch.to(self.config.DEVICE)
-                y_denorm = self.normalizer.denormalize_inputs(y_batch, variable_type='hidden')
-
-                p_curr_norm = self.normalizer.normalize_params(
-                    self.p_initial_guess.repeat(x_batch.size(0), 1)
-                )
-                
-                for _ in range(self.config.ITERATIONS):
-                    y_hat = self.f_theta(x_batch, p_curr_norm)
-                    p_curr_norm = self.g_phi(x_batch, y_hat)
-                
-                p_pred = self.normalizer.denormalize_params(p_curr_norm)
-                x_denorm = self.normalizer.denormalize_inputs(x_batch, variable_type='observed')
-                
-                all_p_pred.append(p_pred.cpu().numpy())
-                all_x_denorm.append(x_denorm.cpu().numpy())
-                all_y_denorm.append(y_denorm.cpu().numpy())
-                
-                p_ref = self.normalizer.denormalize_params(p_batch.to(self.config.DEVICE))
-                all_p_ref.append(p_ref.cpu().numpy())
-
-        pred_params = np.concatenate(all_p_pred)
-        x_raw = np.concatenate(all_x_denorm)
-        p_ref_total = np.concatenate(all_p_ref)
-        
-        # [수정] 조건 완화: 하나라도 유효한 값이 있으면 그림
-        valid_mask = ~np.isnan(p_ref_total).any(axis=1)
-        if np.sum(valid_mask) > 0:
-            print(f"  -> Plotting Real Data Scatter ({np.sum(valid_mask)} valid samples)...")
-            self.plot_scatter(p_ref_total, pred_params, prefix="real_data")
-        else:
-            print("  -> Skipping Real Data Scatter (All ground truth values are NaN).")
-        
-        #if getattr(self.config, 'USE_SDE', False):
-        #    self._evaluate_uncertainty(x_raw, pred_params, num_vis, y_raw=np.concatenate(all_y_denorm))
-            
-        print("Real data evaluation complete.")
-
-    def _evaluate_uncertainty(self, x_raw, p_pred, num_vis, y_raw=None):
-        print(f"  -> Running SDE Coverage Test & Visualization ({num_vis} samples)...")
-        save_path = os.path.join(self.results_path, "real_reconstructions")
-        os.makedirs(save_path, exist_ok=True)
-        
-        aug_factor = getattr(self.config, 'AUGMENTATION_FACTOR', 20)
-        t_points = self.system.t_points
-        sde_scales = getattr(self.config, 'SDE_SCALE_FACTORS', {'bias_scale': 1.0, 'diffusion_scale': 1.0})
-        
-        coverage_stats = []
-        r2_stats = []
-        
-        total_samples = len(x_raw)
-        indices = np.random.choice(total_samples, min(num_vis, total_samples), replace=False)
-        
-        for idx in indices:
-            real_G = x_raw[idx, :, 0]
-            pred_params = p_pred[idx]
-            g0 = real_G[0]
-            i0 = y_raw[idx, 0, 0] if y_raw is not None else 15.0 
-            
-            temp_theta = {'si': pred_params[0], 'sigma': pred_params[1]}
-            temp_model = OGTTModel(ODE_PARAMS, SYS_PARAMS, temp_theta)
-            n5, n6 = temp_model.find_steady_state_N(g0)
-            y0 = [g0, i0, n5, n6]
-            
-            sim_G_ensemble = []
-            sys_instance = OgttSimul()
-            sys_instance.bias_scale = sde_scales.get('bias_scale', 1.0)
-            sys_instance.diffusion_scale = sde_scales.get('diffusion_scale', 1.0)
-            
-            for _ in range(aug_factor):
-                y_sim = euler_maruyama(
-                    sys_instance.drift_func, sys_instance.diffusion_func, sys_instance.t_span,
-                    y0, t_points, pred_params, dt_sim=0.01, system=sys_instance
-                )
-                sim_G_ensemble.append(y_sim[0, :])
-            
-            sim_G_ensemble = np.array(sim_G_ensemble)
-            mean_traj = np.mean(sim_G_ensemble, axis=0)
-            lower_bound = np.percentile(sim_G_ensemble, 5, axis=0)
-            upper_bound = np.percentile(sim_G_ensemble, 95, axis=0)
-            
-            is_covered = (real_G >= lower_bound) & (real_G <= upper_bound)
-            cov_ratio = np.mean(is_covered)
-            coverage_stats.append(cov_ratio)
-            
-            recon_r2 = r2_score(real_G, mean_traj)
-            r2_stats.append(recon_r2)
-            
-            fig, ax = plt.subplots(figsize=(10, 6))
-            ax.fill_between(t_points, lower_bound, upper_bound, color='orange', alpha=0.3, label='SDE 90% CI')
-            ax.plot(t_points, mean_traj, 'orange', linestyle='--', label='Reconstructed Mean')
-            ax.plot(t_points, real_G, 'k-o', label='Real Patient Data', linewidth=2)
-            
-            ax.set_title(f"Patient {idx}\nsi={pred_params[0]:.2f}, sigma={pred_params[1]:.2f}\nCov: {cov_ratio*100:.0f}% | $R^2$: {recon_r2:.3f}")
-            ax.set_xlabel("Time (min)"); ax.set_ylabel("Glucose (mg/dL)")
-            ax.legend(); ax.grid(True, alpha=0.3)
-            plt.savefig(os.path.join(save_path, f"recon_patient_{idx}.png"))
-            plt.close()
-            
-        avg_cov = np.mean(coverage_stats) if coverage_stats else 0.0
-        avg_r2 = np.mean(r2_stats) if r2_stats else 0.0
-        print(f"  -> SDE Evaluation: Avg Coverage={avg_cov*100:.1f}%, Avg R2={avg_r2:.4f}")
-        return avg_cov, avg_r2
 
     def _get_model_spectral_norms(self, model):
         """
-        모델에 더미 데이터를 통과시켜 실제 연산 가중치(Effective Weight)를 갱신한 후,
-        Spectral Norm을 측정합니다.
+        Performs a dummy forward pass to trigger Spectral Normalization hooks,
+        updating the effective weights, and then measures the spectral norm of each linear layer.
         """
         norms, indices = [], []
         linear_idx = 1
         
-        # 1. Dummy Forward로 Hook 발동 (Effective Weight 갱신)
+        # 1. Trigger Hook to update effective weights
         try:
-            # 모델 구조에 따라 컨테이너 선택
+            # Identify the correct container
             if hasattr(model, 'network'):
                 container = model.network
             elif hasattr(model, 'net'):
@@ -401,7 +316,7 @@ class Analyzer:
             else:
                 raise AttributeError("Model has no 'network' or 'net' attribute")
 
-            # 첫 번째 Linear 레이어 찾기
+            # Find the first linear layer to determine input dimension
             first_linear = None
             for layer in container:
                 if isinstance(layer, torch.nn.Linear):
@@ -412,18 +327,18 @@ class Analyzer:
                 in_dim = first_linear.in_features
                 dummy_input = torch.randn(1, in_dim, device=self.config.DEVICE)
                 with torch.no_grad():
-                    container(dummy_input) # Hook 작동 -> layer.weight 갱신
+                    container(dummy_input) # Updates layer.weight via hook
                 
         except Exception as e:
             print(f"Warning: Dummy forward failed ({e}). Values might be stale.")
 
-        # 2. 갱신된 Weight 측정
+        # 2. Measure Spectral Norm of updated weights
         for layer in model.modules():
             if isinstance(layer, torch.nn.Linear):
-                # [핵심 수정] weight_orig가 아니라 실제 연산에 쓰이는 'weight'를 가져옵니다.
+                # Use 'weight' (effective) instead of 'weight_orig'
                 weight = layer.weight 
                 
-                # 최대 특이값 계산
+                # Compute Spectral Norm (Largest Singular Value)
                 norm = torch.linalg.norm(weight, ord=2).item()
                 norms.append(norm)
                 indices.append(linear_idx)
@@ -432,10 +347,9 @@ class Analyzer:
         return {'indices': indices, 'norms': norms}
     
     def _analyze_spectral_norms_single(self, model, model_name):
-        """단일 모델의 스펙트럴 노름을 계산하고 출력합니다."""
+        """Computes and logs the spectral norms for all linear layers in a single model."""
         print(f"\n--- Analyzing Spectral Norms for {model_name} ---")
         
-        # [수정] _get_model_spectral_norms 메서드를 재사용하여 로직 통일
         data = self._get_model_spectral_norms(model)
         norms = data['norms']
         
@@ -447,14 +361,18 @@ class Analyzer:
         return prod
 
     def analyze_spectral_norms(self):
-        """두 네트워크의 스펙트럴 노름과 그 곱을 분석합니다."""
+        """
+        Verifies the Contraction Mapping condition by analyzing the product of spectral norms across both networks.
+        Condition: Lip(f) * Lip(g) < 1
+        """
         prod_f = self._analyze_spectral_norms_single(self.f_theta, "f_theta")
         prod_g = self._analyze_spectral_norms_single(self.g_phi, "g_phi")
         total_prod = prod_f * prod_g
+        
         print("\n" + "="*50)
         print(f"Total Product of Spectral Norms: {total_prod:.4f}")
         
-        # 1.0보다 조금 클 수 있으므로(오차 감안) 1.01 정도로 여유를 둠
+        # Check condition with a small numerical tolerance
         if total_prod < 1.0 + 1e-4:
             print("✅ Contraction mapping condition is satisfied.")
         else:
@@ -462,7 +380,7 @@ class Analyzer:
         print("="*50 + "\n")
 
     def plot_spectral_norms_by_layer(self):
-        """각 모델의 레이어별 스펙트럴 노름을 막대그래프로 시각화합니다."""
+        """Visualizes the spectral norm of each layer as a bar chart and saves the data."""
         print("Plotting and saving spectral norms by layer...")
 
         f_theta_data = self._get_model_spectral_norms(self.f_theta)
@@ -487,56 +405,10 @@ class Analyzer:
         plt.savefig(save_path)
         plt.close(fig)
 
-        # 데이터 저장
+        # Save raw data for further analysis
         all_norm_data = {
             'f_theta': f_theta_data,
             'g_phi': g_phi_data
         }
         with open(os.path.join(self.results_path, 'spectral_norms_by_layer.json'), 'w') as f:
             json.dump(all_norm_data, f, indent=4)
-
-    # -------------------------------------------------------------------------
-    # [추가] Summary Metrics Calculation
-    # -------------------------------------------------------------------------
-    def compute_summary_metrics(self, p_true, p_pred, real_data_loader=None):
-        """[수정] R2 대신 Pearson R 저장"""
-        print("Computing summary metrics...")
-        param_names = self.system.param_names
-        metrics = {}
-        
-        pearson_sum = 0
-        for i, name in enumerate(param_names):
-            # [수정] Pearson R 계산
-            pr, _ = pearsonr(p_true[:, i], p_pred[:, i])
-            metrics[f'PearsonR_{name}'] = pr
-            metrics[f'MSE_{name}'] = mean_squared_error(p_true[:, i], p_pred[:, i])
-            pearson_sum += pr
-        
-        metrics['PearsonR_Avg'] = pearson_sum / len(param_names)
-        metrics['MSE_Total'] = mean_squared_error(p_true, p_pred)
-        
-        # Spectral Norm
-        try:
-            f_norms = self._get_model_spectral_norms(self.f_theta)['norms']
-            g_norms = self._get_model_spectral_norms(self.g_phi)['norms']
-            metrics['Lip_Total'] = np.prod(f_norms) * np.prod(g_norms)
-        except:
-            metrics['Lip_Total'] = -1.0
-            
-        return metrics
-
-    def save_metrics_to_csv(self, metrics):
-        """결과 메트릭을 CSV 파일에 추가(Append)합니다."""
-        file_path = os.path.join(self.config.RESULTS_DIR, 'phase5_summary.csv')
-        file_exists = os.path.isfile(file_path)
-        
-        # 실험 이름 추가
-        metrics_with_name = {'Experiment': self.config.EXPERIMENT_NAME}
-        metrics_with_name.update(metrics)
-        
-        with open(file_path, mode='a', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=metrics_with_name.keys())
-            if not file_exists:
-                writer.writeheader()
-            writer.writerow(metrics_with_name)
-        print(f"Appended metrics to {file_path}")

@@ -267,13 +267,14 @@ def run_experiment_pipeline(global_config):
         analyzer.plot_loss_curves()
         p_true, p_pred = analyzer.evaluate_predictions()
         analyzer.plot_scatter(p_true, p_pred)
-        
+        analyzer.plot_phase_portraits()
+
         if run_config.USE_SPECTRAL_NORM:
             analyzer.plot_spectral_norms_by_layer()
 
         # B. Real Data Validation
         print("  -> Evaluating on Real Clinical Data...")
-        analyzer.evaluate_real_data(real_test_loader, num_vis=5)
+        analyzer.evaluate_real_data(real_test_loader)
         
         # C. Logging Metrics
         metrics = {
@@ -284,6 +285,7 @@ def run_experiment_pipeline(global_config):
         }
         logger.log_result_to_csv(metrics)
         print(f"  -> Experiment Completed. Metrics: {metrics}")
+        
         
         # Cleanup
         del f_theta, g_phi, trainer, analyzer, train_l, val_l, test_l
