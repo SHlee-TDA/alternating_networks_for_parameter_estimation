@@ -163,49 +163,56 @@ class Analyzer:
                  p_true=p_true, p_pred=p_pred)
 
     def plot_phase_portraits(self):
-        print("Plotting phase portraits...")
+        print("Plotting phase portraits (Single Sample Dynamics)...")
         num_params = len(self.system.param_names)
         if num_params < 2: return
 
-        # 배치 전체 평균 입력값 사용
-        x_mean_batch = None
-        p_mean = None
+        # [수정] 평균 대신 '첫 번째 샘플'을 사용하여 Ground Truth와의 관계 확인
+        x_sample = None
+        p_true_raw = None
         
         for x, _, p in self.test_loader:
-            x_mean_batch = x.mean(dim=0, keepdim=True).to(self.config.DEVICE)
-            p_tmp = p.mean(dim=0).cpu().numpy() 
-            p_mean = self.normalizer.denormalize_params(torch.tensor(p_tmp).to(self.config.DEVICE)).cpu().numpy()
+            # 배치 중 첫 번째 샘플 선택
+            x_sample = x[0:1].to(self.config.DEVICE) # (1, Dim)
+            
+            # 정답 파라미터 (Normalized 상태일 수 있으므로 복원)
+            p_vec = p[0].to(self.config.DEVICE)
+            p_true_raw = self.normalizer.denormalize_params(p_vec).cpu().numpy()
             break
             
         combos = list(itertools.combinations(range(num_params), 2))[:3]
         fig, axes = plt.subplots(1, len(combos), figsize=(6 * len(combos), 6), squeeze=False)
         
         for i, (p1, p2) in enumerate(combos):
-            self._plot_single_portrait(axes.flatten()[i], x_mean_batch, p_mean, (p1, p2))
+            # p_true_raw를 중심점이자 Target으로 전달
+            self._plot_single_portrait(axes.flatten()[i], x_sample, p_true_raw, (p1, p2))
             
         plt.savefig(os.path.join(self.results_path, 'phase_portraits.png'), dpi=150)
         plt.close(fig)
 
-    def _plot_single_portrait(self, ax, x_observed, p_mean, p_dims):
+    def _plot_single_portrait(self, ax, x_observed, p_target, p_dims):
         p1_idx, p2_idx = p_dims
         name1 = self.system.param_names[p1_idx]
         name2 = self.system.param_names[p2_idx]
         
-        center1, center2 = p_mean[p1_idx], p_mean[p2_idx]
-        # 범위 설정
-        range1 = np.linspace(max(0, center1 * 0.2), center1 * 1.8, 15)
-        range2 = np.linspace(max(0, center2 * 0.2), center2 * 1.8, 15)
+        # Grid 생성 (Target p_target을 중심으로)
+        center1, center2 = p_target[p1_idx], p_target[p2_idx]
+        
+        # 범위 설정 (중심에서 ±50% ~ ±80%)
+        range1 = np.linspace(max(0.01, center1 * 0.2), center1 * 1.8, 20)
+        range2 = np.linspace(max(0.01, center2 * 0.2), center2 * 1.8, 20)
         grid1, grid2 = np.meshgrid(range1, range2)
         
-        # Grid Tensor (Numpy -> Tensor)
-        p_grid_raw = torch.tensor(p_mean, dtype=torch.float32).repeat(grid1.size, 1).to(self.config.DEVICE)
+        # 전체 파라미터 벡터 구성 (나머지 파라미터는 정답 값으로 고정)
+        p_grid_raw = torch.tensor(p_target, dtype=torch.float32).repeat(grid1.size, 1).to(self.config.DEVICE)
         p_grid_raw[:, p1_idx] = torch.tensor(grid1.flatten(), dtype=torch.float32)
         p_grid_raw[:, p2_idx] = torch.tensor(grid2.flatten(), dtype=torch.float32)
         
+        # 모델 입력용 정규화
         p_grid_norm = self.normalizer.normalize_params(p_grid_raw)
         x_batch = x_observed.repeat(grid1.size, 1) 
         
-        # Vector Field
+        # Vector Field 계산
         with torch.no_grad():
             y_hat = self.f_theta(x_batch, p_grid_norm)
             p_next_norm = self.g_phi(x_batch, y_hat)
@@ -217,19 +224,22 @@ class Analyzer:
         v = dp[:, p2_idx].reshape(grid1.shape)
         speed = np.sqrt(u**2 + v**2)
         
-        # Streamplot (부드러운 색상)
-        ax.streamplot(grid1, grid2, u, v, color=speed, cmap='autumn_r', linewidth=1, density=1.2, arrowsize=1.0)
+        # Streamplot
+        ax.streamplot(grid1, grid2, u, v, color=speed, cmap='autumn_r', linewidth=1, density=1.0, arrowsize=1.0)
         
+        # [추가] Ground Truth 표시 (파란색 X)
+        ax.plot(center1, center2, 'bx', markersize=12, markeredgewidth=3, label='Ground Truth', zorder=10)
+
         # Trajectories (다중 시작점)
         start_points = [
             [range1[2], range2[2]], [range1[2], range2[-3]], 
             [range1[-3], range2[2]], [range1[-3], range2[-3]], 
-            [center1, center2]
+            [center1 * 0.5, center2 * 1.5] # 임의 지점
         ]
         
         for start in start_points:
-            # [수정] Numpy float -> Python float 변환 (TypeError 방지)
-            p_start = torch.tensor(p_mean, dtype=torch.float32).unsqueeze(0).to(self.config.DEVICE)
+            # float 변환
+            p_start = torch.tensor(p_target, dtype=torch.float32).unsqueeze(0).to(self.config.DEVICE)
             p_start[0, p1_idx] = float(start[0])
             p_start[0, p2_idx] = float(start[1])
             
@@ -237,19 +247,25 @@ class Analyzer:
             p_curr = self.normalizer.normalize_params(p_start)
             
             with torch.no_grad():
-                for _ in range(10):
+                for _ in range(15): # 15 steps
                     y = self.f_theta(x_observed, p_curr)
                     p_curr = self.g_phi(x_observed, y)
                     traj.append(self.normalizer.denormalize_params(p_curr).cpu().numpy())
             
             traj_np = np.concatenate(traj, axis=0)
-            # 궤적 (검은 실선 + 점)
+            
+            # 궤적 그리기
             ax.plot(traj_np[:, p1_idx], traj_np[:, p2_idx], 'k-o', linewidth=1.5, markersize=3, alpha=0.6)
-            ax.plot(traj_np[-1, p1_idx], traj_np[-1, p2_idx], 'r*', markersize=12, zorder=5)
+            # 최종 수렴점 (빨간 별)
+            ax.plot(traj_np[-1, p1_idx], traj_np[-1, p2_idx], 'r*', markersize=10, zorder=11, label='Converged' if start == start_points[0] else "")
 
         ax.set_xlabel(name1)
         ax.set_ylabel(name2)
         ax.set_title(f"Dynamics: {name1} vs {name2}")
+        # 범례는 중복 방지를 위해 하나만 표시
+        handles, labels = ax.get_legend_handles_labels()
+        by_label = dict(zip(labels, handles))
+        ax.legend(by_label.values(), by_label.keys(), loc='upper right')
         ax.grid(True, alpha=0.3)
 
     def evaluate_real_data(self, real_test_loader, num_vis=5):
