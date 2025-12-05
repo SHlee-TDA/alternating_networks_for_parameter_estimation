@@ -135,7 +135,49 @@ class Analyzer:
         
         np.savez(os.path.join(self.results_path, f'{prefix}_predictions.npz'), 
                  p_true=p_true, p_pred=p_pred)
+    
+    def _run_fixed_point_iteration(self, x_norm, max_iter=10, tol=1e-4):
+        """
+        Executes the iterative inference logic defined by the user.
         
+        Flow:
+            1. P_curr = Normalized(P_init_guess)
+            2. Loop:
+                Y_guess = f_theta(X, P_curr)
+                P_next  = g_phi(X, Y_guess)
+                if converged: break
+                P_curr = P_next
+        
+        Args:
+            x_norm (Tensor): Normalized observed data (Batch, Dim).
+            
+        Returns:
+            p_final_norm (Tensor): Converged parameter estimates.
+        """
+        batch_size = x_norm.size(0)
+        
+        # 1. Prepare Initial Guess (Normalize & Broadcast)
+        # self.p_init is physical scale, so we normalize it first.
+        p_init_norm = self.normalizer.normalize_params(self.p_initial_guess)
+        p_curr = p_init_norm.repeat(batch_size, 1)
+        
+        # 2. Iteration Loop
+        for k in range(max_iter):
+            # Step A: Guess Hidden States (P -> Y)
+            y_guess = self.f_theta(x_norm, p_curr)
+            
+            # Step B: Update Parameters (Y -> P)
+            p_next = self.g_phi(x_norm, y_guess)
+            
+            # Check Convergence
+            diff = torch.norm(p_next - p_curr, dim=1).max().item()
+            p_curr = p_next
+            
+            if diff < tol:
+                break
+                
+        return p_curr
+    
     def evaluate_predictions(self):
         """
         Quantifies parameter estimation accuracy on the synthetic test set.
@@ -154,21 +196,17 @@ class Analyzer:
                 x_batch = x_batch.to(self.config.DEVICE)
                 p_batch = p_batch.to(self.config.DEVICE)
                 
-                # Inverse Map: g_phi(X, Y) -> P_hat
-                p_pred_norm = self.g_phi(x_batch, p_batch)
+                p_pred_norm = self._run_fixed_point_iteration(x_batch, 
+                                                              max_iter=self.config.ITERATIONS,
+                                                              tol=1e-6)
                 
-                # Iteration Method
-                for _ in range(self.config.ITERATIONS):
-                    y_hat_norm = self.f_theta(x_batch, p_pred_norm)
-                    p_pred_norm = self.g_phi(x_batch, y_hat_norm)
+                # Denormalize for metric calculation
+                p_pred_phys = self.normalizer.denormalize_params(p_pred_norm)
+                p_true_phys = self.normalizer.denormalize_params(p_batch)
                 
-                # Denormalize
-                p_pred = self.normalizer.denormalize_params(p_pred_norm)
-                p_true = self.normalizer.denormalize_params(p_batch)
-                
-                all_p_pred.append(p_pred.cpu().numpy())
-                all_p_true.append(p_true.cpu().numpy())
-                
+                all_p_true.append(p_true_phys.cpu().numpy())
+                all_p_pred.append(p_pred_phys.cpu().numpy())
+
         return np.concatenate(all_p_true), np.concatenate(all_p_pred)
 
     def evaluate_real_data(self, real_test_loader):
@@ -180,32 +218,26 @@ class Analyzer:
         all_p_pred = []
         
         with torch.no_grad():
-            for x_batch, _, p_batch in self.test_loader:
+            for x_batch, _, p_batch in real_test_loader:
                 x_batch = x_batch.to(self.config.DEVICE)
                 p_batch = p_batch.to(self.config.DEVICE)
                 
-                # Inverse Map: g_phi(X, Y) -> P_hat
-                p_pred_norm = self.g_phi(x_batch, p_batch)
+                p_pred_norm = self._run_fixed_point_iteration(x_batch, 
+                                                              max_iter=self.config.ITERATIONS,
+                                                              tol=1e-6)
                 
-                # Iteration Method
-                for _ in range(self.config.ITERATIONS):
-                    y_hat_norm = self.f_theta(x_batch, p_pred_norm)
-                    p_pred_norm = self.g_phi(x_batch, y_hat_norm)
+                # Denormalize for metric calculation
+                p_pred_phys = self.normalizer.denormalize_params(p_pred_norm)
+                p_true_phys = self.normalizer.denormalize_params(p_batch)
                 
-                # Denormalize
-                p_pred = self.normalizer.denormalize_params(p_pred_norm)
-                p_true = self.normalizer.denormalize_params(p_batch)
-                
-                all_p_pred.append(p_pred.cpu().numpy())
-                all_p_true.append(p_true.cpu().numpy())
-    
+                all_p_true.append(p_true_phys.cpu().numpy())
+                all_p_pred.append(p_pred_phys.cpu().numpy())
 
         pred_params = np.concatenate(all_p_pred)
         true_params = np.concatenate(all_p_true)
         
-        print(f"  -> Plotting Real Data Scatter ({np.sum(valid_mask)} valid samples)...")
         self.plot_scatter(true_params, pred_params, prefix="real_data")
-
+    
     def plot_phase_portraits(self):
         num_params = len(self.system.param_names)
         if num_params < 2: return

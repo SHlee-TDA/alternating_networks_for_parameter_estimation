@@ -9,12 +9,10 @@ This module provides essential tools for:
 
 
 import os
-import uuid
 import json
 from datetime import datetime
 from abc import ABC, abstractmethod
 
-import git
 import torch
 import numpy as np
 import pandas as pd
@@ -272,7 +270,7 @@ class ExperimentLogger:
         self.config = config
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
-        self.exp_dir_name = f"{self.timestamp}_{config.EXPERIMENT_NAME}_{self.uuid}"
+        self.exp_dir_name = f"{self.timestamp}_{config.EXPERIMENT_NAME}"
         self.results_dir = os.path.join(config.RESULTS_DIR, config.SYSTEM_NAME, self.exp_dir_name)
         os.makedirs(self.results_dir, exist_ok=True)
 
