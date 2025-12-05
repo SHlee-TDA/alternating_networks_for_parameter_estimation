@@ -1,149 +1,50 @@
 # utils.py
-import torch
-import numpy as np
+"""
+This module provides essential tools for:
+1. Data Normalization: Scaling preserving physical constraints.
+2. Derivative Estimation: .
+3. Stochastic Simulation: Euler-Maruyama solver for SDEs.
+4. Experiment Logging: Management of artifacts and configurations.
+"""
+
+
 import os
-import pandas as pd
 import uuid
 import json
 from datetime import datetime
-import git
 from abc import ABC, abstractmethod
+
+import git
+import torch
+import numpy as np
+import pandas as pd
 from scipy.interpolate import UnivariateSpline, lagrange
 
 
-class Normalizer:
-    # 1. 초기화 메서드에 use_log_params 인자 추가
-    def __init__(self, system, device, state_scales=None, param_bounds=None, use_log_params=False):
-        self.device = device
-        self.use_log_params = use_log_params # [추가] 로그 변환 사용 여부
-
-        # --- Parameter Normalization Init ---
-        if param_bounds is not None:
-            mins, maxs = param_bounds
-            # print(f"[Normalizer] Using Data-Driven Parameter Bounds")
-        else:
-            mins = [system.param_ranges[name][0] for name in system.param_names]
-            maxs = [system.param_ranges[name][1] for name in system.param_names]
-        
-        self.p_min = torch.tensor(mins, device=self.device, dtype=torch.float32)
-        self.p_max = torch.tensor(maxs, device=self.device, dtype=torch.float32)
-
-        # [핵심 수정] 로그 변환 모드일 경우, Min/Max 경계값도 로그를 취해줌
-        if self.use_log_params:
-            print("[Normalizer] ✅ Enabled Log-Space Normalization for Parameters.")
-            # 0이나 음수가 들어오지 않도록 안전장치(1e-6) 후 로그 변환
-            self.p_min = torch.log(torch.maximum(self.p_min, torch.tensor(1e-6, device=self.device)))
-            self.p_max = torch.log(torch.maximum(self.p_max, torch.tensor(1e-6, device=self.device)))
-
-        # 범위 계산 (로그 변환된 min/max 기반으로 계산됨)
-        self.p_range = torch.maximum(
-            self.p_max - self.p_min, 
-            torch.tensor(1e-6, device=self.device)
-        )
-
-        # --- Input State Normalization Init (기존과 동일) ---
-        if state_scales is not None:
-            self.state_scales = torch.tensor(state_scales, device=self.device, dtype=torch.float32)
-            self.state_scales = torch.maximum(self.state_scales, torch.tensor(1e-6, device=self.device))
-        else:
-            self.state_scales = torch.tensor([600.0, 3000.0], device=self.device, dtype=torch.float32)
-
-    def normalize_params(self, p):
-        """ [min, max] -> [-1, 1] (Log option applied) """
-        # [핵심 수정] 입력값에 먼저 로그를 취함
-        if self.use_log_params:
-            p = torch.log(torch.maximum(p, torch.tensor(1e-6, device=self.device)))
-            
-        p_norm = (p - self.p_min) / self.p_range
-        return p_norm * 2.0 - 1.0
-        # return p
-    
-    def denormalize_params(self, p_norm):
-        """ [-1, 1] -> [min, max] (Log option applied) """
-        p_01 = (p_norm + 1.0) / 2.0
-        p_recovered = p_01 * self.p_range + self.p_min
-        
-        # [핵심 수정] 복원된 값(로그 상태)을 지수(Exp)로 변환
-        if self.use_log_params:
-            return torch.exp(p_recovered)
-            
-        return p_recovered
-        #return p_norm
-
-    def normalize_inputs(self, x, variable_type=None):
-        """ X -> X / Scale """
-        n_obs = 1
-        n_hid = 1
-        
-        scale_obs = self.state_scales[0] # Glucose Scale
-        scale_hid = self.state_scales[1] # Insulin Scale
-        
-        # 1. 명시적 타입이 지정된 경우 (Trainer에서 사용)
-        if variable_type == 'observed':
-            # x가 관측 변수(Glucose)일 때
-            return x / scale_obs
-        elif variable_type == 'hidden':
-            # x가 숨겨진 변수(Insulin)일 때 -> 올바른 스케일 적용!
-            return x / scale_hid
-        
-        # 입력 차원에 맞춰 스케일 벡터 확장 (Lagrangian 미분항 대응)
-        # x shape: [Batch, Dim]
-        base_dim = len(self.state_scales)
-        
-        if x.shape[1] == base_dim:
-            scale = self.state_scales
-        elif x.shape[1] == 2 * base_dim: # 미분값 포함 시
-            # 미분값도 동일한 스케일로 나누어야 물리적 관계 보존됨 (중요!)
-            scale = torch.cat([self.state_scales, self.state_scales])
-        else:
-            # 예외 처리: 일단 앞부분만이라도 맞춤
-            scale = self.state_scales.repeat(x.shape[1] // base_dim + 1)[:x.shape[1]]
-            
-        return x / scale
-        #return x
-
-    def denormalize_inputs(self, x_norm, variable_type=None):
-        """ X_norm -> X_norm * Scale """
-        # normalize_inputs와 동일한 로직으로 scale 구성 후 곱셈
-        
-        scale_obs = self.state_scales[0]
-        scale_hid = self.state_scales[1]
-        
-        if variable_type == 'observed':
-            return x_norm * scale_obs
-        elif variable_type == 'hidden':
-            return x_norm * scale_hid
-        
-        base_dim = len(self.state_scales)
-        if x_norm.shape[1] == 2 * base_dim:
-            scale = torch.cat([self.state_scales, self.state_scales])
-        else:
-            scale = self.state_scales
-        return x_norm * scale
-        #return x_norm
-    
-
+# --- 1. Derivative Estimation Strategy ---
 class DerivativeEstimator(ABC):
     """
-    관측된 OGTT 데이터로부터 미분값(기울기)을 추정하는 추상 클래스.
-    구체적인 추정 방법은 서브클래스에서 구현해야 합니다.
+    Abstract Base Class for estimating derivatives (dy/dt) from discrete observations.
     """
     @abstractmethod
     def estimate(self, t, y):
         """        
         Args:
-            t (np.array): 시간 축 (Time points)
-            y (np.array): 관측 값 (Observed values)
+            t (np.array): Time points
+            y (np.array): Observed values
         Returns:
-            dydt (np.array): 추정된 미분값 배열
+            dydt (np.array): Estimated derivatives
         """
         pass
 
 class SplineDerivative(DerivativeEstimator):
     """
-    Smoothing Spline(Reinsch)을 사용하여 미분
-    - s: Smoothing factor (None이면 interpolation)
-    - k: Degree of spline (default=3, cubic)
+    Estimates derivatives using Reinsch Smoothing Splines.
+    
+    Rationale:
+        For sparse and noisy biological data (e.g., OGTT), simple finite differences 
+        amplify noise. Smoothing splines minimize a tradeoff between fitting error 
+        and curvature, controlled by the smoothing factor 's' (derived from sigma^2).
     """
     def __init__(self, s=None, k=3):
         self.s = s
@@ -151,40 +52,31 @@ class SplineDerivative(DerivativeEstimator):
 
     def estimate(self, t, y):
         try:
-            # 데이터 개수가 k보다 작으면 에러가 발생하므로 방어 코드 작성
-            if len(t) <= self.k:
-                k_safe = len(t) - 1
-            else:
-                k_safe = self.k
+            # Fallback for very few points
+            k_safe = min(self.k, len(t) - 1)
+            if k_safe < 1: return np.zeros_like(y)
             
             spline = UnivariateSpline(t, y, s=self.s, k=k_safe)
             return spline.derivative()(t)
         except Exception as e:
-            print(f"[SplineDerivative] Error in spline fitting: {e}. Returning zeros.")
+            print(f"[Warning] Spline fitting failed: {e}. Defaulting to zeros.")
             return np.zeros_like(y)
 
 class PolynomialDerivative(DerivativeEstimator):
-    """
-    Polynomial regression을 이용한 미분
-    - order: 다항식 차수 (defaut=3)
-    """
+    """Polynomial regression-based derivative estimation."""
     def __init__(self, order=3):
         self.order = order
     
     def estimate(self, t, y):
         try:
             order_safe = min(self.order, len(t) - 1)
-            poly_coeffs = np.polyfit(t, y, order_safe)
-            deriv_coeffs = np.polyder(poly_coeffs)
-            return np.polyval(deriv_coeffs, t)
-        except Exception as e:
-            print(f"[PolynomialDerivative] Error in polynomial fitting: {e}. Returning zeros.")
+            coeffs = np.polyfit(t, y, order_safe)
+            return np.polyval(np.polyder(coeffs), t)
+        except Exception:
             return np.zeros_like(y)  
         
 class LagrangeDerivative(DerivativeEstimator):
-    """
-    Lagrange 보간법을 이용한 미분
-    """
+    """Lagrange interpolatin-based derivative estimation"""
     def estimate(self, t, y):
         try:
             poly = lagrange(t, y)
@@ -195,37 +87,106 @@ class LagrangeDerivative(DerivativeEstimator):
             return np.zeros_like(y)
 
 class FiniteDifferenceDerivative(DerivativeEstimator):
-    """
-    유한차분법을 이용한 미분
-    """
+    """Finite difference-based derivative estimation"""
     def estimate(self, t, y):
         return np.gradient(y, t)
     
-# Factory Function
 def get_derivative_estimator(method='spline', **kwargs):
-    """
-    미분 추정기 객체를 생성하는 팩토리 함수.
-    
-    Args:
-        method (str): 'spline', 'poly', 'lagrange', 'finite_diff' 중 하나.
-        kwargs: 각 추정기별 추가 파라미터.
-        
-    Returns:
-        DerivativeEstimator 인스턴스
-    """
+    """Factory function for derivative estimators."""
     estimators = {
         'spline': SplineDerivative,
         'poly': PolynomialDerivative,
         'lagrange': LagrangeDerivative,
         'finite_diff': FiniteDifferenceDerivative
     }
-    
     if method not in estimators:
         raise ValueError(f"Unknown derivative method: {method}. Choose from {list(estimators.keys())}")
-    
     return estimators[method](**kwargs)
+
+
+# --- 2. Data Normalization ---
+class Normalizer:
+    """
+    Handles data normalization to ensure stability during neural network training.
     
-# Euler-Maruyama SDE Solver
+    Note:
+        Neural networks are sensitive to the scale of input features. This class 
+        normalizes observed states (Glucose), hidden states (Insulin), and parameters
+        to a consistent range (typically [-1, 1] or similar) to prevent gradient explosion
+        and accelerate convergence.
+    """
+    def __init__(self, system, device, state_scales=None, param_bounds=None, use_log_params=False):
+        self.system = system
+        self.device = device
+        self.use_log_params = use_log_params
+        
+        # 1. State Scales (Max Absolute Value)
+        self.state_scales = torch.tensor(state_scales if state_scales else [1.0] * 2, 
+                                       dtype=torch.float32, device=device)
+        
+        # 2. Parameter Bounds (Min, Max)
+        if param_bounds:
+            p_min, p_max = param_bounds
+            if self.use_log_params:
+                # Convert physical bounds to log space
+                self.p_min = torch.tensor(np.log(p_min + 1e-9), dtype=torch.float32, device=device)
+                self.p_max = torch.tensor(np.log(p_max + 1e-9), dtype=torch.float32, device=device)
+            else:
+                self.p_min = torch.tensor(p_min, dtype=torch.float32, device=device)
+                self.p_max = torch.tensor(p_max, dtype=torch.float32, device=device)
+        else:
+            ranges = [self.system.param_ranges[n] for n in self.system.param_names]
+            p_arr = np.array(ranges)
+            self.p_min = torch.tensor(p_arr[:, 0], dtype=torch.float32, device=device)
+            self.p_max = torch.tensor(p_arr[:, 1], dtype=torch.float32, device=device)
+
+    def normalize_inputs(self, x, variable_type='observed'):
+        """
+        Normalizes observed (X) or hidden (Y) states.
+        x: (Batch, Time, Dim) or (Batch, FlatDim)
+        """
+        if variable_type == 'observed':
+            scale = self.state_scales[0] # Glucose scale
+        elif variable_type == 'hidden':
+            scale = self.state_scales[1] # Insulin scale
+        else:
+            scale = 1.0
+            
+        return x / (scale + 1e-8)
+
+    def denormalize_inputs(self, x_norm, variable_type='observed'):
+        if variable_type == 'observed':
+            scale = self.state_scales[0]
+        elif variable_type == 'hidden':
+            scale = self.state_scales[1]
+        else:
+            scale = 1.0
+        return x_norm * scale
+
+    def normalize_params(self, p):
+        """
+        Physical Params -> Log Space -> [-1, 1] Range
+        """
+        if self.use_log_params:
+            p = torch.log(p + 1e-9)
+        
+        # Min-Max Scaling to [-1, 1]
+        p_norm = 2 * (p - self.p_min) / (self.p_max - self.p_min + 1e-8) - 1
+        return p_norm
+
+    def denormalize_params(self, p_norm):
+        """
+        [-1, 1] Range -> Log Space -> Physical Params
+        """
+        # Inverse Min-Max
+        p_log = (p_norm + 1) / 2 * (self.p_max - self.p_min) + self.p_min
+        
+        if self.use_log_params:
+            return torch.exp(p_log)
+        return p_log
+    
+
+# --- 3. SDE Solver (Euler-Maruyama) ---
 def euler_maruyama(drift_func, diffusion_func, t_span, y0, t_eval, params, seed=None, dt_sim=1.0, system=None):
     """
     Euler-Maruyama method for solving SDEs with fine time steps.
@@ -250,40 +211,43 @@ def euler_maruyama(drift_func, diffusion_func, t_span, y0, t_eval, params, seed=
     t_start, t_end = t_span
     n_vars = len(y0)
     
-    
-
-    # 시스템 객체에서 bounds 정보가 있으면 가져옴
+    # Bounds for Clamping
     if system is not None and hasattr(system, 'state_bounds'):
         lower_bounds, upper_bounds = system.state_bounds
     else:
-        # 기본 하한 안전장치 (User defined 1e-6)
-        # Clamping Bounds 설정
-        lower_bounds = 1e-6
-        upper_bounds = 1e+3
+        lower_bounds, upper_bounds = 1e-6, 1e+3
 
-    # 시뮬레이션에 사용할 전체 시간 스텝
+    # Time Steps Setup
+    # Recalculate dt to hit t_end exactly
     n_total_steps = int(np.ceil((t_end - t_start) / dt_sim))
     t_sim_points = np.linspace(t_start, t_end, n_total_steps + 1)
     dt_actual = t_sim_points[1] - t_sim_points[0]
+    sqrt_dt = np.sqrt(dt_actual)
     
+    # Simulation Loop
     y_curr = np.array(y0)
     y_res = [y_curr.copy()] # (t=0)
     
     for i in range(n_total_steps):
         t_curr = t_sim_points[i]
         
-        # Drift & Diffusion 계산
-        f = np.array(drift_func(t_curr, y_curr, params))
+        # Calculate Drifts & Diffusion
+        # drift term(f) consists of ode func + bias
+        # see `systems/ogtt_simul.py`
+        f = np.array(drift_func(t_curr, y_curr, params))    
         G = np.array(diffusion_func(t_curr, y_curr, params))
         
-        # Brownian Motion increment dW ~ N(0, dt_actual)
-        # G가 4x4 행렬이므로, dW는 4개의 독립적인 Wiener Process를 가짐 (4-vector)
-        dW = np.random.normal(0, np.sqrt(dt_actual), size=n_vars)
+        # Brownian Motion (Wiener Process) dW ~ N(0, sqrt(dt_actual))
+        dW = np.random.normal(0, sqrt_dt, size=n_vars)
         
-        # SDE Update: Y_{t+dt} = Y_t + f*dt + G * dW
-        # G * dW는 행렬-벡터 곱셈 (4x4) * (4x1) -> (4x1)
-        y_next = y_curr + f * dt_actual + G @ dW
-        # Clamping (Physical Constraints)
+        # SDE Update: Y_{t+dt} = Y_t + f * dt + G * dW
+        if G.ndim == 1:
+            diffusion_term = G * dW
+        else:
+            diffusion_term = G @ dW
+            
+        y_next = y_curr + f * dt_actual + diffusion_term
+        # Calmp
         y_next = np.clip(y_next, lower_bounds, upper_bounds)
         
         y_res.append(y_next.copy())
@@ -291,7 +255,7 @@ def euler_maruyama(drift_func, diffusion_func, t_span, y0, t_eval, params, seed=
 
     y_full = np.array(y_res).T # (n_vars, n_sim_steps+1)
     
-    # t_eval 위치로 보간 (Resampling)
+    # Interpolation (Resampling at t_eval)
     y_out = np.zeros((n_vars, len(t_eval)))
     for k in range(n_vars):
         y_out[k, :] = np.interp(t_eval, t_sim_points, y_full[k, :])
@@ -299,70 +263,49 @@ def euler_maruyama(drift_func, diffusion_func, t_span, y0, t_eval, params, seed=
     return y_out
 
 
-def get_git_hash():
-    """현재 Git 커밋 해시를 반환합니다."""
-    try:
-        repo = git.Repo(search_parent_directories=True)
-        git_hash = repo.head.object.hexsha
-        return git_hash[:7]
-    except:
-        return "no_git"
+# --- 4. Experiment Logger ---
+
 
 class ExperimentLogger:
-    """
-    실험 결과를 CSV 파일로 저장하는 로거 클래스.
-    """
+    """Manages experiment directory creation and config saving."""
     def __init__(self, config):
         self.config = config
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.uuid = str(uuid.uuid4())[:8]
         
         self.exp_dir_name = f"{self.timestamp}_{config.EXPERIMENT_NAME}_{self.uuid}"
         self.results_dir = os.path.join(config.RESULTS_DIR, config.SYSTEM_NAME, self.exp_dir_name)
         os.makedirs(self.results_dir, exist_ok=True)
 
-        # Configi 저장
         self._save_config()
 
     def _save_config(self):
-        # [수정] __dict__ 대신 dir()을 사용하여 Class Attribute(DEVICE 등)까지 모두 포괄
         config_dict = {}
         for key in dir(self.config):
-            # 매직 메소드(__)와 함수(callable)는 제외
-            if key.startswith('__'): continue
-            val = getattr(self.config, key)
-            if callable(val): continue
+            if key.startswith('__'): 
+                continue
             
-            # 직렬화 불가능한 객체(DEVICE 등) 처리
+            val = getattr(self.config, key)
+            if callable(val): 
+                continue
+            
             if key == 'DEVICE':
                 val = str(val)
             
             config_dict[key] = val
-
-        # EXPERIMENTS 리스트는 너무 길 수 있으므로 제외 (선택 사항)
-        #if 'EXPERIMENTS' in config_dict: del config_dict['EXPERIMENTS']
-        
+            
         with open(os.path.join(self.results_dir, 'config.json'), 'w') as f:
             json.dump(config_dict, f, indent=4)
 
     def log_result_to_csv(self, metrics_dict):
-        """
-        실험 결과를 중앙 CSV 레지스트리에 등록합니다.
-        metrics_dict: {'val_loss': 0.1, 'test_error': 0.05, ...}
-        """
         registry_path = os.path.join(self.config.RESULTS_DIR, 'experiment_registry.csv')
         
-        # 기본 정보 구성
         log_data = {
             'timestamp': self.timestamp,
             'system': self.config.SYSTEM_NAME,
             'experiment': self.config.EXPERIMENT_NAME,
-            'uuid': self.uuid,
-            'git_hash': get_git_hash(),
             'use_sde': getattr(self.config, 'USE_SDE', False),
             'use_lagrangian': getattr(self.config, 'USE_LAGRANGIAN', False)
         }
-        # 메트릭 병합
         log_data.update(metrics_dict)
         
         df_new = pd.DataFrame([log_data])

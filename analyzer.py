@@ -9,7 +9,7 @@ import seaborn as sns
 from scipy.stats import pearsonr, linregress
 from sklearn.metrics import mean_squared_error, r2_score
 from utils import euler_maruyama
-from systems.ogtt_simul import OgttSimul, OGTTModel, ode_params, sys_params
+from systems.ogtt_simul import OgttSimul, OGTTModel, ODE_PARAMS, SYS_PARAMS
 
 plt.style.use('seaborn-v0_8-whitegrid')
 sns.set_palette("deep")
@@ -339,7 +339,7 @@ class Analyzer:
             i0 = y_raw[idx, 0, 0] if y_raw is not None else 15.0 
             
             temp_theta = {'si': pred_params[0], 'sigma': pred_params[1]}
-            temp_model = OGTTModel(ode_params, sys_params, temp_theta)
+            temp_model = OGTTModel(ODE_PARAMS, SYS_PARAMS, temp_theta)
             n5, n6 = temp_model.find_steady_state_N(g0)
             y0 = [g0, i0, n5, n6]
             
