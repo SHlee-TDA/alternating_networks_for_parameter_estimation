@@ -1,4 +1,23 @@
 # systems/ogtt_simul.py
+"""
+systems/ogtt_simul.py
+================================================================================
+Implements the Oral Glucose Tolerance Test (OGTT) simulation environment.
+
+This module defines the dynamical system for glucose-insulin interaction, 
+incorporating both deterministic ODEs and stochastic SDE components.
+
+Key Components:
+1. OgttSimul: The main system interface for generating trajectories and 
+   defining SDE drift/diffusion terms.
+2. OGTTModel: The core differential equation solver representing the biological 
+   mechanisms (e.g., insulin secretion, hepatic glucose production).
+
+References:
+- The model is based on the physiological diagram of glucose-insulin dynamics.
+- SDE terms are calibrated using real-world data residuals (see analysis/).
+================================================================================
+"""
 import os
 import json
 from pathlib import Path
@@ -8,67 +27,54 @@ from scipy.integrate import solve_ivp
 import scipy.stats as stats
 from scipy.interpolate import CubicSpline
 
-
 from .base_system import System
 
-# Load OGTT Simulation parameter
-
-def load_config(config_path):
+# --- Configuration & ODE Parameter Loading ---
+def load_json_config(config_path):
     with open(config_path, 'r') as f:
         config = json.load(f)
     return config
 
-current_file_path = Path(__file__)
-BASE_DIR = current_file_path.resolve().parent
-CONFIG_FILE_PATH = BASE_DIR / 'config.json' 
-SYS_FILE_PATH = BASE_DIR / 'system_params.json'
+CURRENT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = CURRENT_DIR.parent
+CONFIG = load_json_config(CURRENT_DIR / 'config.json')
+SYS_PARAMS = load_json_config(CURRENT_DIR / 'system_params.json')
+ODE_PARAMS = CONFIG['ode_params']
 
-config = load_config(CONFIG_FILE_PATH)
-sys_params = load_config(SYS_FILE_PATH)
-ode_params = config['ode_params']
-
-# Load SDE Simulation parameter
-# SDE simulation parameter  `analysis/calibrate_sde_params.py`
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent 
-SDE_PARAM_FILE_PATH = PROJECT_ROOT / 'data' / 'parameters' / 'calibrated_sde_params.json'
-
-
-# default
-SIGMA_T_POINTS = np.array([0, 120])
-SIGMA_G_T = np.array([0.0, 0.0])
-SIGMA_I_T = np.array([0.0, 0.0])
-MU_G_T = np.array([0.0, 0.0])
-MU_I_T = np.array([0.0, 0.0]) 
-BOUNDS_MAP = {'G_max': 1e9, 'I_max': 1e9}
+# SDE Calibration Data Loading
+# Loads empirically estimated diffusion (sigma) and drift bias terms.
+SDE_PARAM_PATH = PROJECT_ROOT / 'data' / 'parameters' / 'calibrated_sde_params.json'
 
 try:
-    with open(SDE_PARAM_FILE_PATH, 'r') as f:
-        calib_data = json.load(f)
-        
-        SIGMA_T_POINTS = np.array(calib_data['t_points'])
-        SIGMA_G_T = np.array(calib_data['sigma_G'])
-        SIGMA_I_T = np.array(calib_data['sigma_I'])
-        
-        # Drift Bias 로드
-        if 'mu_G' in calib_data:
-            MU_G_T = np.array(calib_data['mu_G'])
-            MU_I_T = np.array(calib_data['mu_I'])
-            
-        if 'bounds' in calib_data:
-            BOUNDS_MAP = calib_data['bounds']
-            
-    # print(f"Loaded SDE params from {SDE_PARAM_FILE_PATH}")
-
+    calib_data = load_json_config(SDE_PARAM_PATH)
+    SIGMA_T_POINTS = np.array(calib_data.get('t_points', [0, 120]))
+    SIGMA_G_T = np.array(calib_data.get('sigma_G', [0.0, 0.0]))
+    SIGMA_I_T = np.array(calib_data.get('sigma_I', [0.0, 0.0]))
+    MU_G_T = np.array(calib_data.get('mu_G', [0.0, 0.0]))
+    MU_I_T = np.array(calib_data.get('mu_I', [0.0, 0.0]))
+    BOUNDS_MAP = calib_data.get('bounds', {'G_max': 1e9, 'I_max': 1e9})
 except FileNotFoundError:
-    print(f"Warning: {SDE_PARAM_FILE_PATH} not found. Using default (zero) diffusion.")
-    
+    print(f"[Warning] SDE parameters not found at {SDE_PARAM_PATH}. Using default zeros.")
+    SIGMA_T_POINTS = np.array([0, 120])
+    SIGMA_G_T = np. zeros(2)
+    SIGMA_I_T = np.zeros(2)
+    MU_G_T, MU_I_T = np.zeros(2), np.zeros(2)
+    BOUNDS_MAP = {'G_max': 1e9, 'I_max': 1e9}
 
 
 class OgttSimul(System):
     """
-    OGTT(Oral Glucose Tolerance Test) 시뮬레이션 시스템의 상세 명세
-    [Optimization]: OGTTModel 인스턴스를 재사용하여 시뮬레이션 속도를 향상시킴.
+    Defines the Stochastic Differential Equation (SDE) system for OGTT.
+    
+    System State (y):
+        y[0] (G): Glucose concentration
+        y[1] (I): Insulin concentration
+        y[2] (N5): Delayed signal for insulin secretion (Incretin effect)
+        y[3] (N6): Delayed signal for insulin secretion (Incretin effect)
+        
+    Parameters:
+        si: Insulin sensitivity
+        sigma: Generalized parameter related to secretion capacity
     """
     name='ogtt_simul'
     param_names = ['si', 'sigma']
@@ -76,51 +82,53 @@ class OgttSimul(System):
         'si': [0.0, 2.0],   
         'sigma': [0.0, 2.0]      
     }
+    
+    # Heuristic initial conditions range (minG, maxG), (minI, maxI)
     initial_conditions = ([80.0, 120.0], 
-                         [10.0, 20.0])  # [minG(0), maxG(0)]
+                         [10.0, 20.0])  
     t_span = [0, 120]    
     t_points = np.array([0, 30, 60, 90, 120])
-    observed_var_idx = 0  # Glucose
-    hidden_var_idx = 1    # Insulin
     
+    # Indices for observed vs hidden variables
+    observed_var_idx = 0  # Glucose is observed
+    hidden_var_idx = 1    # Insulin is considered 'hidden' in this experimental setup
+    
+    # Scaling factors for SDE terms
     bias_scale = 1.0
     diffusion_scale = 1.0
     
     def __init__(self):
         super().__init__()
-        # [Optimization] 모델 인스턴스를 미리 생성 (Dummy theta로 초기화)
-        # 매 step마다 생성하는 오버헤드를 제거함.
-        self.model = OGTTModel(ode_params, sys_params, {'si': 0.0, 'sigma': 0.0})
+        # Optimization: Pre-instantiate model to avoid overhead in loops
+        self.model = OGTTModel(ODE_PARAMS, SYS_PARAMS, {'si': 0.0, 'sigma': 0.0})
         
-        # Interpolate SDE parameters via CubicSpline for smoothness.
+        # Interpolators for time-dependent SDE parameters
         self.sigma_g_spline = CubicSpline(SIGMA_T_POINTS, SIGMA_G_T, bc_type='natural')
         self.sigma_i_spline = CubicSpline(SIGMA_T_POINTS, SIGMA_I_T, bc_type='natural')
         self.mu_g_spline = CubicSpline(SIGMA_T_POINTS, MU_G_T, bc_type='natural')
         self.mu_i_spline = CubicSpline(SIGMA_T_POINTS, MU_I_T, bc_type='natural')
         
     def sample_initial_conditions(self, params_dict):
-        # I found that sampling from log-normal fits better to real NIH OGTT data
-        s_oglu0 = 0.1196
-        loc_oglu0 = 0.0000
-        scale_oglu0 = 90.9547
-        oglu0 = stats.lognorm.rvs(s=s_oglu0, loc=loc_oglu0, scale=scale_oglu0, size=1)[0]
+        """
+        Samples initial conditions (G0, I0) from log-normal priors derived from NIH data,
+        and computes the corresponding steady-state values for N5 and N6.
+        """        
+        # Priors for G(0) and I(0) derived from NIH data
+        oglu0 = stats.lognorm.rvs(s=0.1196, loc=0.0, scale=90.9547)
+        oins0 = stats.lognorm.rvs(s=0.6901, loc=0.0, scale=5.9133)
         
-        s_oins0 = 0.6901
-        loc_oins0 = 0.0000
-        scale_oins0 = 5.9133
-        oins0 = stats.lognorm.rvs(s=s_oins0, loc=loc_oins0, scale=scale_oins0, size=1)[0]
+        # Update model params to find consistent steady state
+        self.model.theta['si'] = params_dict['si']
+        self.model.theta['sigma'] = params_dict['sigma']
         
-        model = OGTTModel(ode_params, sys_params, {'si': params_dict['si'], 'sigma': params_dict['sigma']})
-        n5_ss, n6_ss = model.find_steady_state_N(oglu0)
+        # Solve algebraic equilibrium for auxiliary variables
+        n5_ss, n6_ss = self.model.find_steady_state_N(oglu0)
         
-        return [oglu0, oins0, n5_ss, n6_ss]  # G(0), I(0), N5(0), N6(0)
+        return [oglu0, oins0, n5_ss, n6_ss]
     
-    # [Optimization] @staticmethod 제거 -> Instance method로 변경
     def ode_func(self, t, y, params):
         si, sigma = params
         
-        # [Optimization] 기존 인스턴스의 파라미터만 업데이트 (객체 생성 X)
-        # Python의 딕셔너리는 Mutable이므로 직접 수정이 빠름
         self.model.theta['si'] = si
         self.model.theta['sigma'] = sigma
 
@@ -130,84 +138,58 @@ class OgttSimul(System):
 
     def drift_func(self, t, y, params):
         """
-        SDE의 Drift 항: f(t, y) + mu_bias(t)
-        결정론적 모델의 물리적 궤적에 데이터 기반 편향 보정값을 더해줍니다.
+        SDE Drift Term: F(t, y) = f_ode(t, y) + mu_bias(t)
+        
+        Adds a data-driven bias correction term (mu) to the physical ODE drift.
+        This accounts for structural model mismatch (misspecification).
         """
-        # 1. 결정론적 ODE 계산
         dydt_ode = self.ode_func(t, y, params)
         
-        # 2. Bias Correction (Cubic spline)
-        mu_g = self.mu_g_spline(t)
-        mu_i = self.mu_i_spline(t)
-        
-        # 3. Bias 추가 (리스트 복사 후 수정)
-        scale = self.bias_scale
+        # Add bias correction
         dydt_corrected = list(dydt_ode)
-        dydt_corrected[0] += scale * mu_g # Glucose
-        dydt_corrected[1] += scale * mu_i # Insulin
+        dydt_corrected[0] += self.bias_scale * self.mu_g_spline(t) # Glucose bias
+        dydt_corrected[1] += self.bias_scale * self.mu_i_spline(t) # Insulin bias
         
         return dydt_corrected
     
     def diffusion_func(self, t, y, params):
         """
-        SDE의 확산 행렬 G(t, y). 시간 t에 의존하며, G, I에만 노이즈 적용 (2x2 대각선).
-        상태 변수: (G, I, N5, N6)
+        SDE Diffusion Term: G(t, y)
+        
+        Models the stochastic diversity of Glucose and Insulin.
+        Returns a diagonal matrix assuming uncorrelated noise between states.
         """
-        # 현재 시간 t에서의 보간된 시그마 값
-        sigma_g_t = self.sigma_g_spline(t)
-        sigma_i_t = self.sigma_i_spline(t)
-        
-        # 4개의 상태 변수와 4개의 Wiener Process (dW_1 to dW_4)가 있다고 가정
-        # SDE 형식 dY_t = f(t, Y_t)dt + G(t, Y_t)dW_t 에서
-        # G(t, Y)는 (n_vars, n_wiener_processes) 행렬.
-        # 여기서는 dW_1=G, dW_2=I, dW_3=N5, dW_4=N6 에 해당하는 노이즈로 간주하고 
-        # 대각 행렬 (4x4)로 가정합니다.
-        # 30분 단위의 diffusion 추정치만 있고, SDE는 1분 단위로 풀기 때문에, 그 스케일 차이를 보정하도록 scaling factor를 곱합니다.
-        scale = self.diffusion_scale
-        
         n_vars = 4
         diffusion_matrix = np.zeros((n_vars, n_vars))
         
-        # G(0, 0)와 I(1, 1)에만 시간 의존적 시그마 적용
-        diffusion_matrix[0, 0] = sigma_g_t * scale # Glucose
-        diffusion_matrix[1, 1] = sigma_i_t * scale # Insulin
+        # Apply calibrated time-dependent volatility
+        diffusion_matrix[0, 0] = self.sigma_g_spline(t) * self.diffusion_scale
+        diffusion_matrix[1, 1] = self.sigma_i_spline(t) * self.diffusion_scale
         
-        # N5(2, 2)와 N6(3, 3)는 0 (Steady state로 움직이는 변수의 노이즈 무시)
-        
+        # N5, N6 are assumed to be deterministic (zero diffusion)
         return diffusion_matrix
     
     @property
     def state_bounds(self):
-        """
-        상태 변수의 물리적 하한 및 상한을 정의합니다.
-        Returns:
-            lower_bounds: [G_min, I_min, N5_min, N6_min]
-            upper_bounds: [G_max, I_max, N5_max, N6_max]
-        """
-        # 하한: 10^-6 (0 대신 안전장치)
+        """Physical constraints for state variables [G, I, N5, N6]."""
         lower = np.array([1e-6, 1e-6, 1e-6, 1e-6])
-        
-        # 상한: G, I는 데이터 기반 10% 마진 적용, N5, N6는 충분히 큰 값(1e9)으로 설정
-        g_max = BOUNDS_MAP.get('G_max', 1e9)
-        i_max = BOUNDS_MAP.get('I_max', 1e9)
-        upper = np.array([g_max, i_max, 1e9, 1e9])
-        
+        upper = np.array([
+            BOUNDS_MAP.get('G_max', 1e9), 
+            BOUNDS_MAP.get('I_max', 1e9), 
+            1e9, 
+            1e9
+        ])
         return lower, upper
 
 class OGTTModel:
     """
-    OGTT 모델의 기본 클래스입니다.
+    Physiological model of Glucose-Insulin dynamics.
     
-    이 클래스는 포도당-인슐린 동역학을 4개의 미분방정식으로 모델링합니다:
-    - 포도당 농도 (G)
-    - 인슐린 농도 (I)
-    - 인슐린 분비 관련 변수 (N5)
-    - 인슐린 분비 관련 변수 (N6)
-    
-    Attributes:
-        ode_params (dict): ODE 시스템 파라미터
-        sys_params (dict): 시스템 파라미터
-        theta (dict): 모델 파라미터 (si, sigma) [Optimization: Mutable for Reuse]
+    Equations encapsulate:
+    - Glucose appearing from oral ingestion (OGTT_rate)
+    - Hepatic Glucose Production (HGP)
+    - Insulin-dependent glucose uptake
+    - Insulin secretion stimulated by glucose and incretins (N5, N6)
     """
     def __init__(self, ode_params, sys_params, theta):
         self.ode_params = ode_params
@@ -216,383 +198,175 @@ class OGTTModel:
 
     def GI_ode_universal(self, t, y):
         """
-        Defines the system of ODEs for the glucose-insulin model.
-
-        Parameters:
-        t : float
-            Current time point.
-        y : array_like
-            Current state vector [G, I, N5, N6], where:
-            G : Glucose concentration
-            I : Insulin concentration
-            N5, N6 : Variables related to insulin secretion dynamics
-
-        Returns:
-        dydt : tuple
-            Derivatives [dG/dt, dI/dt, dN5/dt, dN6/dt]
+        dG/dt = HGP + OGTT_rate - (Eg0 + Si * I) * G
+        dI/dt = (b * ISR) / BV - k * I
+        dN5/dt, dN6/dt : Incretin dynamics (delay chain)
         """
-        # 상태 변수 언패킹
         G, I, N5, N6 = y
-
-        # 시스템 파라미터 접근
         p_sys = self.sys_params
-        p_ode = self.ode_params
-        
-        # 시스템 파라미터 설정
-        Eg0 = p_sys['Eg0']
-        k = p_sys['k']
-        BV = p_sys['BV']
-        b = p_sys['b']
-
-        # 대사율 M 계산
-        M = self.calculate_metabolic_rate(G)
-
-        # OGTT 투여율 계산
-        OGTT_rate = self.calculate_ogtt_flux(t)
-
-        # 간 포도당 생성(HGP) 계산
-        HGP = self.calculate_HGP(I)
-
-        # Glucose Amplifying Factor (GF) 계산
-        GF = self.calculate_GF(G)
-        
-
-        # Microdomain Ca2+ (cmd) 계산
-        ci = self.calculate_ci(M)
-        cmd = self.calculate_cmd(ci)
-
-        # 인슐린 분비 관련 변수 계산
-        r2 = self.calculate_r2(ci)
-        r3 = self.calculate_r3(ci, GF)
-        CN = self.calculate_CN(cmd)
-        CN1 = CN[0]
-        ISR = self.calculate_ISR(CN, N5)
-
-        # ODE 계산
-        ts = p_sys['ts']
-        unit_con = p_sys['unit_con']
-        r1 = p_sys['r1']
-        rm1 = p_sys['rm1']
-        rm2 = p_sys['rm2']
-        rm3 = p_sys['rm3']
         si = self.theta['si']
 
+        # 1. Flux Calculations
+        M = self.calculate_metabolic_rate(G)
+        OGTT_rate = self.calculate_ogtt_flux(t)
+        HGP = self.calculate_HGP(I)
+        GF = self.calculate_GF(G) 
 
-        dGdt = HGP + OGTT_rate - (Eg0 + unit_con * si * I) * G
-        dIdt = (b * ISR) / BV - k * I
-        dN5dt = ts * (rm1 * CN1 * N5 - (r1 + rm2) * N5 + r2 * N6)
-        dN6dt = ts * (r3 + rm2 * N5 - (rm3 + r2) * N6)
+        # 2. Calcium & Secretion Dynamics
+        ci = self.calculate_ci(M)
+        cmd = self.calculate_cmd(ci)
+        CN = self.calculate_CN(cmd)
+        ISR = self.calculate_ISR(CN, N5)
 
-        dydt = dGdt, dIdt, dN5dt, dN6dt
-        return dydt
+        # 3. ODEs
+        # Glucose Dynamics
+        dGdt = HGP + OGTT_rate - (p_sys['Eg0'] + p_sys['unit_con'] * si * I) * G
+        
+        # Insulin Dynamics
+        dIdt = (p_sys['b'] * ISR) / p_sys['BV'] - p_sys['k'] * I
+        
+        # Incretin/Signal Delay Dynamics (N5, N6)
+        r2 = self.calculate_r2(ci)
+        r3 = self.calculate_r3(ci, GF)
+        rm1, rm2, rm3 = p_sys['rm1'], p_sys['rm2'], p_sys['rm3']
+        r1 = p_sys['r1']
+        
+        dN5dt = p_sys['ts'] * (rm1 * CN[0] * N5 - (r1 + rm2) * N5 + r2 * N6)
+        dN6dt = p_sys['ts'] * (r3 + rm2 * N5 - (rm3 + r2) * N6)
+
+        return dGdt, dIdt, dN5dt, dN6dt
 
     def simulate(self, t_span, initial_conditions, t_eval=None):
-        # [Note: NumPy Array Comparison]
-        # t_eval은 numpy array일 수 있으므로 '== None'으로 비교하면 
-        # "The truth value of an array is ambiguous" 에러가 발생합니다.
-        # 반드시 'is None'을 사용하여 객체의 정체성을 비교해야 합니다.
         if t_eval is None:
             t_eval = np.linspace(0, 120, 121)
 
-        solution = solve_ivp(
+        return solve_ivp(
             self.GI_ode_universal,
             t_span,
             initial_conditions,
-            method='BDF',
+            method='BDF', # Stiff solver is recommended for biological systems
             t_eval=t_eval
         )
-        return solution
 
-        
+    # --- Sub-process Calculations (Helper Methods) ---
+    # Note: These methods implement specific physiological transfer functions.
+    
     def calculate_metabolic_rate(self, G):
-        """
-        Calculates the metabolic rate M as a function of glucose rate G.
-
-        Parameters:
-        G : float
-            Current glucose rate.
-
-        Returns:
-        M : float
-            Metabolic rate.
-
-        Equation:
-        M = Mmax * G^kM / (alpha_M^kM + G^kM)
-        """
-        p_sys = self.sys_params
-
-        Mmax = p_sys['Mmax']
-        alpha_M = p_sys['alpha_M']
-        kM = p_sys['kM']
-
-        numerator = Mmax * G ** kM
-        denominator = alpha_M ** kM + G ** kM
-        M = numerator / denominator
-
-        return M
-
+        p = self.sys_params
+        return p['Mmax'] * G**p['kM'] / (p['alpha_M']**p['kM'] + G**p['kM'])
 
     def calculate_ogtt_flux(self, t):
-        """
-        OGTT Flux 계산 (Debug Version)
-        """
-        p_ode = self.ode_params
+        """Computes oral glucose appearance rate (triangular/trapezoidal profile)."""
+        p = self.ode_params
         p_sys = self.sys_params
-
-        t1 = p_ode['t1']
-        t2 = p_ode['t2']
-        t3 = p_ode['t3']
-        a1 = p_ode['a1']
-        a2 = p_ode['a2']
-        a3 = p_ode['a3']
-        OGTT_bar = p_sys['OGTT_bar']
         
-        # [디버깅] 파라미터가 제대로 로드되었는지 확인 (최초 1회만 출력됨)
-        #if not hasattr(self, '_params_checked'):
-        #    print(f"[DEBUG Params] t1={t1}, OGTT_bar={OGTT_bar}")
-        #    self._params_checked = True
-
-        flux = 0.0
+        # Vectorized implementation for efficiency
+        t1, t2, t3 = p['t1'], p['t2'], p['t3']
+        a1, a2, a3 = p['a1'], p['a2'], p['a3']
         
-        # 스칼라/벡터 분기 처리
-        if np.isscalar(t):
-            if 0 < t <= t1:
-                flux = t * a1 / t1
-            elif t1 < t <= t2:
-                flux = ((t - t2) * (a2 - a1) / (t2 - t1)) + a2
-            elif t2 < t <= t3:
-                flux = (t - t3) * (a3 - a2) / (t3 - t2)
-            else:
-                flux = 0.0
-            
-            # [디버깅] Flux가 0이 아니어야 할 시간대에 0인지 확인
-            #if 0 < t < t3 and flux == 0.0:
-            #    print(f"[WARNING] Flux is 0 at t={t}! Check condition logic.")
-                
-        else:
-            # 벡터 처리 (기존 로직)
-            condlist = [
-                (t > 0) & (t <= t1),
-                (t > t1) & (t <= t2),
-                (t > t2) & (t <= t3)
-            ]
-            choicelist = [
-                t * a1 / t1,
-                ((t - t2) * (a2 - a1) / (t2 - t1)) + a2,
-                (t - t3) * (a3 - a2) / (t3 - t2)
-            ]
-            flux = np.select(condlist, choicelist, default=0.0)
-
-        return OGTT_bar * flux
+        condlist = [(t > 0) & (t <= t1), (t > t1) & (t <= t2), (t > t2) & (t <= t3)]
+        choicelist = [
+            t * a1 / t1,
+            ((t - t2) * (a2 - a1) / (t2 - t1)) + a2,
+            (t - t3) * (a3 - a2) / (t3 - t2)
+        ]
+        flux = np.select(condlist, choicelist, default=0.0) if not np.isscalar(t) else \
+               (t * a1 / t1 if 0 < t <= t1 else 
+               ((t - t2) * (a2 - a1) / (t2 - t1)) + a2 if t1 < t <= t2 else 
+               (t - t3) * (a3 - a2) / (t3 - t2) if t2 < t <= t3 else 0.0)
+               
+        return p_sys['OGTT_bar'] * flux
 
     def calculate_HGP(self, I):
-        """
-        Calculates the hepatic glucose production (HGP) as a function of insulin rate I.
-
-        Parameters:
-        I : float
-            Current insulin rate.
-
-        Returns:
-        HGP : float
-            Hepatic glucose production rate.
-
-        Equations:
-        hepa_max = hepa_bar / (hepa_k + si) + hepa_b
-        alpha_HGP = alpha_max / (alpha_k + si) + alpha_b
-        HGP = hepa_max / (alpha_HGP + hepasi * I) + HGP_b
-        """
-        p_sys = self.sys_params
-        p_ode = self.ode_params
-
-        hepa_bar = p_sys['hepa_bar']
-        hepa_k = p_sys['hepa_k']
-        hepa_b = p_sys['hepa_b']
-
+        """Hepatic Glucose Production: Suppressed by Insulin."""
+        p, sys = self.ode_params, self.sys_params
         si = self.theta['si']
-        hepasi = p_ode['hepasi']
-
-        hepa_max = hepa_bar / (hepa_k + si) + hepa_b
-
-        alpha_max = p_sys['alpha_max']
-        alpha_b = p_sys['alpha_b']
-        alpha_k = p_sys['alpha_k']
-
-        alpha_HGP = alpha_max / (alpha_k + si) + alpha_b
-    
-        HGP_b = p_sys['HGP_b']
-        HGP = hepa_max / (alpha_HGP + hepasi * I) + HGP_b
-
-        return HGP
+        
+        hepa_max = sys['hepa_bar'] / (sys['hepa_k'] + si) + sys['hepa_b']
+        alpha_HGP = sys['alpha_max'] / (sys['alpha_k'] + si) + sys['alpha_b']
+        
+        return hepa_max / (alpha_HGP + p['hepasi'] * I) + sys['HGP_b']
     
     def calculate_GF(self, G):
-        """
-        Calculates the Glucose Amplifying Factor (GF) as a function of glucose rate G.
-
-        Parameters:
-        G : float
-            Current glucose rate.
-
-        Returns:
-        GF : float
-            Glucose Amplifying Factor.
-
-        Equation:
-        GF = [GF_bar * (G - shGF)^kGF] / [alpha_GF^kGF + (G - shGF)^kGF] + GF_b
-        """
-        p_sys = self.sys_params
-
-        GF_bar = p_sys['GF_bar']
-        kGF = p_sys['kGF']
-        alpha_GF = p_sys['alpha_GF']
-        shGF = p_sys['shGF']
-        GF_b = p_sys['GF_b']
-
-        numerator = GF_bar * (G - shGF) ** kGF
-        denominator = alpha_GF ** kGF + (G - shGF) ** kGF
-        GF = numerator / denominator + GF_b
-
-        return GF
+        """Glucose Amplifying Factor (Potentiation)."""
+        p = self.sys_params
+        G_eff = G - p['shGF']
+        num = p['GF_bar'] * G_eff**p['kGF']
+        den = p['alpha_GF']**p['kGF'] + G_eff**p['kGF']
+        return num / den + p['GF_b']
 
     def calculate_ci(self, M):
-        """
-        Calculates the microdomain calcium ci as a function of metabolic rate M.
-
-        Parameters:
-        M : float
-            Metabolic rate.
-
-        Returns:
-        ci : float
-            Microdomain calcium.
-
-        Equation:
-        ci = [ca_bar * (M + gamma_bar * gamma)^kca] / [alpha_ca^kca + (M + gamma_bar * gamma)^kca] + ca_b
-        """
-        p_sys = self.sys_params
-        p_ode = self.ode_params
-
-        ca_bar = p_sys['ca_bar']
-        kca = p_sys['kca']
-        alpha_ca = p_sys['alpha_ca']
-        ca_b = p_sys['ca_b']
-        gamma = p_ode['gamma']
-        gamma_bar = p_ode['gamma_bar']
-
-        ci_input = M + gamma_bar * gamma
-        numerator = ca_bar * ci_input ** kca
-        denominator = alpha_ca ** kca + ci_input ** kca
-        ci = numerator / denominator + ca_b
-
-        return ci
+        p, ode = self.sys_params, self.ode_params
+        ci_in = M + ode['gamma_bar'] * ode['gamma']
+        return (p['ca_bar'] * ci_in**p['kca']) / (p['alpha_ca']**p['kca'] + ci_in**p['kca']) + p['ca_b']
 
     def calculate_cmd(self, ci):
-        p_sys = self.sys_params
-
-        cmd_factor = p_sys['cmd_factor']
-        cmd_b = p_sys['cmd_b']
-        cik = p_sys['cik']
-        cialpha = p_sys['cialpha']
-
-        numerator = cmd_factor * ci ** cik
-        denominator = cialpha ** cik + ci ** cik
-        cmd = numerator / denominator + cmd_b
-
-        return cmd
+        p = self.sys_params
+        return (p['cmd_factor'] * ci**p['cik']) / (p['cialpha']**p['cik'] + ci**p['cik']) + p['cmd_b']
 
     def calculate_r2(self, ci):
-        p_ode = self.ode_params
-        p_sys = self.sys_params
-
-        r20 = p_ode['r20']
-        Kp2 = p_sys['Kp2']
-
-        r2 = r20 * ci / (ci + Kp2)
-        return r2
+        return self.ode_params['r20'] * ci / (ci + self.sys_params['Kp2'])
 
     def calculate_r3(self, ci, GF):
-        p_ode = self.ode_params
-        p_sys = self.sys_params
-
-        r30 = p_sys['r30']
-        sigma = self.theta['sigma']
-        Kp2 = p_sys['Kp2']
-
-        r3 = sigma * GF * r30 * ci / (ci + Kp2)
-        return r3
+        return self.theta['sigma'] * GF * self.sys_params['r30'] * ci / (ci + self.sys_params['Kp2'])
 
     def calculate_CN(self, cmd):
-        p_sys = self.sys_params
-
-        k1 = p_sys['k1']
-        km1 = p_sys['km1']
-        r1 = p_sys['r1']
-        rm1 = p_sys['rm1']
-        u1 = p_sys['u1']
-
-        # Fast-slow analysis 변수 계산
-        N1_C = km1 / (3 * k1 * cmd + rm1)
-        N1_D = r1 / (3 * k1 * cmd + rm1)
-        N2_E = 3 * k1 * cmd / (2 * k1 * cmd + km1)
-        N2_F = 2 * km1 / (2 * k1 * cmd + km1)
-        N3_L = 2 * k1 * cmd / (2 * km1 + k1 * cmd)
-        N3_N = 3 * km1 / (2 * km1 + k1 * cmd)
-
-        # Fast-slow analysis by considering N6 and N5 slow and all other fast
-        CN4 = (k1 * cmd) / (3 * km1 + u1)
+        """Computes fraction of vesicles in different pools using fast-slow analysis."""
+        p = self.sys_params
+        k1_cmd = p['k1'] * cmd
+        
+        # Coefficients derived from equilibrium assumption on fast variables
+        N3_L = 2 * k1_cmd / (2 * p['km1'] + k1_cmd)
+        N3_N = 3 * p['km1'] / (2 * p['km1'] + k1_cmd)
+        
+        CN4 = k1_cmd / (3 * p['km1'] + p['u1'])
         CN3 = N3_L / (1 - N3_N * CN4)
+        
+        N2_E = 3 * k1_cmd / (2 * k1_cmd + p['km1'])
+        N2_F = 2 * p['km1'] / (2 * k1_cmd + p['km1'])
         CN2 = N2_E / (1 - N2_F * CN3)
+        
+        N1_D = p['r1'] / (3 * k1_cmd + p['rm1'])
+        N1_C = p['km1'] / (3 * k1_cmd + p['rm1'])
         CN1 = N1_D / (1 - N1_C * CN2)
-
+        
         return (CN1, CN2, CN3, CN4)
 
     def calculate_ISR(self, CN, N5):
-        p_sys = self.sys_params
-
-        u1 = p_sys['u1']
-        u2 = p_sys['u2']
-        u3 = p_sys['u3']
-        ts = p_sys['ts']
-
-        CN1, CN2, CN3, CN4 = CN
-
-        N1 = CN1 * N5
-        N2 = CN2 * N1
-        N3 = CN3 * N2
-        N4 = CN4 * N3
-        NF = u1 * N4 / u2
-        NR = (u2 / u3) * NF
-
-        ISR = ts * 9 * (u3 * NR)
-
-        return ISR
+        """Insulin Secretion Rate."""
+        p = self.sys_params
+        # Chain of vesicle pools
+        N4 = CN[3] * (CN[2] * (CN[1] * (CN[0] * N5))) # Nested multiplication
+        NF = p['u1'] * N4 / p['u2']
+        NR = (p['u2'] / p['u3']) * NF
+        return p['ts'] * 9 * (p['u3'] * NR)
 
     def find_steady_state_N(self, oglu0):
         """
-        Given initial glucose value (oglu(0)),
-        compute equilibrium states of N5 and N6 (dN5/dt = 0, dN6/dt =0) via algebra.
+        Solves for the steady-state values of N5 and N6 given a baseline Glucose G(0).
+        Ensures that the simulation starts from a biological equilibrium.
         """
+        # Calculate static factors based on G(0)
         M = self.calculate_metabolic_rate(oglu0)
         ci = self.calculate_ci(M)
         GF = self.calculate_GF(oglu0)
         cmd = self.calculate_cmd(ci)
+        CN1 = self.calculate_CN(cmd)[0]
         
-        CN = self.calculate_CN(cmd)
-        CN1 = CN[0]
-
+        # Parameters
+        p = self.sys_params
+        r2 = self.calculate_r2(ci)
+        r3 = self.calculate_r3(ci, GF)
         
-        rm1, rm2, rm3 = self.sys_params['rm1'], self.sys_params['rm2'], self.sys_params['rm3']
-        r1, r2, r3 = self.sys_params['r1'], self.calculate_r2(ci), self.calculate_r3(ci, GF)
-        
+        # Linear system Ax = b for [N5_ss, N6_ss]
+        # Derived from dN5/dt = 0, dN6/dt = 0
         A = np.array([
-            [rm1 * CN1 - (r1 + rm2), r2],
-            [rm2, -(rm3 + r2)]
+            [p['rm1'] * CN1 - (p['r1'] + p['rm2']), r2],
+            [p['rm2'], -(p['rm3'] + r2)]
         ])
         b = np.array([0, -r3])
         
         try:
-            n5_ss, n6_ss = np.linalg.solve(A, b)
-            return n5_ss, n6_ss
+            return np.linalg.solve(A, b)
         except np.linalg.LinAlgError:
-            return 1.0, 0.5
-
+            return 1.0, 0.5 # Fallback defaults
