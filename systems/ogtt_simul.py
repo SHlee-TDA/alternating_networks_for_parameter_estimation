@@ -48,8 +48,10 @@ SDE_PARAM_PATH = PROJECT_ROOT / 'data' / 'parameters' / 'calibrated_sde_params.j
 try:
     calib_data = load_json_config(SDE_PARAM_PATH)
     SIGMA_T_POINTS = np.array(calib_data.get('t_points', [0, 120]))
+    # Diffusion terms
     SIGMA_G_T = np.array(calib_data.get('sigma_G', [0.0, 0.0]))
     SIGMA_I_T = np.array(calib_data.get('sigma_I', [0.0, 0.0]))
+    # Drift bias terms
     MU_G_T = np.array(calib_data.get('mu_G', [0.0, 0.0]))
     MU_I_T = np.array(calib_data.get('mu_I', [0.0, 0.0]))
     BOUNDS_MAP = calib_data.get('bounds', {'G_max': 1e9, 'I_max': 1e9})
@@ -102,7 +104,7 @@ class OgttSimul(System):
         # Optimization: Pre-instantiate model to avoid overhead in loops
         self.model = OGTTModel(ODE_PARAMS, SYS_PARAMS, {'si': 0.0, 'sigma': 0.0})
         
-        # Interpolators for time-dependent SDE parameters
+        # Cubic spline interpolators for smooth SDE terms        
         self.sigma_g_spline = CubicSpline(SIGMA_T_POINTS, SIGMA_G_T, bc_type='natural')
         self.sigma_i_spline = CubicSpline(SIGMA_T_POINTS, SIGMA_I_T, bc_type='natural')
         self.mu_g_spline = CubicSpline(SIGMA_T_POINTS, MU_G_T, bc_type='natural')
