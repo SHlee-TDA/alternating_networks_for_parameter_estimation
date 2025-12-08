@@ -42,10 +42,10 @@ class Config:
     #    각 시나리오별로 데이터 구성과 검증 방식이 다릅니다.
     BASE_SCENARIOS = [
         # [시나리오 1] ODE Pure: ODE 데이터만 사용 (Baseline)
-        {'name_prefix': 'ode_pure', 'use_sde': False, 'scenario': 'sim_only', 'val_source': 'sim'},
+        #{'name_prefix': 'ode_pure', 'use_sde': False, 'scenario': 'sim_only', 'val_source': 'sim'},
         
         # [시나리오 2] SDE Pure: SDE 데이터만 사용 (Domain Randomization 효과 확인)
-        #{'name_prefix': 'sde_pure', 'use_sde': True, 'scenario': 'sim_only', 'val_source': 'sim'},
+        {'name_prefix': 'sde_pure', 'use_sde': True, 'scenario': 'sim_only', 'val_source': 'sim'},
         
         # [시나리오 3] ODE Hybrid: ODE 데이터 + Real 데이터 혼합 학습
         #{'name_prefix': 'ode_hybrid', 'use_sde': False, 'scenario': 'hybrid', 'real_ratio': 0.3, 'val_source': 'sim'},
@@ -94,10 +94,10 @@ class Config:
     # =========================================================================
     NUM_SAMPLES = 10000     # 생성할 증강 데이터 샘플 수
     TEST_SPLIT = 0.2
-    BATCH_SIZE = 256
-    EPOCHS = 20000
-    LEARNING_RATE = 1e-3
-    WEIGHT_DECAY = 1e-6
+    BATCH_SIZE = 512
+    EPOCHS = 10000
+    LEARNING_RATE = 1e-4
+    WEIGHT_DECAY = 1e-4
     
     USE_EARLY_STOPPING = True
     EARLY_STOPPING_PATIENCE = 200
@@ -106,7 +106,10 @@ class Config:
     # =========================================================================
     # 4. Methodology Hyperparameters
     # =========================================================================
-    CONSISTENCY_LOSS_LAMBDA = 1.0
+    LOSS_CONFIG = [
+        ('supervised', 1.0)
+    ]
+    CONSISTENCY_LOSS_LAMBDA = 0.1
     ITERATIONS = 20
     
     # 미분 방법
@@ -125,12 +128,12 @@ class Config:
     # =========================================================================
     MODEL_CONFIG = {
         'f_theta': {
-            'hidden_dims': [128, 128, 128],
-            'activation': 'Tanh'
+            'hidden_dims': [256, 256, 256],
+            'activation': 'SiLU'
         },
         'g_phi': {
-            'hidden_dims': [128, 128, 128],
-            'activation': 'Tanh'
+            'hidden_dims': [256, 256, 256],
+            'activation': 'SiLU'
         },
         'initialization': {
             'type': 'xavier',

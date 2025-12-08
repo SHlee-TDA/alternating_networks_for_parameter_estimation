@@ -9,6 +9,8 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 
+from losses import get_loss_function
+
 class Trainer:
     """
     Manages the optimization process for f_theta and g_phi.
@@ -43,7 +45,11 @@ class Trainer:
             self.optimizer, mode='min', factor=0.9, patience=20, min_lr=1e-8, verbose=True
         )
         
-        self.loss_fn = nn.MSELoss()
+        self.loss_fn = get_loss_function(
+            f_theta=self.f_theta,
+            g_phi=self.g_phi,
+            config=self.config.LOSS_CONFIG
+        )
         
         # Setup results directory
         self.results_path = os.path.join(config.RESULTS_DIR, config.SYSTEM_NAME, config.EXPERIMENT_NAME)
@@ -82,28 +88,28 @@ class Trainer:
 
 
                 self.optimizer.zero_grad()
-                # --- 1. Forward Loss (State Estimation) ---
-                # f_theta: (X, P) -> Y_hat
-                y_pred = self.f_theta(x_batch, p_batch)
-                loss_f = self.loss_fn(y_pred, y_batch)
+                # # --- 1. Forward Loss (State Estimation) ---
+                # # f_theta: (X, P) -> Y_hat
+                # y_pred = self.f_theta(x_batch, p_batch)
+                # loss_f = self.loss_fn(y_pred, y_batch)
                 
-                # --- 2. Inverse Loss (Parameter Estimation) ---
-                # g_phi: (X, Y) -> P_hat
-                p_pred = self.g_phi(x_batch, y_batch)
-                loss_g = self.loss_fn(p_pred, p_batch)
+                # # --- 2. Inverse Loss (Parameter Estimation) ---
+                # # g_phi: (X, Y) -> P_hat
+                # p_pred = self.g_phi(x_batch, y_batch)
+                # loss_g = self.loss_fn(p_pred, p_batch)
                 
                 
-                total_loss = loss_f + loss_g
+                # total_loss = loss_f + loss_g
                 
-                # --- 3. Consistency Loss (Fixed Point Regularization) ---
-                # P -> f_theta -> Y_hat -> g_phi -> P_recon
-                # Enforces bijections on the manifold defined by the ODE
-                loss_consistency = torch.tensor(0.0, device=self.config.DEVICE)
+                # # --- 3. Consistency Loss (Fixed Point Regularization) ---
+                # # P -> f_theta -> Y_hat -> g_phi -> P_recon
+                # # Enforces bijections on the manifold defined by the ODE
+                # loss_consistency = torch.tensor(0.0, device=self.config.DEVICE)
                 
-                if self.config.USE_CONSISTENCY_LOSS:
-                    p_reconstructed = self.g_phi(x_batch, y_pred)
-                    loss_consistency = self.loss_fn(p_reconstructed, p_batch)
-                    total_loss += self.config.CONSISTENCY_LOSS_LAMBDA * loss_consistency
+                # if self.config.USE_CONSISTENCY_LOSS:
+                #     p_reconstructed = self.g_phi(x_batch, y_pred)
+                #     loss_consistency = self.loss_fn(p_reconstructed, p_batch)
+                #     total_loss += self.config.CONSISTENCY_LOSS_LAMBDA * loss_consistency
                 
                 # # --- 4. Spectral Penalty (Optional) ---
                 # # Soft constraint to encourage Lipschitz constant < 1
@@ -111,6 +117,7 @@ class Trainer:
                 #     f_penalty, g_penalty = self.compute_spectral_product_penalty()
                 #     total_loss += (f_penalty + g_penalty) * 0.01 # Scaling factor for penalty
 
+                total_loss, metrics = self.loss_fn(x_batch, y_batch, p_batch)
                 total_loss.backward()
                 
                 # Gradient clipping
@@ -120,10 +127,17 @@ class Trainer:
                 self.optimizer.step()
                 
                 # logging
-                epoch_train_losses['total_loss'].append(total_loss.item())
-                epoch_train_losses['loss_f'].append(loss_f.item())
-                epoch_train_losses['loss_g'].append(loss_g.item())
-                epoch_train_losses['loss_consistency'].append(loss_consistency.item())
+                # epoch_train_losses['total_loss'].append(total_loss.item())
+                # epoch_train_losses['loss_f'].append(loss_f.item())
+                # epoch_train_losses['loss_g'].append(loss_g.item())
+                # epoch_train_losses['loss_consistency'].append(loss_consistency.item())
+                for k, v in metrics.items():
+                    # epoch_losses 딕셔너리에 키가 없으면 리스트 생성 후 추가하는 로직 필요
+                    if k not in epoch_train_losses:
+                        epoch_train_losses[k] = []
+                    epoch_train_losses[k].append(v)
+                
+                epoch_train_losses['total'].append(total_loss.item())
                 
                 pbar.set_postfix(loss=total_loss.item())
 
