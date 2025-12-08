@@ -88,7 +88,7 @@ def _generate_one_sample(args):
 
         # 3. Feature Engineering (Derivative feature)
         # If enabled, appends time derivatives (dy/dt) to the state vector.
-        if getattr(config, 'USE_LAGRANGIAN', False):
+        if getattr(config, 'USE_DERIVATIVE', False):
             t_points = sys_instance.t_points
             T = len(t_points)
             y_dot_full = np.zeros_like(y_full)
@@ -104,7 +104,7 @@ def _generate_one_sample(args):
         hid_idx = [sys_instance.hidden_var_idx]
         
         # Indices handling for features + derivatives
-        if getattr(config, 'USE_LAGRANGIAN', False):
+        if getattr(config, 'USE_DERIVATIVE', False):
             n_vars = len(y0)
             obs_deriv_idx = [idx + n_vars for idx in obs_idx]
             obs_idx += obs_deriv_idx
@@ -333,7 +333,7 @@ class RealOGTTDataLoader:
         params_data = df_clean[param_cols].values
         
         # Feature Engineering
-        if getattr(self.config, 'USE_LAGRANGIAN', False):
+        if getattr(self.config, 'USE_DERIVATIVE', False):
             # Add derivatives to Glucose (Observed)
             observed_data = self._add_derivative_feature(self.t_points, glucose_raw, self.s_glucose)
             # Insulin (Hidden) is kept as is (N, T, 1) for compatibility

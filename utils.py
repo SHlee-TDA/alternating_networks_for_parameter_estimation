@@ -302,7 +302,7 @@ class ExperimentLogger:
             'system': self.config.SYSTEM_NAME,
             'experiment': self.config.EXPERIMENT_NAME,
             'use_sde': getattr(self.config, 'USE_SDE', False),
-            'use_lagrangian': getattr(self.config, 'USE_LAGRANGIAN', False)
+            'use_derivative': getattr(self.config, 'USE_DERIVATIVE', False)
         }
         log_data.update(metrics_dict)
         

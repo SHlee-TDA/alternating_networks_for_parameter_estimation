@@ -13,7 +13,7 @@ class BaseLoss(nn.Module):
     All custom loss functions should inherit from this class and implement the forward method.
     """
     def __init__(self, f_theta, g_phi, config):
-        super(BaseLoss, self).__init__(f_theta, g_phi, config)
+        super(BaseLoss, self).__init__()
         self.f_theta = f_theta
         self.g_phi = g_phi
         self.config = config
@@ -50,8 +50,8 @@ class SupervisedLoss(BaseLoss):
         total_loss = loss_f + loss_g
         
         metrics = {
-            'loss_f_theta': loss_f.item(),
-            'loss_g_phi': loss_g.item()
+            'loss_f': loss_f.item(),
+            'loss_g': loss_g.item()
         }
         
         return total_loss, metrics
@@ -71,11 +71,11 @@ class CompositeLoss(BaseLoss):
         for component, weight in zip(self.components, self.weights):
             loss, metrics = component(x_true, y_true, p_true)
             
-            # 가중치 적용
             total_loss += loss * weight
             
-            # 메트릭 병합
             merged_metrics.update(metrics)
+        
+        merged_metrics['total_loss'] = total_loss.item()
             
         return total_loss, merged_metrics
     
@@ -95,14 +95,12 @@ def get_loss_function(f_theta, g_phi, config):
         if isinstance(item, tuple) or isinstance(item, list):
             name, weight = item
         else:
-            name, weight = item, 1.0 # 가중치 생략 시 기본값 1.0
+            name, weight = item, 1.0 
             
         if name not in component_map:
             raise ValueError(f"Unknown loss type: {name}")
             
-        # 컴포넌트 생성
         comp_instance = component_map[name](f_theta, g_phi, config)
         active_components_with_weights.append((comp_instance, weight))
         
-    # CompositeLoss에 (모듈, 가중치) 리스트 전달
     return CompositeLoss(f_theta, g_phi, config, active_components_with_weights)

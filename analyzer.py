@@ -32,35 +32,57 @@ class Analyzer:
 
     def plot_loss_curves(self):
         """
-        Visualizes the convergence of training and validation losses.
+        Visualizes training metrics.
+        Generates a SEPARATE plot file for each loss component found in history.
+        (e.g., 'total_loss.png', 'loss_f.png', 'loss_recur.png')
         """
-        if self.history is None: 
+        if self.history is None:
             return
-        fig, axs = plt.subplots(ncols=2, figsize=(12, 6))
-        
-        c_train = 'cornflowerblue'
-        c_val = 'sandybrown'
 
-        # Plot f_theta
-        axs[0].plot(self.history['train_loss_f'], label='Train', color=c_train, linewidth=2, alpha=0.8)
-        axs[0].plot(self.history['val_loss_f'], label='Val', color=c_val, linestyle='--', linewidth=2, alpha=0.8)
-        axs[0].set_title("Loss: f_theta (Hidden Predictor)")
-        axs[0].set_yscale('log') 
-        axs[0].legend(); axs[0].grid(True, which="both", ls="-", alpha=0.3)
+        # 1. 기록된 메트릭 이름 추출 (예: 'total_loss', 'loss_f', 'loss_recur')
+        # Trainer가 'train_' 접두사를 붙여 저장하므로, 이를 제거하여 기본 이름을 찾습니다.
+        metric_names = set()
+        for key in self.history.keys():
+            if key.startswith('train_'):
+                metric_names.add(key.replace('train_', ''))
 
-        # Plot g_phi
-        axs[1].plot(self.history['train_loss_g'], label='Train', color=c_train, linewidth=2, alpha=0.8)
-        axs[1].plot(self.history['val_loss_g'], label='Val', color=c_val, linestyle='--', linewidth=2, alpha=0.8)
-        axs[1].set_title("Loss: g_phi (Parameter Estimator)")
-        axs[1].set_yscale('log')
-        axs[1].legend(); axs[1].grid(True, which="both", ls="-", alpha=0.3)
+        print(f"  -> Plotting curves for: {metric_names}")
 
-        plt.tight_layout()
-        plt.savefig(os.path.join(self.results_path, 'loss_curves.png'), dpi=150)
-        plt.close(fig)
+        # 2. 각 메트릭별로 그래프 그리기 및 개별 저장
+        for metric in metric_names:
+            train_key = f'train_{metric}'
+            val_key = f'val_{metric}'
+            
+            # 데이터가 없으면 건너뜀
+            if train_key not in self.history:
+                continue
 
+            plt.figure(figsize=(8, 6))
+            
+            # Train Curve
+            plt.plot(self.history[train_key], label='Train', color='cornflowerblue', linewidth=2)
+            
+            # Val Curve (존재할 경우에만)
+            if val_key in self.history:
+                plt.plot(self.history[val_key], label='Val', color='sandybrown', linestyle='--', linewidth=2)
+
+            plt.title(f"Convergence: {metric}")
+            plt.xlabel("Epoch")
+            plt.ylabel("Loss (Log Scale)")
+            plt.yscale('log') # 수렴 확인을 위해 로그 스케일 권장
+            plt.legend()
+            plt.grid(True, which="both", ls="-", alpha=0.2)
+            
+            # 파일명: metric 이름 그대로 사용 (예: loss_recur.png)
+            save_name = f"{metric}.png"
+            plt.savefig(os.path.join(self.results_path, save_name), dpi=150)
+            plt.close() # 메모리 해제
+
+        # 3. JSON 로그 저장 (기존 유지)
         with open(os.path.join(self.results_path, 'loss_history.json'), 'w') as f:
-            json.dump(self.history, f, indent=4)
+            # numpy float 등을 json serializable하게 변환
+            serializable_history = {k: [float(v) for v in vals] for k, vals in self.history.items()}
+            json.dump(serializable_history, f, indent=4)
 
     def plot_scatter(self, p_true, p_pred, prefix="sim"):
         """

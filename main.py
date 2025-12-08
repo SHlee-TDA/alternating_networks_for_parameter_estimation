@@ -131,14 +131,14 @@ def prepare_dataloaders(exp_config, sim_data_tuple, system, global_config):
     real_test = Subset(dataset_real, split_data['test_indices']) # For final evaluation
 
     # 5. Construct Train Loader (Scenario-based)
-    scenario = exp_config.get('scenario', 'sim_only')
+    scenario = exp_config.get('SCENARIO', 'sim_only')
     
     if scenario == 'hybrid':
         print(f"  -> [Hybrid] Mixing Sim ({len(sim_train)}) + Real ({len(real_train)})")
         final_train_set = ConcatDataset([sim_train, real_train])
         
         # Weighted Sampling to balance Sim/Real ratio
-        real_ratio = exp_config.get('real_ratio', 0.3)
+        real_ratio = exp_config.get('REAL_RATIO', 0.3)
         w_sim = (1 - real_ratio) / len(sim_train)
         w_real = real_ratio / len(real_train)
         weights = [w_sim] * len(sim_train) + [w_real] * len(real_train)
@@ -173,7 +173,7 @@ def run_experiment_pipeline(global_config):
     required_configs = set()
     
     for exp in global_config.EXPERIMENTS:
-        sde_mode = exp.get('use_sde', False)
+        sde_mode = exp.get('USE_SDE', False)
         # If 'mixed', we need both ODE and SDE datasets
         if sde_mode == 'mixed':
             required_configs.add(False) # ODE
@@ -191,17 +191,24 @@ def run_experiment_pipeline(global_config):
     # --- Phase 2: Experiment Loop ---
     total_exps = len(global_config.EXPERIMENTS)
     for idx, exp_config in enumerate(global_config.EXPERIMENTS):
-        exp_name = exp_config['name']
+        exp_name = exp_config['NAME']
         print(f"\n{'='*60}")
         print(f"Experiment {idx+1}/{total_exps}: {exp_name}")
         
         # 1. Configure Current Run
         run_config = copy.deepcopy(global_config)
         run_config.EXPERIMENT_NAME = exp_name
-        run_config.USE_SPECTRAL_NORM = exp_config['use_spectral_norm']
-        run_config.USE_CONSISTENCY_LOSS = exp_config['use_consistency_loss']
-        run_config.USE_SDE = exp_config.get('use_sde', False)
+        # run_config.USE_SPECTRAL_NORM = exp_config['use_spectral_norm']
+        # run_config.USE_CONSISTENCY_LOSS = exp_config['use_consistency_loss']
+        # run_config.USE_SDE = exp_config.get('use_sde', False)
         
+        for key, value in exp_config.items():
+            if hasattr(run_config, key):
+                setattr(run_config, key, value)
+            else:
+                setattr(run_config, key, value)
+        
+    
         # Logger Setup
         logger = ExperimentLogger(run_config)
         print(f"  -> Log Dir: {logger.results_dir}")
@@ -209,11 +216,11 @@ def run_experiment_pipeline(global_config):
         # Inject Logger Path into Config for Trainer
         trainer_config = copy.deepcopy(run_config)
         trainer_config.RESULTS_DIR = logger.results_dir
-        trainer_config.SYSTEM_NAME = ""     # Already in path
-        trainer_config.EXPERIMENT_NAME = "" # Already in path
+        # trainer_config.SYSTEM_NAME = ""     # Already in path
+        # trainer_config.EXPERIMENT_NAME = "" # Already in path
         
         # 2. Data Preparation
-        req_sde = exp_config.get('use_sde', False)
+        req_sde = exp_config.get('USE_SDE', False)
         
         if req_sde == 'mixed':
             # Merge ODE and SDE data
@@ -252,10 +259,6 @@ def run_experiment_pipeline(global_config):
         trainer = Trainer(f_theta, g_phi, train_l, val_l, trainer_config)
         f_theta, g_phi, history = trainer.train()
         
-        # Save Loss History explicitly
-        with open(os.path.join(logger.results_dir, 'loss_history.json'), 'w') as f:
-            json.dump({k: [float(v) for v in vals] for k, vals in history.items()}, f, indent=4)
-
         # --- Phase 3: Analysis & Evaluation ---
         print("  -> Starting Analysis...")
         analyzer = Analyzer(
@@ -268,9 +271,7 @@ def run_experiment_pipeline(global_config):
         p_true, p_pred = analyzer.evaluate_predictions()
         analyzer.plot_scatter(p_true, p_pred)
         analyzer.plot_phase_portraits()
-
-        if run_config.USE_SPECTRAL_NORM:
-            analyzer.plot_spectral_norms_by_layer()
+        analyzer.plot_spectral_norms_by_layer()
 
         # B. Real Data Validation
         print("  -> Evaluating on Real Clinical Data...")

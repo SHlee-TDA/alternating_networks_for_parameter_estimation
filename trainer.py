@@ -48,8 +48,8 @@ class Trainer:
         self.loss_fn = get_loss_function(
             f_theta=self.f_theta,
             g_phi=self.g_phi,
-            config=self.config.LOSS_CONFIG
-        )
+            config=self.config
+        ).to(config.DEVICE)
         
         # Setup results directory
         self.results_path = os.path.join(config.RESULTS_DIR, config.SYSTEM_NAME, config.EXPERIMENT_NAME)
@@ -132,12 +132,9 @@ class Trainer:
                 # epoch_train_losses['loss_g'].append(loss_g.item())
                 # epoch_train_losses['loss_consistency'].append(loss_consistency.item())
                 for k, v in metrics.items():
-                    # epoch_losses 딕셔너리에 키가 없으면 리스트 생성 후 추가하는 로직 필요
-                    if k not in epoch_train_losses:
-                        epoch_train_losses[k] = []
                     epoch_train_losses[k].append(v)
                 
-                epoch_train_losses['total'].append(total_loss.item())
+                epoch_train_losses['total_loss'].append(total_loss.item())
                 
                 pbar.set_postfix(loss=total_loss.item())
 
@@ -186,28 +183,33 @@ class Trainer:
             p_batch = p_batch.to(self.config.DEVICE)
             
             # Forward
-            y_pred = self.f_theta(x_batch, p_batch)
-            loss_f = self.loss_fn(y_pred, y_batch)
+            # y_pred = self.f_theta(x_batch, p_batch)
+            # loss_f = self.loss_fn(y_pred, y_batch)
             
-            # Inverse
-            p_pred = self.g_phi(x_batch, y_batch)
-            loss_g = self.loss_fn(p_pred, p_batch)
+            # # Inverse
+            # p_pred = self.g_phi(x_batch, y_batch)
+            # loss_g = self.loss_fn(p_pred, p_batch)
             
-            # Consistency
-            loss_const = torch.tensor(0.0, device=self.config.DEVICE)
-            if getattr(self.config, 'USE_CONSISTENCY_LOSS', False):
-                p_recon = self.g_phi(x_batch, y_pred)
-                loss_const = self.loss_fn(p_recon, p_batch)
+            # # Consistency
+            # loss_const = torch.tensor(0.0, device=self.config.DEVICE)
+            # if getattr(self.config, 'USE_CONSISTENCY_LOSS', False):
+            #     p_recon = self.g_phi(x_batch, y_pred)
+            #     loss_const = self.loss_fn(p_recon, p_batch)
             
-            total_loss = loss_f + loss_g
-            if self.config.USE_CONSISTENCY_LOSS:
-                total_loss += self.config.CONSISTENCY_LOSS_LAMBDA * loss_const
+            # total_loss = loss_f + loss_g
+            # if self.config.USE_CONSISTENCY_LOSS:
+            #     total_loss += self.config.CONSISTENCY_LOSS_LAMBDA * loss_const
             
-            # Logging
+            # # Logging
+            # losses['total_loss'].append(total_loss.item())
+            # losses['loss_f'].append(loss_f.item())
+            # losses['loss_g'].append(loss_g.item())
+            # losses['loss_consistency'].append(loss_const.item())
+            total_loss, metrics = self.loss_fn(x_batch, y_batch, p_batch)
+            for k, v in metrics.items():
+                losses[k].append(v)
+            
             losses['total_loss'].append(total_loss.item())
-            losses['loss_f'].append(loss_f.item())
-            losses['loss_g'].append(loss_g.item())
-            losses['loss_consistency'].append(loss_const.item())
 
         return {k: np.mean(v) for k, v in losses.items()}
     
