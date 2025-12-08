@@ -56,6 +56,46 @@ class SupervisedLoss(BaseLoss):
         
         return total_loss, metrics
     
+class RecurrentLoss(BaseLoss):
+    """
+    Recurrent loss function that computes multi-step prediction loss for parameters.
+    """
+    def __init__(self, f_theta, g_phi, config, iter=10, gamma=0.9):
+        super(RecurrentLoss, self).__init__(f_theta, g_phi, config)
+        self.iter = iter # Number of recurrent steps
+        self.gamma = gamma # Discount factor
+        
+    def forward(self, x_true, y_true, p_true):
+        total_loss = torch.tensor(0.0, device=x_true.device)
+        metrics = {}
+        
+        p_curr = p_true
+        
+        first_step_loss = None
+        final_step_loss = None
+        
+        # Unrolled Optimization Loop (BPTT)
+        for k in range(1, self.iter + 1):
+            y_pred = self.f_theta(x_true, p_curr)
+            p_next = self.g_phi(x_true, y_pred)
+            step_loss = self.mse_loss(p_next, p_true)
+            
+            weight = self.gamma ** (k - 1)
+            total_loss += step_loss * weight
+            
+            if k == 1:
+                first_step_loss = step_loss.item()
+            if k == self.iter:
+                final_step_loss = step_loss.item()
+            
+            p_curr = p_next
+        
+        metrics['loss_recur'] = total_loss.item()
+        metrics['loss_recur_first'] = first_step_loss
+        metrics['loss_recur_final'] = final_step_loss 
+        
+        return total_loss, metrics
+    
 class CompositeLoss(BaseLoss):
     def __init__(self, f_theta, g_phi, config, components_with_weights):
         super(CompositeLoss, self).__init__(f_theta, g_phi, config)
@@ -85,8 +125,7 @@ def get_loss_function(f_theta, g_phi, config):
     
     component_map = {
         'supervised': SupervisedLoss,
-        #'consistency': ConsistencyComponent,
-        #'recurrent': RecurrentComponent
+        'recurrent': RecurrentLoss
     }
     
     active_components_with_weights = []

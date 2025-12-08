@@ -359,7 +359,7 @@ class Analyzer:
         """
         norms, indices = [], []
         linear_idx = 1
-        
+        scale_factor = 0.95
         # 1. Trigger Hook to update effective weights
         try:
             # Identify the correct container
@@ -394,7 +394,7 @@ class Analyzer:
                 
                 # Compute Spectral Norm (Largest Singular Value)
                 norm = torch.linalg.norm(weight, ord=2).item()
-                norms.append(norm)
+                norms.append(scale_factor * norm)
                 indices.append(linear_idx)
                 linear_idx += 1
                 

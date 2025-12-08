@@ -58,7 +58,8 @@ class Config:
     DERIVATIVE_METHOD: str = 'spline'  # 'finite_difference', 'spline', 'lagrangian', 'polynomial'
     
     LOSS_CONFIG: List[Tuple[str, float]] = field(default_factory=lambda: [
-        ('supervised', 1.0)
+        ('supervised', 1.0),
+        ('recurrent', 1.0)
     ])
     
     ITERATIONS: int = 20               # Number of iterations for parameter estimation during inference
