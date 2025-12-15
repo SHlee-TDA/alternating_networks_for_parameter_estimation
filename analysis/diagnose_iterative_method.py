@@ -160,7 +160,7 @@ def analyze_iterative_process(f_theta, g_phi, val_data, normalizer, config, save
     p_curr_norm = normalizer.normalize_params(p_curr_phys)
     
     # 기록 저장소
-    history_phys = [p_curr_phys.cpu().numpy()] # Step 0
+    history_phys = [] 
     
     print(f"[Info] Running Iterative Inference for {iterations} steps...")
     
@@ -197,7 +197,7 @@ def plot_distribution_evolution(history, p_true, save_dir):
     param_names = ['Si (Sensitivity)', 'Sigma (Secretion)']
     
     # 보고 싶은 스텝 선정 (너무 많으면 복잡하므로)
-    steps_to_show = [0, 1, 3, 5, num_steps-1]
+    steps_to_show = [1, 3, 5, 7, num_steps-1]
     colors = plt.cm.viridis(np.linspace(0, 1, len(steps_to_show)))
     
     fig, axes = plt.subplots(1, num_params, figsize=(16, 6))
