@@ -144,6 +144,7 @@ class ParameterEstimator(nn.Module):
             final_linear = spectral_norm(final_linear, n_power_iterations=5)
         layers.append(final_linear)
         
+        # FIX: 2025-12-15 
         if use_spectral_norm:
              layers.append(ExcludeLambda(spectral_scale))
         
