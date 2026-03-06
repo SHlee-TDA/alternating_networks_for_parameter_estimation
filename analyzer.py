@@ -359,7 +359,7 @@ class Analyzer:
         """
         norms, indices = [], []
         linear_idx = 1
-        scale_factor = 0.95
+        scale_factor = 0.99
         # 1. Trigger Hook to update effective weights
         try:
             # Identify the correct container

@@ -60,7 +60,7 @@ class RecurrentLoss(BaseLoss):
     """
     Recurrent loss function that computes multi-step prediction loss for parameters.
     """
-    def __init__(self, f_theta, g_phi, config, iter=10, gamma=0.9):
+    def __init__(self, f_theta, g_phi, config, iter=2, gamma=1.0):
         super(RecurrentLoss, self).__init__(f_theta, g_phi, config)
         self.iter = iter # Number of recurrent steps
         self.gamma = gamma # Discount factor

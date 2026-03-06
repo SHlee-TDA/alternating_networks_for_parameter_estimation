@@ -5,13 +5,13 @@ import torch.nn as nn
 from torch.nn.utils import spectral_norm
 
 def get_activation(name):
-    if name == 'Tanh':
+    if name == 'Tanh' or name == 'tanh':
         return nn.Tanh()
-    elif name == 'ReLU':
+    elif name == 'ReLU' or name == 'relu':
         return nn.ReLU()
-    elif name == 'SiLU':
+    elif name == 'SiLU' or  name == 'silu':
         return nn.SiLU()
-    elif name == 'Sigmoid':
+    elif name == 'Sigmoid' or name == 'sigmoid':
         return nn.Sigmoid()
     else:
         raise ValueError(f"Unknown activation function: {name}")
@@ -25,16 +25,38 @@ def init_weights(m, activation='Tanh'):
         - ReLU/SiLU: Kaiming Normal
         - Bias: 0
     """
-    if isinstance(m, nn.Linear):
-        if activation in ['Tanh', 'Sigmoid']:
-            torch.nn.init.xavier_uniform_(m.weight)
-            if m.bias is not None:
-                torch.nn.init.constant_(m.bias, 0)
+    # if isinstance(m, nn.Linear):
+    #     if activation in ['Tanh', 'Sigmoid']:
+    #         torch.nn.init.xavier_uniform_(m.weight)
+    #         if m.bias is not None:
+    #             torch.nn.init.constant_(m.bias, 0)
                 
-        elif activation in ['ReLU', 'SiLU', 'Softplus']:
-            torch.nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='relu')
-            if m.bias is not None:
-                torch.nn.init.constant_(m.bias, 0)
+    #     elif activation in ['ReLU', 'SiLU', 'Softplus']:
+    #         torch.nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='relu')
+    #         if m.bias is not None:
+    #             torch.nn.init.constant_(m.bias, 0)
+    
+    """
+    Orthogonal Initialization for Spectral Normalized Networks.
+    Achieves 'Edge of Chaos' initialization state.
+    """
+    if isinstance(m, nn.Linear):
+        # 1. Gain 설정 (활성화 함수에 맞게 신호 보존)
+        if activation in ['ReLU', 'SiLU', 'ELU']:
+            # 이론적으로 sqrt(2)지만, SN 환경에선 조금 더 공격적으로 잡음
+            gain = torch.nn.init.calculate_gain('relu') # sqrt(2) approx 1.414
+        elif activation == 'Tanh':
+            gain = torch.nn.init.calculate_gain('tanh') # 5/3 approx 1.67
+        else:
+            gain = 1.0
+
+        # 2. Orthogonal Initialization (핵심!)
+        # SN이 있어도 특이값이 균일하므로 분산이 보존됨.
+        torch.nn.init.orthogonal_(m.weight, gain=gain)
+        
+        # 3. Bias는 0으로 초기화
+        if m.bias is not None:
+            torch.nn.init.constant_(m.bias, 0)
                 
 class ExcludeLambda(nn.Module):
     """
@@ -76,7 +98,7 @@ class HiddenVarPredictor(nn.Module):
         
         layers = []
         input_dim = flat_x_dim + num_params
-        spectral_scale = 0.95
+        spectral_scale = 0.99
         
         for hidden_dim in hidden_dims:
             linear = nn.Linear(input_dim, hidden_dim)
@@ -124,7 +146,7 @@ class ParameterEstimator(nn.Module):
 
         input_dim = flat_x_dim + flat_y_dim
         layers = []
-        spectral_scale = 0.95
+        spectral_scale = 0.99
 
         for hidden_dim in hidden_dims:
             linear = nn.Linear(input_dim, hidden_dim)
@@ -145,8 +167,8 @@ class ParameterEstimator(nn.Module):
         layers.append(final_linear)
         
         # FIX: 2025-12-15 
-        if use_spectral_norm:
-             layers.append(ExcludeLambda(spectral_scale))
+        # if use_spectral_norm:
+        #      layers.append(ExcludeLambda(spectral_scale))
         
         # Enforce range [-1, 1]
         layers.append(nn.Tanh())

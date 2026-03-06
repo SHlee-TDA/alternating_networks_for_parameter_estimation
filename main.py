@@ -106,29 +106,33 @@ def prepare_dataloaders(exp_config, sim_data_tuple, system, global_config):
     )
 
     # 4. Prepare Real Data (for Hybrid Training)
-    real_loader = RealOGTTDataLoader(
-        file_path='data/clean_sumner_n_612.xlsx', 
-        config=global_config,
-        split_file='data/data_split_indices.json'
-    )
-    obs_real, hid_real, params_real, _ = real_loader.load_data()
-    
-    # Normalize Real Data using Sim-derived Normalizer
-    X_real = torch.FloatTensor(obs_real).view(len(obs_real), -1).to(global_config.DEVICE)
-    Y_real = torch.FloatTensor(hid_real).view(len(hid_real), -1).to(global_config.DEVICE)
-    P_real = torch.FloatTensor(params_real).to(global_config.DEVICE)
-    
-    dataset_real = TensorDataset(
-        normalizer.normalize_inputs(X_real, 'observed'),
-        normalizer.normalize_inputs(Y_real, 'hidden'),
-        normalizer.normalize_params(P_real)
-    )
-    
-    # Load Split Indices for Real Data
-    with open('data/data_split_indices.json', 'r') as f:
-        split_data = json.load(f)
-    real_train = Subset(dataset_real, split_data['train_indices'])
-    real_test = Subset(dataset_real, split_data['test_indices']) # For final evaluation
+    if exp_config.get('SYSTEM_NAME') == 'ogtt_simul':
+        real_loader = RealOGTTDataLoader(
+            file_path='data/clean_sumner_n_612.xlsx', 
+            config=global_config,
+            split_file='data/data_split_indices.json'
+        )
+        obs_real, hid_real, params_real, _ = real_loader.load_data()
+        
+        # Normalize Real Data using Sim-derived Normalizer
+        X_real = torch.FloatTensor(obs_real).view(len(obs_real), -1).to(global_config.DEVICE)
+        Y_real = torch.FloatTensor(hid_real).view(len(hid_real), -1).to(global_config.DEVICE)
+        P_real = torch.FloatTensor(params_real).to(global_config.DEVICE)
+        
+        dataset_real = TensorDataset(
+            normalizer.normalize_inputs(X_real, 'observed'),
+            normalizer.normalize_inputs(Y_real, 'hidden'),
+            normalizer.normalize_params(P_real)
+        )
+        
+        # Load Split Indices for Real Data
+        with open('data/data_split_indices.json', 'r') as f:
+            split_data = json.load(f)
+        real_train = Subset(dataset_real, split_data['train_indices'])
+        real_test = Subset(dataset_real, split_data['test_indices']) # For final evaluation
+    else:
+        real_train = None
+        real_test = None
 
     # 5. Construct Train Loader (Scenario-based)
     scenario = exp_config.get('SCENARIO', 'sim_only')

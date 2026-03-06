@@ -40,8 +40,8 @@ def _generate_one_sample(args):
         i0 = sample_from_lognorm(dist_params['I0'])
         
         # Resolve steady-state for hidden delay variables
-        from systems.ogtt_simul import OGTTModel, ode_params, sys_params
-        temp_model = OGTTModel(ode_params, sys_params, {'si': si, 'sigma': sigma_p})
+        from systems.ogtt_simul import OGTTModel, ODE_PARAMS, SYS_PARAMS
+        temp_model = OGTTModel(ODE_PARAMS, SYS_PARAMS, {'si': si, 'sigma': sigma_p})
         n5, n6 = temp_model.find_steady_state_N(g0)
         y0 = [g0, i0, n5, n6]
     else:
@@ -160,14 +160,17 @@ class DataGenerator:
         self.config = config
         self.dist_params = None
 
-        # Load empirical distribution parameters if available
-        dist_file = Path('data/parameters/distribution_params.json')
-        if dist_file.exists():
-            with open(dist_file, 'r') as f:
-                self.dist_params = json.load(f)
-            print("Loaded data-driven distribution parameters for sampling.")
+        # Load empirical distribution parameters for OGTT problem if available
+        if self.config.SYSTEM_NAME == 'ogtt':
+            dist_file = Path('data/parameters/distribution_params.json')
+            if dist_file.exists():
+                with open(dist_file, 'r') as f:
+                    self.dist_params = json.load(f)
+                print("Loaded data-driven distribution parameters for sampling.")
+            else:
+                print("Data-driven distribution parameters file not found. Using uniform sampling.")
         else:
-            print("Data-driven distribution parameters file not found. Using uniform sampling.")
+            print("OGTT system not detected. Using uniform sampling for parameters and initial conditions.")
 
     def generate_data(self):
         # Setup paths
@@ -283,7 +286,7 @@ class RealOGTTDataLoader:
             self.s_glucose = None
             self.s_insulin = None
             
-        method = getattr(config, 'DERIVATIVE_METHOD', 'spline')
+        method = getattr(config, 'DERIVATIVE_METHOD', None)
         
         kwargs = {}
         if method == 'spline':

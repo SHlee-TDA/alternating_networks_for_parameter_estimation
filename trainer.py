@@ -42,7 +42,7 @@ class Trainer:
         )
         
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode='min', factor=0.9, patience=20, min_lr=1e-8, verbose=True
+            self.optimizer, mode='min', factor=0.99999999999, patience=20, min_lr=1e-8, verbose=True
         )
         
         self.loss_fn = get_loss_function(
@@ -121,8 +121,8 @@ class Trainer:
                 total_loss.backward()
                 
                 # Gradient clipping
-                torch.nn.utils.clip_grad_norm_(self.f_theta.parameters(), max_norm=1.0)
-                torch.nn.utils.clip_grad_norm_(self.g_phi.parameters(), max_norm=1.0)
+                #torch.nn.utils.clip_grad_norm_(self.f_theta.parameters(), max_norm=1.0)
+                #torch.nn.utils.clip_grad_norm_(self.g_phi.parameters(), max_norm=1.0)
                 
                 self.optimizer.step()
                 

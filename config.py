@@ -26,7 +26,7 @@ class Config:
     # --------------------------------------------------------------------------
     # 1. System & Environment
     # --------------------------------------------------------------------------
-    SYSTEM_NAME: str = 'ogtt_simul' # 'lotka_volterra', 'sir', 'nc_sir', 'ogtt_simul'
+    SYSTEM_NAME: str = 'sir' # 'lotka_volterra', 'sir', 'nc_sir', 'ogtt_simul'
     SEED: int = 42
     DEVICE: str = "cuda" if torch.cuda.is_available() else "cpu"
     RESULTS_DIR: str = 'results'
@@ -34,8 +34,8 @@ class Config:
     # --------------------------------------------------------------------------
     # 2. Data Generation and Data Loading
     # -------------------------------------------------------------------------- 
-    NUM_SAMPLES: int = 10000
-    AUGMENTATION_FACTOR: int = 30   # Resampling number for SDE simulation
+    NUM_SAMPLES: int = 624
+    AUGMENTATION_FACTOR: int = 0   # Resampling number for SDE simulation
     SDE_SCALE_FACTORS: Dict[str, float] = field(default_factory=lambda: {
         'bias_scale': 1.0,
         'diffusion_scale': 1.27
@@ -47,10 +47,10 @@ class Config:
     # --------------------------------------------------------------------------
     # 3. Trainig Hyperparameters
     # --------------------------------------------------------------------------
-    EPOCHS: int = 10000
-    LEARNING_RATE: float = 1e-4
-    WEIGHT_DECAY: float = 1e-4
-    USE_EARLY_STOPPING: bool = True
+    EPOCHS: int = 50000
+    LEARNING_RATE: float = 1e-3
+    WEIGHT_DECAY: float = 0.0
+    USE_EARLY_STOPPING: bool = False
     EARLY_STOPPING_PATIENCE: int = 200
     EARLY_STOPPING_MIN_DELTA: float = 1e-6
     
@@ -59,22 +59,22 @@ class Config:
     
     LOSS_CONFIG: List[Tuple[str, float]] = field(default_factory=lambda: [
         ('supervised', 1.0),
-        ('recurrent', 1.0)
+        #('recurrent', 1.0)
     ])
     
-    ITERATIONS: int = 20               # Number of iterations for parameter estimation during inference
+    ITERATIONS: int = 10               # Number of iterations for parameter estimation during inference
     
     # --------------------------------------------------------------------------
     # 4. Model Architecture
     # --------------------------------------------------------------------------
     MODEL_CONFIG: Dict[str, Any] = field(default_factory=lambda: {
         'f_theta': {
-            'hidden_dims': [256, 256, 256],
-            'activation': 'SiLU'
+            'hidden_dims': [64, 64, 64, 64],
+            'activation': 'ReLU'
         },
         'g_phi': {
-            'hidden_dims': [256, 256, 256],
-            'activation': 'SiLU'
+            'hidden_dims': [64, 64, 64, 64],
+            'activation': 'ReLU'
         }
     })
     
@@ -94,12 +94,12 @@ class Config:
             },
             
             # Scenario 2: Training only on SDE data
-            {
-                'NAME': 'sde_only',
-                'USE_SDE': True,
-                'SCENARIO': 'sim_only',
-                'VAL_SOURCE': 'sim'
-            }
+            # {
+            #     'NAME': 'sde_only',
+            #     'USE_SDE': True,
+            #     'SCENARIO': 'sim_only',
+            #     'VAL_SOURCE': 'sim'
+            # }
         ])
     EXPERIMENTS: List[Dict[str, Any]] = field(init=False)
     
