@@ -7,8 +7,8 @@ class LotkaVolterra(System):
     name = 'lotka_volterra'
     param_names = ['alpha', 'beta', 'delta', 'gamma']
     param_ranges = {
-        'alpha': [0.8, 1.2], 'beta': [0.4, 0.8],
-        'delta': [0.2, 0.6], 'gamma': [0.8, 1.2]
+        'alpha': [0.6, 1.0], 'beta': [0.4, 0.8],
+        'delta': [0.2, 0.6], 'gamma': [0.6, 1.0]
     }
     initial_conditions = ([5, 15], [1, 5])
     t_span = [0, 20]

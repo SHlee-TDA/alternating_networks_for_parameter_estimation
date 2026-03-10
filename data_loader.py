@@ -161,7 +161,7 @@ class DataGenerator:
         self.dist_params = None
 
         # Load empirical distribution parameters for OGTT problem if available
-        if self.config.SYSTEM_NAME == 'ogtt':
+        if self.config.SYSTEM_NAME == 'ogtt_simul':
             dist_file = Path('data/parameters/distribution_params.json')
             if dist_file.exists():
                 with open(dist_file, 'r') as f:
@@ -199,8 +199,8 @@ class DataGenerator:
         
         # Configure SDE Scaling 
         scale_factor = getattr(self.config, 'SDE_SCALE_FACTORS', {'bias_scale': 1.0, 'diffusion_scale': 1.0})
-        bias_scale = getattr(scale_factor, 'bias_scale', 1.0)
-        diffusion_scale = getattr(scale_factor, 'diffusion_scale', 1.0)
+        bias_scale = scale_factor.get('bias_scale', 1.0)
+        diffusion_scale = scale_factor.get('diffusion_scale', 1.0)
         
         self.system.bias_scale = bias_scale
         self.system.diffusion_scale = diffusion_scale        

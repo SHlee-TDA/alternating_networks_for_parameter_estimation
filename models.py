@@ -50,12 +50,11 @@ def init_weights(m, activation='Tanh'):
         else:
             gain = 1.0
 
-        # 2. Orthogonal Initialization (핵심!)
-        # SN이 있어도 특이값이 균일하므로 분산이 보존됨.
-        torch.nn.init.orthogonal_(m.weight, gain=gain)
+        # 2. Orthogonal Initialization
+        target_weight = getattr(m, 'weight_orig', m.weight)
+        torch.nn.init.orthogonal_(target_weight, gain=gain)
         
-        # 3. Bias는 0으로 초기화
-        if m.bias is not None:
+        if getattr(m, 'bias', None) is not None:
             torch.nn.init.constant_(m.bias, 0)
                 
 class ExcludeLambda(nn.Module):
@@ -103,7 +102,7 @@ class HiddenVarPredictor(nn.Module):
         for hidden_dim in hidden_dims:
             linear = nn.Linear(input_dim, hidden_dim)
             if use_spectral_norm:
-                linear = spectral_norm(linear, n_power_iterations=5)
+                linear = spectral_norm(linear, n_power_iterations=1)
             layers.append(linear)
             
             if use_spectral_norm:
@@ -115,7 +114,7 @@ class HiddenVarPredictor(nn.Module):
         # Output Layer
         last_linear = nn.Linear(input_dim, flat_y_dim)
         if use_spectral_norm:
-            last_linear = spectral_norm(last_linear, n_power_iterations=5)
+            last_linear = spectral_norm(last_linear, n_power_iterations=1)
         layers.append(last_linear)
                 
         self.network = nn.Sequential(*layers)
@@ -151,7 +150,7 @@ class ParameterEstimator(nn.Module):
         for hidden_dim in hidden_dims:
             linear = nn.Linear(input_dim, hidden_dim)
             if use_spectral_norm:
-                linear = spectral_norm(linear, n_power_iterations=5)
+                linear = spectral_norm(linear, n_power_iterations=1)
             layers.append(linear)
             
             if use_spectral_norm:
@@ -163,7 +162,7 @@ class ParameterEstimator(nn.Module):
         # Output Layer
         final_linear = nn.Linear(input_dim, num_params)
         if use_spectral_norm:
-            final_linear = spectral_norm(final_linear, n_power_iterations=5)
+            final_linear = spectral_norm(final_linear, n_power_iterations=1)
         layers.append(final_linear)
         
         # FIX: 2025-12-15 

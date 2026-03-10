@@ -26,7 +26,7 @@ class Config:
     # --------------------------------------------------------------------------
     # 1. System & Environment
     # --------------------------------------------------------------------------
-    SYSTEM_NAME: str = 'sir' # 'lotka_volterra', 'sir', 'nc_sir', 'ogtt_simul'
+    SYSTEM_NAME: str = 'lotka_volterra' # 'lotka_volterra', 'sir', 'nc_sir', 'ogtt_simul'
     SEED: int = 42
     DEVICE: str = "cuda" if torch.cuda.is_available() else "cpu"
     RESULTS_DIR: str = 'results'
@@ -34,7 +34,7 @@ class Config:
     # --------------------------------------------------------------------------
     # 2. Data Generation and Data Loading
     # -------------------------------------------------------------------------- 
-    NUM_SAMPLES: int = 624
+    NUM_SAMPLES: int = 625
     AUGMENTATION_FACTOR: int = 0   # Resampling number for SDE simulation
     SDE_SCALE_FACTORS: Dict[str, float] = field(default_factory=lambda: {
         'bias_scale': 1.0,
@@ -42,12 +42,12 @@ class Config:
     }
     )
     TEST_SPLIT: float = 0.2
-    BATCH_SIZE: int = 512
+    BATCH_SIZE: int = 256
     
     # --------------------------------------------------------------------------
     # 3. Trainig Hyperparameters
     # --------------------------------------------------------------------------
-    EPOCHS: int = 50000
+    EPOCHS: int = 100000
     LEARNING_RATE: float = 1e-3
     WEIGHT_DECAY: float = 0.0
     USE_EARLY_STOPPING: bool = False
@@ -70,11 +70,11 @@ class Config:
     MODEL_CONFIG: Dict[str, Any] = field(default_factory=lambda: {
         'f_theta': {
             'hidden_dims': [64, 64, 64, 64],
-            'activation': 'ReLU'
+            'activation': 'SiLU'
         },
         'g_phi': {
             'hidden_dims': [64, 64, 64, 64],
-            'activation': 'ReLU'
+            'activation': 'SiLU'
         }
     })
     

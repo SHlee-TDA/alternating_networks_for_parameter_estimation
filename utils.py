@@ -113,10 +113,13 @@ class Normalizer:
         to a consistent range (typically [-1, 1] or similar) to prevent gradient explosion
         and accelerate convergence.
     """
-    def __init__(self, system, device, state_scales=None, param_bounds=None, use_log_params=False):
+    def __init__(self, system, device, 
+                 state_scales=None, param_bounds=None, use_log_params=False,
+                 use_normalization=True):
         self.system = system
         self.device = device
         self.use_log_params = use_log_params
+        self.use_normalization = use_normalization
         
         # 1. State Scales (Max Absolute Value)
         self.state_scales = torch.tensor(state_scales if state_scales else [1.0] * 2, 
@@ -150,7 +153,10 @@ class Normalizer:
         else:
             scale = 1.0
             
-        return x / (scale + 1e-8)
+        if self.use_normalization:
+            return x / (scale + 1e-8)
+        else:
+            return x
 
     def denormalize_inputs(self, x_norm, variable_type='observed'):
         if variable_type == 'observed':
@@ -159,7 +165,10 @@ class Normalizer:
             scale = self.state_scales[1]
         else:
             scale = 1.0
-        return x_norm * scale
+        if self.use_normalization:    
+            return x_norm * scale
+        else:
+            return x_norm
 
     def normalize_params(self, p):
         """
@@ -170,19 +179,33 @@ class Normalizer:
         
         # Min-Max Scaling to [-1, 1]
         p_norm = 2 * (p - self.p_min) / (self.p_max - self.p_min + 1e-8) - 1
-        return p_norm
+        if self.use_normalization:
+            return p_norm
+        else:
+            return p
 
     def denormalize_params(self, p_norm):
         """
-        [-1, 1] Range -> Log Space -> Physical Params
+        Inverts the transformation applied by ``normalize_params``.
+
+        When ``use_normalization`` is ``True`` the incoming tensor is assumed
+        to lie in ``[-1,1]`` and is mapped back to the original parameter
+        range (in log space if ``use_log_params`` is ``True``).  When
+        ``use_normalization`` is ``False`` the tensor is returned unchanged
+        except that, if ``use_log_params`` is ``True``, it is exponentiated
+        to recover the physical value.
         """
-        # Inverse Min-Max
-        p_log = (p_norm + 1) / 2 * (self.p_max - self.p_min) + self.p_min
-        
+        # handle normalization first, then apply log–exp if requested
+        if self.use_normalization:
+            p_log = (p_norm + 1) / 2 * (self.p_max - self.p_min) + self.p_min
+        else:
+            p_log = p_norm
+
         if self.use_log_params:
             return torch.exp(p_log)
-        return p_log
-    
+        else:
+            return p_log
+        
 
 # --- 3. SDE Solver (Euler-Maruyama) ---
 def euler_maruyama(drift_func, diffusion_func, t_span, y0, t_eval, params, seed=None, dt_sim=1.0, system=None):

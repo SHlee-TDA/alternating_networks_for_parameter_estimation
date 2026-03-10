@@ -34,11 +34,12 @@ class Trainer:
         self.config = config
         
         # Joint optimizer for both networks
-        self.optimizer = torch.optim.AdamW(
+        self.optimizer = torch.optim.Adam(
             list(self.f_theta.parameters()) + list(self.g_phi.parameters()),
             lr=config.LEARNING_RATE,
             weight_decay=config.WEIGHT_DECAY,
-            betas=(0.5, 0.999)
+            #betas=(0.5, 0.999),
+            eps=1e-4
         )
         
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -149,7 +150,7 @@ class Trainer:
                 history[f'val_{k}'].append(v)
             
             # Logging & Checkpointing
-            if epoch % 100 == 0 or epoch == self.config.EPOCHS - 1:
+            if epoch % 1000 == 0 or epoch == self.config.EPOCHS - 1:
                 print(f"Epoch {epoch+1:04d} | Train: {history['train_total_loss'][-1]:.4f} | Val: {history['val_total_loss'][-1]:.4f}")
             
             # Early Stopping Logic

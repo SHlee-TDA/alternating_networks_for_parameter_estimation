@@ -294,9 +294,10 @@ class Analyzer:
         range2 = np.linspace(max(0.01, center2 * 0.2), center2 * 1.8, 20)
         grid1, grid2 = np.meshgrid(range1, range2)
         
+        # BUGFIX: GPU CRASH
         p_grid_raw = torch.tensor(p_target, dtype=torch.float32).repeat(grid1.size, 1).to(self.config.DEVICE)
-        p_grid_raw[:, p1_idx] = torch.tensor(grid1.flatten(), dtype=torch.float32)
-        p_grid_raw[:, p2_idx] = torch.tensor(grid2.flatten(), dtype=torch.float32)
+        p_grid_raw[:, p1_idx] = torch.tensor(grid1.flatten(), dtype=torch.float32).to(self.config.DEVICE)
+        p_grid_raw[:, p2_idx] = torch.tensor(grid2.flatten(), dtype=torch.float32).to(self.config.DEVICE)
         
         p_grid_norm = self.normalizer.normalize_params(p_grid_raw)
         x_batch = x_observed.repeat(grid1.size, 1) 

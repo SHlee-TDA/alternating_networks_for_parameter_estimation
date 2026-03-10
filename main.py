@@ -73,13 +73,16 @@ def prepare_dataloaders(exp_config, sim_data_tuple, system, global_config):
     p_min = np.min(params_sim, axis=0)
     p_max = np.max(params_sim, axis=0)
     p_bounds = (p_min / 1.2, p_max * 1.2) # Log-space friendly margin
-
+    
+    use_log = (global_config.SYSTEM_NAME == 'ogtt_simul')
+    use_normalization = (global_config.SYSTEM_NAME == 'ogtt_simul')
     normalizer = Normalizer(
         system, 
         global_config.DEVICE, 
         state_scales=calc_scales, 
         param_bounds=p_bounds,
-        use_log_params=True  
+        use_log_params=use_log,
+        use_normalization=use_normalization
     )
     
     # 3. Create Sim Dataset
@@ -106,7 +109,7 @@ def prepare_dataloaders(exp_config, sim_data_tuple, system, global_config):
     )
 
     # 4. Prepare Real Data (for Hybrid Training)
-    if exp_config.get('SYSTEM_NAME') == 'ogtt_simul':
+    if global_config.SYSTEM_NAME == 'ogtt_simul':
         real_loader = RealOGTTDataLoader(
             file_path='data/clean_sumner_n_612.xlsx', 
             config=global_config,
