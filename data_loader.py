@@ -179,7 +179,8 @@ class DataGenerator:
         os.makedirs(save_dir, exist_ok=True)
 
         suffix = "sde" if getattr(self.config, 'USE_SDE', False) else "ode"
-        filename = f"augmented_data_{suffix}_{self.config.NUM_SAMPLES}.npz"
+        deriv_suffix = "_deriv" if getattr(self.config, 'USE_DERIVATIVE', False) else "_noderiv"
+        filename = f"augmented_data_{suffix}{deriv_suffix}_{self.config.NUM_SAMPLES}.npz"        
         save_path = save_dir / filename
 
         # Load Cached Data

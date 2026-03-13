@@ -26,15 +26,15 @@ class Config:
     # --------------------------------------------------------------------------
     # 1. System & Environment
     # --------------------------------------------------------------------------
-    SYSTEM_NAME: str = 'lotka_volterra' # 'lotka_volterra', 'sir', 'nc_sir', 'ogtt_simul'
+    SYSTEM_NAME: str = 'ogtt_simul' # 'lotka_volterra', 'sir', 'nc_sir', 'ogtt_simul'
     SEED: int = 42
     DEVICE: str = "cuda" if torch.cuda.is_available() else "cpu"
-    RESULTS_DIR: str = 'results'
+    RESULTS_DIR: str = 'results/abalation_study'
     
     # --------------------------------------------------------------------------
     # 2. Data Generation and Data Loading
     # -------------------------------------------------------------------------- 
-    NUM_SAMPLES: int = 625
+    NUM_SAMPLES: int = 1000
     AUGMENTATION_FACTOR: int = 0   # Resampling number for SDE simulation
     SDE_SCALE_FACTORS: Dict[str, float] = field(default_factory=lambda: {
         'bias_scale': 1.0,
@@ -55,7 +55,7 @@ class Config:
     EARLY_STOPPING_MIN_DELTA: float = 1e-6
     
     USE_DERIVATIVE: bool = True       # Whether to use derivative features in state variable input
-    DERIVATIVE_METHOD: str = 'spline'  # 'finite_difference', 'spline', 'lagrangian', 'polynomial'
+    DERIVATIVE_METHOD: str = 'lagrange'  # 'finite_diff', 'spline', 'lagrange', 'polynomial'
     
     LOSS_CONFIG: List[Tuple[str, float]] = field(default_factory=lambda: [
         ('supervised', 1.0),
