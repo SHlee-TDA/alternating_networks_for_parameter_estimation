@@ -6,7 +6,7 @@ class Sir(System):
     """SIR 시스템의 상세 명세"""
     name = 'sir'
     param_names = ['beta', 'gamma']
-    param_ranges = {'beta': [0.08, 0.12], 'gamma': [0.09, 0.11]}
+    param_ranges = {'beta': [0.05, 0.15], 'gamma': [0.05, 0.35]}
     
     # SIR은 y0가 고정된 값
     initial_conditions = ([50.0 - 1.0 - 0.0], [1.0], [0.0])

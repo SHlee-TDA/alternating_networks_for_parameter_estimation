@@ -26,15 +26,15 @@ class Config:
     # --------------------------------------------------------------------------
     # 1. System & Environment
     # --------------------------------------------------------------------------
-    SYSTEM_NAME: str = 'ogtt_simul' # 'lotka_volterra', 'sir', 'nc_sir', 'ogtt_simul'
+    SYSTEM_NAME: str = 'sir' # 'lotka_volterra', 'sir', 'nc_sir', 'ogtt_simul'
     SEED: int = 42
     DEVICE: str = "cuda" if torch.cuda.is_available() else "cpu"
-    RESULTS_DIR: str = 'results/abalation_study'
+    RESULTS_DIR: str = 'results/tmp'
     
     # --------------------------------------------------------------------------
     # 2. Data Generation and Data Loading
     # -------------------------------------------------------------------------- 
-    NUM_SAMPLES: int = 1000
+    NUM_SAMPLES: int = 600
     AUGMENTATION_FACTOR: int = 0   # Resampling number for SDE simulation
     SDE_SCALE_FACTORS: Dict[str, float] = field(default_factory=lambda: {
         'bias_scale': 1.0,
@@ -55,14 +55,14 @@ class Config:
     EARLY_STOPPING_MIN_DELTA: float = 1e-6
     
     USE_DERIVATIVE: bool = True       # Whether to use derivative features in state variable input
-    DERIVATIVE_METHOD: str = 'lagrange'  # 'finite_diff', 'spline', 'lagrange', 'polynomial'
+    DERIVATIVE_METHOD: str = 'finite_diff'  # 'finite_diff', 'spline', 'lagrange', 'polynomial'
     
     LOSS_CONFIG: List[Tuple[str, float]] = field(default_factory=lambda: [
         ('supervised', 1.0),
         #('recurrent', 1.0)
     ])
     
-    ITERATIONS: int = 10               # Number of iterations for parameter estimation during inference
+    ITERATIONS: int = 1              # Number of iterations for parameter estimation during inference
     
     # --------------------------------------------------------------------------
     # 4. Model Architecture
