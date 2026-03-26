@@ -1,5 +1,6 @@
 # systems/lotka_volterra.py
 import numpy as np
+import torch
 from .base_system import System
 
 class LotkaVolterra(System):
@@ -29,3 +30,14 @@ class LotkaVolterra(System):
         dxdt = alpha * x - beta * x * y_h
         dydt = delta * x * y_h - gamma * y_h
         return [dxdt, dydt]
+
+    @staticmethod
+    def ode_func_torch(u, theta):
+        x, y = u[:, 0], u[:, 1]
+        # param_names 순서에 정확히 맞춤
+        alpha, beta, delta, gamma = theta[0], theta[1], theta[2], theta[3]
+        
+        dxdt = alpha * x - beta * x * y
+        dydt = delta * x * y - gamma * y
+        
+        return torch.stack([dxdt, dydt], dim=1)    

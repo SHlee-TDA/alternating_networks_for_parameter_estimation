@@ -1,5 +1,6 @@
 # systems/sir.py
 import numpy as np
+import torch
 from .base_system import System
 
 class Sir(System):
@@ -32,3 +33,19 @@ class Sir(System):
         dIdt = beta * S * I / N - gamma * I
         dRdt = gamma * I
         return [dSdt, dIdt, dRdt]
+        
+    @staticmethod
+    def ode_func_torch(u, theta):
+        """
+        u: (Batch, 3) -> [S, I, R]
+        theta: (2,) -> [beta, gamma]
+        """
+        S, I, R = u[:, 0], u[:, 1], u[:, 2]
+        beta, gamma = theta[0], theta[1]
+        N = S + I + R  # 총 인구 보존 법칙 활용
+        
+        dSdt = -beta * S * I / N
+        dIdt = beta * S * I / N - gamma * I
+        dRdt = gamma * I
+        
+        return torch.stack([dSdt, dIdt, dRdt], dim=1)

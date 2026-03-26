@@ -34,7 +34,7 @@ class Config:
     # --------------------------------------------------------------------------
     # 2. Data Generation and Data Loading
     # -------------------------------------------------------------------------- 
-    NUM_SAMPLES: int = 600
+    NUM_SAMPLES: int = 100000
     AUGMENTATION_FACTOR: int = 0   # Resampling number for SDE simulation
     SDE_SCALE_FACTORS: Dict[str, float] = field(default_factory=lambda: {
         'bias_scale': 1.0,
@@ -55,14 +55,14 @@ class Config:
     EARLY_STOPPING_MIN_DELTA: float = 1e-6
     
     USE_DERIVATIVE: bool = True       # Whether to use derivative features in state variable input
-    DERIVATIVE_METHOD: str = 'finite_diff'  # 'finite_diff', 'spline', 'lagrange', 'polynomial'
+    DERIVATIVE_METHOD: str = 'spline'  # 'finite_diff', 'spline', 'lagrange', 'polynomial'
     
     LOSS_CONFIG: List[Tuple[str, float]] = field(default_factory=lambda: [
         ('supervised', 1.0),
         #('recurrent', 1.0)
     ])
     
-    ITERATIONS: int = 1              # Number of iterations for parameter estimation during inference
+    ITERATIONS: int = 10              # Number of iterations for parameter estimation during inference
     
     # --------------------------------------------------------------------------
     # 4. Model Architecture
