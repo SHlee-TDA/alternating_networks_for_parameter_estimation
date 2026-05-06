@@ -26,15 +26,15 @@ class Config:
     # --------------------------------------------------------------------------
     # 1. System & Environment
     # --------------------------------------------------------------------------
-    SYSTEM_NAME: str = 'sir' # 'lotka_volterra', 'sir', 'nc_sir', 'ogtt_simul'
+    SYSTEM_NAME: str = 'lotka_volterra' # 'lotka_volterra', 'sir', 'nc_sir', 'ogtt_simul'
     SEED: int = 42
     DEVICE: str = "cuda" if torch.cuda.is_available() else "cpu"
-    RESULTS_DIR: str = 'results/tmp'
+    RESULTS_DIR: str = 'results/'
     
     # --------------------------------------------------------------------------
     # 2. Data Generation and Data Loading
     # -------------------------------------------------------------------------- 
-    NUM_SAMPLES: int = 100000
+    NUM_SAMPLES: int = 10000
     AUGMENTATION_FACTOR: int = 0   # Resampling number for SDE simulation
     SDE_SCALE_FACTORS: Dict[str, float] = field(default_factory=lambda: {
         'bias_scale': 1.0,

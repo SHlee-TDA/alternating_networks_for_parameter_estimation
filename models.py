@@ -179,8 +179,6 @@ class ParameterEstimator(nn.Module):
         combined_input = torch.cat((x_observed, y_hidden), dim=1)
         return self.network(combined_input)
 
-                
-
 
 # class ResidualBlock(nn.Module):
 #     """Skip Connection + LayerNorm이 적용된 블록"""

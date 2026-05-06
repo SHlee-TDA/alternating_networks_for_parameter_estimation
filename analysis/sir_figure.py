@@ -17,9 +17,9 @@ def generate_sir_figure():
     t_points = sir_system.t_points  # [0, 20, 40, 60, 80, 100]
     
     t_continuous = np.linspace(t_span[0], t_span[1], 1000)
-    
-    params_r0_gt_1 = [0.12, 0.09]  # R0 ~ 1.33
-    params_r0_le_1 = [0.08, 0.11]  # R0 ~ 0.73
+    #{'beta': [0.05, 0.15], 'gamma': [0.05, 0.35]}
+    params_r0_gt_1 = [0.15, 0.05]  # R0 ~ 3.0
+    params_r0_le_1 = [0.05, 0.35]  # R0 ~ 0.14
     
     scenarios = [
         {'params': params_r0_gt_1, 'title': r'$\mathcal{R}_0 > 1$'},

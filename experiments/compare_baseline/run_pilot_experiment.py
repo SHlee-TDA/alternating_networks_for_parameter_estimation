@@ -145,7 +145,7 @@ def run_monte_carlo_evaluation(estimator, sys_obj, radii, n_trials=50, save_path
 def run_baseline_experiment():
     test_radii = [0.1, 0.5, 1.0, 2.0]
     systems = [
-        Sir(), 
+        #Sir(), 
         LotkaVolterra()
         ]
     
