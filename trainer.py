@@ -23,48 +23,59 @@ class Trainer:
         config (object): Configuration namespace.
     """
     def __init__(self, 
-                 f_theta, g_phi, 
                  train_loader, val_loader, 
-                 config, 
+                 config,
+                 hidden_net=None, param_net=None,
+                 baseline_net=None
                  ):
-        self.f_theta = f_theta.to(config.DEVICE)
-        self.g_phi = g_phi.to(config.DEVICE)
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.config = config
         
-        # Joint optimizer for both networks
-        self.optimizer = torch.optim.Adam(
-            list(self.f_theta.parameters()) + list(self.g_phi.parameters()),
-            lr=config.LEARNING_RATE,
-            weight_decay=config.WEIGHT_DECAY,
-            #betas=(0.5, 0.999),
-            eps=1e-4
-        )
-        
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode='min', factor=0.99999999999, patience=20, min_lr=1e-8, verbose=True
-        )
-        
-        self.loss_fn = get_loss_function(
-            f_theta=self.f_theta,
-            g_phi=self.g_phi,
-            config=self.config
-        ).to(config.DEVICE)
-        
         # Setup results directory
         self.results_path = os.path.join(config.RESULTS_DIR, config.SYSTEM_NAME, config.EXPERIMENT_NAME)
         os.makedirs(self.results_path, exist_ok=True)
-        
-        # Cache for power iteration vectors (u, v) to speed up spectral penalty calculation    
         self.spectral_cache = {}
+
+        # Model initialization
+        if getattr(self.config, 'RUN_BASELINE', False):
+            self.baseline_net = baseline_net.to(config.DEVICE)
+            
+            self.optimizer = torch.optim.Adam(
+                self.baseline_net.parameters(),
+                lr=config.LEARNING_RATE,
+                weight_decay=config.WEIGHT_DECAY,
+                eps=1e-4
+            )
+            self.loss_fn = nn.MSELoss().to(config.DEVICE)
+            
+        else:
+            self.hidden_net = hidden_net.to(config.DEVICE)
+            self.param_net = param_net.to(config.DEVICE)
+            
+            # 기존 Joint 옵티마이저
+            self.optimizer = torch.optim.Adam(
+                list(self.hidden_net.parameters()) + list(self.param_net.parameters()),
+                lr=config.LEARNING_RATE,
+                weight_decay=config.WEIGHT_DECAY,
+                eps=1e-4
+            )
+            self.loss_fn = get_loss_function(
+                f_theta=self.hidden_net,
+                g_phi=self.param_net,
+                config=self.config
+            ).to(config.DEVICE)
+
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer, mode='min', factor=0.99999999999, patience=20, min_lr=1e-8, verbose=True
+        )
 
     def train(self):
         """
         Executes the main training loop.
         
         Returns:
-            f_theta, g_phi, history (dict of loss logs)
+            hidden_net, param_net, history (dict of loss logs)
         """
         print(f"Training models for {self.config.EXPERIMENT_NAME}...")
 
@@ -74,8 +85,12 @@ class Trainer:
         patience_counter = 0
         
         for epoch in range(self.config.EPOCHS):
-            self.f_theta.train()
-            self.g_phi.train()
+            if getattr(self.config, 'RUN_BASELINE', False):
+                self.baseline_net.train()
+            else:
+                self.hidden_net.train()
+                self.param_net.train()
+
             
             epoch_train_losses = defaultdict(list)
             
@@ -86,7 +101,6 @@ class Trainer:
                 x_batch = x_batch.to(self.config.DEVICE)
                 y_batch = y_batch.to(self.config.DEVICE)
                 p_batch = p_batch.to(self.config.DEVICE)
-
 
                 self.optimizer.zero_grad()
                 # # --- 1. Forward Loss (State Estimation) ---
@@ -118,12 +132,18 @@ class Trainer:
                 #     f_penalty, g_penalty = self.compute_spectral_product_penalty()
                 #     total_loss += (f_penalty + g_penalty) * 0.01 # Scaling factor for penalty
 
-                total_loss, metrics = self.loss_fn(x_batch, y_batch, p_batch)
+                if getattr(self.config, 'RUN_BASELINE', False):
+                    p_pred = self.baseline_net(x_batch)
+                    total_loss = self.loss_fn(p_pred, p_batch)
+                    metrics = {'mse_loss_baseline': total_loss.item()}
+                else:
+                    total_loss, metrics = self.loss_fn(x_batch, y_batch, p_batch)
+                    
                 total_loss.backward()
                 
                 # Gradient clipping
-                #torch.nn.utils.clip_grad_norm_(self.f_theta.parameters(), max_norm=1.0)
-                #torch.nn.utils.clip_grad_norm_(self.g_phi.parameters(), max_norm=1.0)
+                #torch.nn.utils.clip_grad_norm_(self.hidden_net.parameters(), max_norm=1.0)
+                #torch.nn.utils.clip_grad_norm_(self.param_net.parameters(), max_norm=1.0)
                 
                 self.optimizer.step()
                 
@@ -168,13 +188,20 @@ class Trainer:
                     break
         
         self._save_final_artifacts()
-        return self.f_theta, self.g_phi, history
+        
+        if getattr(self.config, 'RUN_BASELINE', False):
+            return self.baseline_net, history
+        return self.hidden_net, self.param_net, history    
+       
     
     @torch.no_grad()
     def evaluate(self, loader):
         """Computes loss on the validation/test set."""
-        self.f_theta.eval()
-        self.g_phi.eval()
+        if getattr(self.config, 'RUN_BASELINE', False):
+            self.baseline_net.eval()
+        else:
+            self.hidden_net.eval()
+            self.param_net.eval()   
         
         losses = defaultdict(list)
         
@@ -206,7 +233,13 @@ class Trainer:
             # losses['loss_f'].append(loss_f.item())
             # losses['loss_g'].append(loss_g.item())
             # losses['loss_consistency'].append(loss_const.item())
-            total_loss, metrics = self.loss_fn(x_batch, y_batch, p_batch)
+            if getattr(self.config, 'RUN_BASELINE', False):
+                p_pred = self.baseline_net(x_batch)
+                total_loss = self.loss_fn(p_pred, p_batch)
+                metrics = {'mse_loss_baseline': total_loss.item()}
+            else:
+                total_loss, metrics = self.loss_fn(x_batch, y_batch, p_batch)
+                
             for k, v in metrics.items():
                 losses[k].append(v)
             
@@ -273,19 +306,32 @@ class Trainer:
         return f_penalty, g_penalty
     
     def _save_checkpoint(self, epoch, loss):
-        save_path = os.path.join(self.results_path, 'best_model.pth')
+        filename = 'best_baseline_model.pth' if getattr(self.config, 'RUN_BASELINE', False) else 'best_model.pth'
+        save_path = os.path.join(self.results_path, filename)
+        
         try:
-            torch.save({
-                'f_theta_state_dict': self.f_theta.state_dict(),
-                'g_phi_state_dict': self.g_phi.state_dict(),
-                'optimizer_state_dict': self.optimizer.state_dict(),
-                'epoch': epoch + 1,
-                'best_val_loss': loss
-            }, save_path)
+            if getattr(self.config, 'RUN_BASELINE', False):
+                torch.save({
+                    'baseline_state_dict': self.baseline_net.state_dict(),
+                    'optimizer_state_dict': self.optimizer.state_dict(),
+                    'epoch': epoch + 1,
+                    'best_val_loss': loss
+                }, save_path)
+            else:
+                torch.save({
+                    'Hnet_state_dict': self.hidden_net.state_dict(),
+                    'Pnet_state_dict': self.param_net.state_dict(),
+                    'optimizer_state_dict': self.optimizer.state_dict(),
+                    'epoch': epoch + 1,
+                    'best_val_loss': loss
+                }, save_path)
+                
         except Exception as e:
             print(f"Warning: Could not save checkpoint: {e}")
-
+    
     def _save_final_artifacts(self):
-        torch.save(self.f_theta.state_dict(), os.path.join(self.results_path, 'f_theta.pth'))
-        torch.save(self.g_phi.state_dict(), os.path.join(self.results_path, 'g_phi.pth'))
-        
+        if getattr(self.config, 'RUN_BASELINE', False):
+            torch.save(self.baseline_net.state_dict(), os.path.join(self.results_path, 'baseline_net.pth'))
+        else:
+            torch.save(self.hidden_net.state_dict(), os.path.join(self.results_path, 'Hnet.pth'))
+            torch.save(self.param_net.state_dict(), os.path.join(self.results_path, 'Pnet.pth'))    

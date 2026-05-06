@@ -26,11 +26,12 @@ class Config:
     # --------------------------------------------------------------------------
     # 1. System & Environment
     # --------------------------------------------------------------------------
-    SYSTEM_NAME: str = 'lotka_volterra' # 'lotka_volterra', 'sir', 'nc_sir', 'ogtt_simul'
+    SYSTEM_NAME: str = 'sir' # 'lotka_volterra', 'sir', 'nc_sir', 'ogtt_simul'
+    EXPERIMENT_NAME: str = 'baseline_comparison'
     SEED: int = 42
     DEVICE: str = "cuda" if torch.cuda.is_available() else "cpu"
-    RESULTS_DIR: str = 'results/'
-    
+    RESULTS_DIR: str = 'results/baseline_comparison'
+    RUN_BASELINE: bool = False  # Whether to run the single-network baseline for comparison
     # --------------------------------------------------------------------------
     # 2. Data Generation and Data Loading
     # -------------------------------------------------------------------------- 
@@ -47,7 +48,7 @@ class Config:
     # --------------------------------------------------------------------------
     # 3. Trainig Hyperparameters
     # --------------------------------------------------------------------------
-    EPOCHS: int = 100000
+    EPOCHS: int = 10000
     LEARNING_RATE: float = 1e-3
     WEIGHT_DECAY: float = 0.0
     USE_EARLY_STOPPING: bool = False
@@ -68,11 +69,11 @@ class Config:
     # 4. Model Architecture
     # --------------------------------------------------------------------------
     MODEL_CONFIG: Dict[str, Any] = field(default_factory=lambda: {
-        'f_theta': {
+        'hidden_net': {
             'hidden_dims': [64, 64, 64, 64],
             'activation': 'SiLU'
         },
-        'g_phi': {
+        'param_net': {
             'hidden_dims': [64, 64, 64, 64],
             'activation': 'SiLU'
         }

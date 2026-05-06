@@ -179,6 +179,49 @@ class ParameterEstimator(nn.Module):
         combined_input = torch.cat((x_observed, y_hidden), dim=1)
         return self.network(combined_input)
 
+class SingleNetworkBaseline(nn.Module):
+    """
+    Baseline model that directly maps observed variables (X) to hidden variables (Y) without parameter estimation.
+    
+    Note:
+        This serves as a simple benchmark to evaluate the benefits of the bi-directional architecture.
+    """
+    def __init__(self, flat_x_dim, flat_y_dim, model_config, use_spectral_norm=False):
+        super().__init__()
+        
+        hidden_dims = model_config['hidden_dims']
+        activation = get_activation(model_config['activation'])
+        
+        layers = []
+        input_dim = flat_x_dim
+        spectral_scale = 0.99
+        
+        for hidden_dim in hidden_dims:
+            linear = nn.Linear(input_dim, hidden_dim)
+            if use_spectral_norm:
+                linear = spectral_norm(linear, n_power_iterations=1)
+            layers.append(linear)
+            
+            if use_spectral_norm:
+                layers.append(ExcludeLambda(spectral_scale))
+                
+            layers.append(activation)
+            input_dim = hidden_dim
+            
+        # Output Layer
+        last_linear = nn.Linear(input_dim, flat_y_dim)
+        if use_spectral_norm:
+            last_linear = spectral_norm(last_linear, n_power_iterations=1)
+        layers.append(last_linear)
+                
+        self.network = nn.Sequential(*layers)
+        self.network.apply(lambda m: init_weights(m, activation))
+
+    def forward(self, x_observed):
+        return self.network(x_observed)
+
+
+
 
 # class ResidualBlock(nn.Module):
 #     """Skip Connection + LayerNorm이 적용된 블록"""

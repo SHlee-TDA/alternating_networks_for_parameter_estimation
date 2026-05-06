@@ -24,6 +24,7 @@ import json
 import importlib
 import argparse
 from collections import defaultdict
+import glob
 
 import numpy as np
 import torch
@@ -31,9 +32,9 @@ from torch.utils.data import DataLoader, TensorDataset, random_split, ConcatData
 
 from config import Config
 from data_loader import DataGenerator, RealOGTTDataLoader
-from models import HiddenVarPredictor, ParameterEstimator
+from models import HiddenVarPredictor, ParameterEstimator, SingleNetworkBaseline
 from trainer import Trainer
-from analyzer import Analyzer
+from analyzer import get_analyzer_class
 from utils import Normalizer, ExperimentLogger
 
 
@@ -250,53 +251,124 @@ def run_experiment_pipeline(global_config):
         # 3. Model Initialization
         sample_x, sample_y, sample_p = next(iter(train_l))
         
-        f_theta = HiddenVarPredictor(
-            sample_x.shape[1], sample_y.shape[1], sample_p.shape[1],
-            model_config=run_config.MODEL_CONFIG['f_theta'],
-            use_spectral_norm=run_config.USE_SPECTRAL_NORM
-        ).to(device)
-        
-        g_phi = ParameterEstimator(
-            sample_x.shape[1], sample_y.shape[1], sample_p.shape[1],
-            model_config=run_config.MODEL_CONFIG['g_phi'],
-            use_spectral_norm=run_config.USE_SPECTRAL_NORM
-        ).to(device)
+        if getattr(run_config, 'RUN_BASELINE', False):
+            baseline_net = SingleNetworkBaseline(
+                flat_x_dim=sample_x.shape[1],
+                flat_y_dim=sample_p.shape[1],
+                model_config=run_config.MODEL_CONFIG['param_net'], # 기존 모델의 파라미터 구조 차용
+                use_spectral_norm=run_config.USE_SPECTRAL_NORM
+            ).to(device)
+            hidden_net, param_net = None, None
+        else:
+            baseline_net = None
+            hidden_net = HiddenVarPredictor(
+                sample_x.shape[1], sample_y.shape[1], sample_p.shape[1],
+                model_config=run_config.MODEL_CONFIG['hidden_net'],
+                use_spectral_norm=run_config.USE_SPECTRAL_NORM
+            ).to(device)
+            
+            param_net = ParameterEstimator(
+                sample_x.shape[1], sample_y.shape[1], sample_p.shape[1],
+                model_config=run_config.MODEL_CONFIG['param_net'],
+                use_spectral_norm=run_config.USE_SPECTRAL_NORM
+            ).to(device)
         
         # 4. Training
-        trainer = Trainer(f_theta, g_phi, train_l, val_l, trainer_config)
-        f_theta, g_phi, history = trainer.train()
-        
-        # --- Phase 3: Analysis & Evaluation ---
-        print("  -> Starting Analysis...")
-        analyzer = Analyzer(
-            f_theta, g_phi, test_l, trainer_config, 
-            system, p_init, normalizer, history
+        trainer = Trainer(
+            train_l, val_l, 
+            config,
+            hidden_net=hidden_net, param_net=param_net,
+            baseline_net=baseline_net
         )
         
-        # A. Simulation Metrics
-        analyzer.plot_loss_curves()
-        p_true, p_pred = analyzer.evaluate_predictions()
-        analyzer.plot_scatter(p_true, p_pred)
-        analyzer.plot_phase_portraits()
-        analyzer.plot_spectral_norms_by_layer()
+        if getattr(run_config, 'RUN_BASELINE', False):
+            baseline_net, history = trainer.train()
+        else:
+            hidden_net, param_net, history = trainer.train()
+        
+        # --- Phase 3: Analysis & Evaluation ---
+        if getattr(run_config, 'RUN_BASELINE', False):
+            print("  -> [Baseline Mode] Skipping Analyzer for now. (Will be implemented in Step 4)")
+            metrics = {
+                'train_loss': history['train_total_loss'][-1],
+                'val_loss': history['val_total_loss'][-1],
+                'test_mse': -1, # 평가는 4단계에서 수행할 예정이므로 임시값 할당
+                'epoch': len(history['train_total_loss'])
+            }
+            logger.log_result_to_csv(metrics)
+            print(f"  -> Baseline Experiment Completed. Metrics: {metrics}")
+            
+            del baseline_net, trainer, train_l, val_l, test_l
+            
+        else:
+            print("  -> Starting Analysis...")
+            
+            # [수정된 부분] 동적으로 시스템에 맞는 Analyzer 할당
+            AnalyzerClass = get_analyzer_class(global_config.SYSTEM_NAME)
+            analyzer = AnalyzerClass(
+                f_theta=hidden_net, 
+                g_phi=param_net, 
+                test_loader=test_l, 
+                config=trainer_config,
+                system=system, 
+                p_initial_guess=p_init, 
+                normalizer=normalizer, 
+                history=history
+            )
+            
+            try:
+                print("  -> Loading Baseline Model for comparison...")
+                baseline_model = SingleNetworkBaseline(
+                    flat_x_dim=sample_x.shape[1],
+                    flat_y_dim=sample_p.shape[1],
+                    model_config=run_config.MODEL_CONFIG['param_net'],
+                    use_spectral_norm=None
+                ).to(device)
+                
+                base_dir = os.path.dirname(logger.results_dir)
+                baseline_paths = glob.glob(os.path.join(base_dir, '*', 'baseline_net.pth'))
+                
+                if baseline_paths:
+                    latest_baseline_path = max(baseline_paths, key=os.path.getmtime)
+                    print(f"  -> Found baseline at: {latest_baseline_path}")
+                    baseline_model.load_state_dict(torch.load(latest_baseline_path))
+                    
+                    # 비교 분석 실행
+                    analyzer.run_comparison(baseline_model)
+                else:
+                    print("  -> [Warning] baseline_net.pth not found in previous run folders.")
+                    
+            except Exception as e:
+                import traceback
+                print(f"  -> [Warning] Baseline comparison skipped: {e}")
+                traceback.print_exc() # 숨겨진 진짜 에러 원인을 출력합니다.
+                
+            # A. Simulation Metrics
+            analyzer.plot_loss_curves()
+            p_true, p_pred = analyzer.evaluate_predictions()
+            analyzer.plot_scatter(p_true, p_pred)
+            analyzer.plot_phase_portraits()
+            analyzer.plot_spectral_norms_by_layer()
 
-        # B. Real Data Validation
-        print("  -> Evaluating on Real Clinical Data...")
-        analyzer.evaluate_real_data(real_test_loader)
-        
-        # C. Logging Metrics
-        metrics = {
-            'train_loss': history['train_total_loss'][-1],
-            'val_loss': history['val_total_loss'][-1],
-            'test_mse': np.mean((p_true - p_pred)**2),
-            'epoch': len(history['train_total_loss'])
-        }
-        logger.log_result_to_csv(metrics)
-        print(f"  -> Experiment Completed. Metrics: {metrics}")
-        
-        
-        # Cleanup
-        del f_theta, g_phi, trainer, analyzer, train_l, val_l, test_l
+            # B. Real Data Validation
+            print("  -> Evaluating on Real Clinical Data...")
+            if hasattr(analyzer, 'evaluate_real_data') and real_test_loader is not None:
+                print("  -> Evaluating on Real Clinical Data...")
+                analyzer.evaluate_real_data(real_test_loader)
+            
+            # C. Logging Metrics
+            metrics = {
+                'train_loss': history['train_total_loss'][-1],
+                'val_loss': history['val_total_loss'][-1],
+                'test_mse': np.mean((p_true - p_pred)**2),
+                'epoch': len(history['train_total_loss'])
+            }
+            logger.log_result_to_csv(metrics)
+            print(f"  -> Experiment Completed. Metrics: {metrics}")
+            
+            # Cleanup
+            del hidden_net, param_net, trainer, analyzer, train_l, val_l, test_l
+            
         torch.cuda.empty_cache()
         gc.collect()
 

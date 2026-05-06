@@ -14,7 +14,7 @@ from systems.ogtt_simul import OgttSimul, OGTTModel, ODE_PARAMS, SYS_PARAMS
 plt.style.use('seaborn-v0_8-whitegrid')
 sns.set_palette("deep")
 
-class Analyzer:
+class BaseAnalyzer:
     """
     Encapsulates evaluation metrics and visualization routines.
     """
@@ -230,35 +230,6 @@ class Analyzer:
                 all_p_pred.append(p_pred_phys.cpu().numpy())
 
         return np.concatenate(all_p_true), np.concatenate(all_p_pred)
-
-    def evaluate_real_data(self, real_test_loader):
-        print(f"\n=== Real Data Evaluation ({len(real_test_loader.dataset)} samples) ===")
-        self.f_theta.eval()
-        self.g_phi.eval()
-        
-        all_p_true = []
-        all_p_pred = []
-        
-        with torch.no_grad():
-            for x_batch, _, p_batch in real_test_loader:
-                x_batch = x_batch.to(self.config.DEVICE)
-                p_batch = p_batch.to(self.config.DEVICE)
-                
-                p_pred_norm = self._run_fixed_point_iteration(x_batch, 
-                                                              max_iter=self.config.ITERATIONS,
-                                                              tol=1e-6)
-                
-                # Denormalize for metric calculation
-                p_pred_phys = self.normalizer.denormalize_params(p_pred_norm)
-                p_true_phys = self.normalizer.denormalize_params(p_batch)
-                
-                all_p_true.append(p_true_phys.cpu().numpy())
-                all_p_pred.append(p_pred_phys.cpu().numpy())
-
-        pred_params = np.concatenate(all_p_pred)
-        true_params = np.concatenate(all_p_true)
-        
-        self.plot_scatter(true_params, pred_params, prefix="real_data")
     
     def plot_phase_portraits(self):
         num_params = len(self.system.param_names)
@@ -467,3 +438,234 @@ class Analyzer:
         }
         with open(os.path.join(self.results_path, 'spectral_norms_by_layer.json'), 'w') as f:
             json.dump(all_norm_data, f, indent=4)
+            
+        def run_comparison(self, baseline_model):
+            """자식 클래스에서 오버라이딩하여 각 벤치마크에 맞는 비교 분석을 수행합니다."""
+            print(f"  -> [Info] No specific comparison logic defined for {self.__class__.__name__}.")
+            
+# Benchmark Specific Analyzers (자식 클래스)
+
+class SIRAnalyzer(BaseAnalyzer):
+    def run_comparison(self, baseline_model):
+        """
+        Baseline(Single Net)과 Ours(Alternating Net)의 예측 결과를 비교하고 시각화합니다.
+        SIR 시스템에 특화된 평가를 수행합니다.
+        """
+        print("\n=== Running SIR Comparison Analysis (Baseline vs Ours) ===")
+
+        if baseline_model is None:
+            print("  -> [Warning] Baseline model not provided. Skipping SIR comparison.")
+            return
+
+        print("\n=== Running SIR Comparison Analysis (Baseline vs Ours) ===")
+        self.f_theta.eval()
+        self.g_phi.eval()
+        baseline_model.eval()
+
+        all_p_true = []
+        all_p_ours = []
+        all_p_base = []
+
+        with torch.no_grad():
+            for x_batch, _, p_batch in self.test_loader:
+                x_batch = x_batch.to(self.config.DEVICE)
+                p_batch = p_batch.to(self.config.DEVICE)
+                
+                # 1. True Parameters (Denormalize)
+                p_true_phys = self.normalizer.denormalize_params(p_batch).cpu().numpy()
+                all_p_true.append(p_true_phys)
+                
+                # 2. Baseline Predictions
+                p_base_norm = baseline_model(x_batch)
+                p_base_phys = self.normalizer.denormalize_params(p_base_norm).cpu().numpy()
+                all_p_base.append(p_base_phys)
+                
+                # 3. Ours (Alternating) Predictions - 기존 메서드 활용
+                p_ours_norm = self._run_fixed_point_iteration(x_batch, 
+                                                              max_iter=self.config.ITERATIONS,
+                                                              tol=1e-6)
+                p_ours_phys = self.normalizer.denormalize_params(p_ours_norm).cpu().numpy()
+                all_p_ours.append(p_ours_phys)
+
+        p_true = np.concatenate(all_p_true, axis=0)
+        p_ours = np.concatenate(all_p_ours, axis=0)
+        p_base = np.concatenate(all_p_base, axis=0)
+
+        # R0 = beta / gamma (파라미터 순서가 beta, gamma라고 가정)
+        R0_true = p_true[:, 0] / p_true[:, 1]
+        R0_ours = p_ours[:, 0] / p_ours[:, 1]
+        R0_base = p_base[:, 0] / p_base[:, 1]
+
+        self._print_metrics_table(p_true, p_ours, p_base, R0_true, R0_ours, R0_base)
+        self._plot_sir_scatter(p_true, p_ours, p_base, R0_true, R0_ours, R0_base)
+        self._plot_trajectory_comparison(p_true, p_ours, p_base, R0_true)
+
+    def _print_metrics_table(self, p_true, p_ours, p_base, R0_true, R0_ours, R0_base):
+        def calc_metrics(true, pred):
+            rmse = np.sqrt(np.mean((true - pred)**2))
+            mae = np.mean(np.abs(true - pred))
+            pearson_r = pearsonr(true, pred)[0]
+            return rmse, mae, pearson_r
+
+        metrics = {
+            "Beta (RMSE / MAE / Pearson)": [calc_metrics(p_true[:, 0], p_base[:, 0]), calc_metrics(p_true[:, 0], p_ours[:, 0])],
+            "Gamma (RMSE / MAE / Pearson)": [calc_metrics(p_true[:, 1], p_base[:, 1]), calc_metrics(p_true[:, 1], p_ours[:, 1])],
+            "R0 (RMSE / MAE / Pearson)": [calc_metrics(R0_true, R0_base), calc_metrics(R0_true, R0_ours)]
+        }
+
+        print("\n" + "="*60)
+        print(f"{'Metric':<20} | {'Baseline (Single)':<18} | {'Ours (Alternating)':<18}")
+        print("-" * 60)
+        for key, vals in metrics.items():
+            base_str = f"{vals[0][0]:.4f} / {vals[0][1]:.4f}"
+            ours_str = f"{vals[1][0]:.4f} / {vals[1][1]:.4f}"
+            print(f"{key:<20} | {base_str:<18} | {ours_str:<18}")
+        print("="*60 + "\n")
+
+    def _plot_sir_scatter(self, p_true, p_ours, p_base, R0_true, R0_ours, R0_base):
+        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+        titles = [r'Infection Rate ($\beta$)', r'Recovery Rate ($\gamma$)', r'Basic Reproduction Number ($\mathcal{R}_0$)']
+        
+        true_vals = [p_true[:, 0], p_true[:, 1], R0_true]
+        ours_vals = [p_ours[:, 0], p_ours[:, 1], R0_ours]
+        base_vals = [p_base[:, 0], p_base[:, 1], R0_base]
+
+        for i in range(3):
+            ax = axes[i]
+            ax.scatter(true_vals[i], base_vals[i], alpha=0.5, color='indianred', label='Baseline (Single)', marker='x')
+            ax.scatter(true_vals[i], ours_vals[i], alpha=0.6, color='steelblue', label='Ours (Alternating)', marker='o', edgecolors='white', linewidth=0.5)
+            
+            min_val = min(np.min(true_vals[i]), np.min(ours_vals[i]), np.min(base_vals[i]))
+            max_val = max(np.max(true_vals[i]), np.max(ours_vals[i]), np.max(base_vals[i]))
+            ax.plot([min_val, max_val], [min_val, max_val], 'k--', lw=2, label='Ideal ($y=x$)')
+            
+            if i == 2:
+                # R0 = 1 Threshold
+                ax.axvline(1.0, color='gray', linestyle=':', alpha=0.7)
+                ax.axhline(1.0, color='gray', linestyle=':', alpha=0.7)
+
+            ax.set_title(titles[i], fontsize=14)
+            ax.set_xlabel('True Value')
+            ax.set_ylabel('Predicted Value')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        save_path = os.path.join(self.results_path, 'sir_scatter_comparison.png')
+        plt.savefig(save_path, dpi=300)
+        plt.close()
+        print(f"  -> Saved {save_path}")
+
+    def _plot_trajectory_comparison(self, p_true, p_ours, p_base, R0_true):
+        from scipy.integrate import solve_ivp
+        
+        # R0 > 1 과 R0 < 1 인 대표 케이스 추출
+        try:
+            idx_epidemic = np.where(R0_true > 1.2)[0][0]
+            idx_decay = np.where(R0_true < 0.8)[0][0]
+        except IndexError:
+            print("  -> [Warning] Could not find both R0>1.2 and R0<0.8 cases. Using random indices.")
+            idx_epidemic, idx_decay = 0, len(R0_true)-1
+
+        indices = [idx_epidemic, idx_decay]
+        titles = [r'Epidemic Regime ($\mathcal{R}_0 > 1$)', r'Decay Regime ($\mathcal{R}_0 < 1$)']
+
+        fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+        t_span = (0, 110)
+        t_eval = np.linspace(0, 110, 200)
+        y0 = [49.0, 1.0, 0.0] # Data Generator 초기값 기준
+
+        def sir_ode(t, y, beta, gamma):
+            S, I, R = y
+            N = 50.0
+            return [-beta * S * I / N, beta * S * I / N - gamma * I, gamma * I]
+
+        for i, idx in enumerate(indices):
+            sol_true = solve_ivp(sir_ode, t_span, y0, args=tuple(p_true[idx]), t_eval=t_eval)
+            sol_base = solve_ivp(sir_ode, t_span, y0, args=tuple(p_base[idx]), t_eval=t_eval)
+            sol_ours = solve_ivp(sir_ode, t_span, y0, args=tuple(p_ours[idx]), t_eval=t_eval)
+
+            # Observed State S(t)
+            ax_s = axes[i, 0]
+            ax_s.plot(sol_true.t, sol_true.y[0], 'k-', lw=3, label='True S(t)')
+            ax_s.plot(sol_base.t, sol_base.y[0], 'indianred', linestyle='--', lw=2, label='Baseline Pred')
+            ax_s.plot(sol_ours.t, sol_ours.y[0], 'steelblue', linestyle='-.', lw=2, label='Ours Pred')
+            ax_s.set_title(f"Observed State: S(t) | {titles[i]}")
+            ax_s.set_xlabel("Time")
+            ax_s.set_ylabel("Population")
+            ax_s.legend()
+            ax_s.grid(True, alpha=0.3)
+
+            # Hidden State I(t)
+            ax_i = axes[i, 1]
+            ax_i.plot(sol_true.t, sol_true.y[1], 'k-', lw=3, label='True I(t) (Hidden)')
+            ax_i.plot(sol_base.t, sol_base.y[1], 'indianred', linestyle='--', lw=2, label='Baseline Pred')
+            ax_i.plot(sol_ours.t, sol_ours.y[1], 'steelblue', linestyle='-.', lw=2, label='Ours Pred')
+            ax_i.set_title(f"Hidden State: I(t) | {titles[i]}")
+            ax_i.set_xlabel("Time")
+            ax_i.legend()
+            ax_i.grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        save_path = os.path.join(self.results_path, 'sir_trajectory_comparison.png')
+        plt.savefig(save_path, dpi=300)
+        plt.close()
+        print(f"  -> Saved {save_path}")
+
+class LotkaVolterraAnalyzer(BaseAnalyzer):
+    def run_comparison(self, baseline_model):
+        print("\n=== Running Lotka-Volterra Comparison Analysis ===")
+        # LV 전용 Phase Portrait, Time-series Aliasing 비교 코드
+        pass
+
+class OgttSimulAnalyzer(BaseAnalyzer):
+    def run_comparison(self, baseline_model):
+        print("\n=== Running OGTT Comparison Analysis ===")
+        # OGTT 전용 Loss Landscape (Valley) 시각화, S_I vs sigma Joint Scatter 등
+    
+    # OGTT에만 있는 기존 메서드는 이쪽으로 이동시킵니다.
+
+    def evaluate_real_data(self, real_test_loader):
+        print(f"\n=== Real Data Evaluation ({len(real_test_loader.dataset)} samples) ===")
+        self.f_theta.eval()
+        self.g_phi.eval()
+        
+        all_p_true = []
+        all_p_pred = []
+        
+        with torch.no_grad():
+            for x_batch, _, p_batch in real_test_loader:
+                x_batch = x_batch.to(self.config.DEVICE)
+                p_batch = p_batch.to(self.config.DEVICE)
+                
+                p_pred_norm = self._run_fixed_point_iteration(x_batch, 
+                                                              max_iter=self.config.ITERATIONS,
+                                                              tol=1e-6)
+                
+                # Denormalize for metric calculation
+                p_pred_phys = self.normalizer.denormalize_params(p_pred_norm)
+                p_true_phys = self.normalizer.denormalize_params(p_batch)
+                
+                all_p_true.append(p_true_phys.cpu().numpy())
+                all_p_pred.append(p_pred_phys.cpu().numpy())
+
+        pred_params = np.concatenate(all_p_pred)
+        true_params = np.concatenate(all_p_true)
+        
+        self.plot_scatter(true_params, pred_params, prefix="real_data")\
+
+
+# ==========================================
+# 3. Factory Function (main.py에서 호출할 함수)
+# ==========================================
+def get_analyzer_class(system_name):
+    """시스템 이름에 따라 알맞은 Analyzer 클래스를 반환합니다."""
+    if system_name == 'sir':
+        return SIRAnalyzer
+    elif system_name == 'lotka_volterra':
+        return LotkaVolterraAnalyzer
+    elif system_name == 'ogtt_simul':
+        return OgttSimulAnalyzer
+    else:
+        print(f"  -> [Warning] Unknown system '{system_name}'. Falling back to BaseAnalyzer.")
+        return BaseAnalyzer
