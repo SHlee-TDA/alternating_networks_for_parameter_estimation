@@ -1,19 +1,26 @@
-# systems/sir.py
 import numpy as np
 import torch
 from .base_system import System
 
 class Sir(System):
-    """SIR 시스템의 상세 명세"""
+    """
+    SIR 시스템의 상세 명세 
+    (Baseline을 무너뜨리기 위해 파라미터 범위와 Sparsity를 극단적으로 조정한 버전)
+    """
     name = 'sir'
     param_names = ['beta', 'gamma']
-    param_ranges = {'beta': [0.05, 0.15], 'gamma': [0.05, 0.35]}
     
-    # SIR은 y0가 고정된 값
-    initial_conditions = ([50.0 - 1.0 - 0.0], [1.0], [0.0])
+    # 1. 파라미터 범위 확대: R0 가 0.02 부터 50 까지 다양하게 분포되도록 설정
+    param_ranges = {'beta': [0.01, 0.5], 'gamma': [0.01, 0.5]}
+    
+    # SIR은 y0가 고정된 값 (S=49, I=1, R=0)
+    initial_conditions = ([49.0], [1.0], [0.0])
     
     t_span = [0, 110]
-    t_points = np.array([0, 20, 40, 60, 80, 100])
+    
+    # 2. 관측 샘플 수 축소: 6개 -> 4개의 극단적인 Sparse 관측
+    t_points = np.array([0, 30, 60, 90])
+    
     observed_var_idx = 0  # S (Susceptible)
     hidden_var_idx = 1    # I (Infected)
 

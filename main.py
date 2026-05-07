@@ -354,7 +354,7 @@ def run_experiment_pipeline(global_config):
             print("  -> Evaluating on Real Clinical Data...")
             if hasattr(analyzer, 'evaluate_real_data') and real_test_loader is not None:
                 print("  -> Evaluating on Real Clinical Data...")
-                analyzer.evaluate_real_data(real_test_loader)
+                analyzer.evaluate_real_data(real_test_loader, baseline_model=baseline_model)
             
             # C. Logging Metrics
             metrics = {

@@ -457,7 +457,6 @@ class SIRAnalyzer(BaseAnalyzer):
             print("  -> [Warning] Baseline model not provided. Skipping SIR comparison.")
             return
 
-        print("\n=== Running SIR Comparison Analysis (Baseline vs Ours) ===")
         self.f_theta.eval()
         self.g_phi.eval()
         baseline_model.eval()
@@ -480,7 +479,7 @@ class SIRAnalyzer(BaseAnalyzer):
                 p_base_phys = self.normalizer.denormalize_params(p_base_norm).cpu().numpy()
                 all_p_base.append(p_base_phys)
                 
-                # 3. Ours (Alternating) Predictions - 기존 메서드 활용
+                # 3. Ours (Alternating) Predictions
                 p_ours_norm = self._run_fixed_point_iteration(x_batch, 
                                                               max_iter=self.config.ITERATIONS,
                                                               tol=1e-6)
@@ -496,35 +495,59 @@ class SIRAnalyzer(BaseAnalyzer):
         R0_ours = p_ours[:, 0] / p_ours[:, 1]
         R0_base = p_base[:, 0] / p_base[:, 1]
 
-        self._print_metrics_table(p_true, p_ours, p_base, R0_true, R0_ours, R0_base)
-        self._plot_sir_scatter(p_true, p_ours, p_base, R0_true, R0_ours, R0_base)
+        # 4. 평가 점수 계산 및 JSON 저장
+        metrics_dict = self._calculate_and_save_metrics(p_true, p_ours, p_base, R0_true, R0_ours, R0_base)
+        
+        # 5. 시각화 (Scatter Plot에 점수 포함)
+        self._plot_sir_scatter(p_true, p_ours, p_base, R0_true, R0_ours, R0_base, metrics_dict)
         self._plot_trajectory_comparison(p_true, p_ours, p_base, R0_true)
 
-    def _print_metrics_table(self, p_true, p_ours, p_base, R0_true, R0_ours, R0_base):
+    def _calculate_and_save_metrics(self, p_true, p_ours, p_base, R0_true, R0_ours, R0_base):
         def calc_metrics(true, pred):
-            rmse = np.sqrt(np.mean((true - pred)**2))
-            mae = np.mean(np.abs(true - pred))
-            pearson_r = pearsonr(true, pred)[0]
-            return rmse, mae, pearson_r
+            rmse = float(np.sqrt(np.mean((true - pred)**2)))
+            mae = float(np.mean(np.abs(true - pred)))
+            r = float(pearsonr(true, pred)[0]) if len(true) > 1 else 0.0
+            return {"RMSE": rmse, "MAE": mae, "Pearson_r": r}
 
         metrics = {
-            "Beta (RMSE / MAE / Pearson)": [calc_metrics(p_true[:, 0], p_base[:, 0]), calc_metrics(p_true[:, 0], p_ours[:, 0])],
-            "Gamma (RMSE / MAE / Pearson)": [calc_metrics(p_true[:, 1], p_base[:, 1]), calc_metrics(p_true[:, 1], p_ours[:, 1])],
-            "R0 (RMSE / MAE / Pearson)": [calc_metrics(R0_true, R0_base), calc_metrics(R0_true, R0_ours)]
+            "Beta": {
+                "Baseline": calc_metrics(p_true[:, 0], p_base[:, 0]),
+                "Ours": calc_metrics(p_true[:, 0], p_ours[:, 0])
+            },
+            "Gamma": {
+                "Baseline": calc_metrics(p_true[:, 1], p_base[:, 1]),
+                "Ours": calc_metrics(p_true[:, 1], p_ours[:, 1])
+            },
+            "R0": {
+                "Baseline": calc_metrics(R0_true, R0_base),
+                "Ours": calc_metrics(R0_true, R0_ours)
+            }
         }
 
-        print("\n" + "="*60)
-        print(f"{'Metric':<20} | {'Baseline (Single)':<18} | {'Ours (Alternating)':<18}")
-        print("-" * 60)
+        # 표(Table) 콘솔 출력
+        print("\n" + "="*85)
+        print(f"{'Metric':<10} | {'Baseline (RMSE / MAE / r)':<33} | {'Ours (RMSE / MAE / r)':<33}")
+        print("-" * 85)
         for key, vals in metrics.items():
-            base_str = f"{vals[0][0]:.4f} / {vals[0][1]:.4f}"
-            ours_str = f"{vals[1][0]:.4f} / {vals[1][1]:.4f}"
-            print(f"{key:<20} | {base_str:<18} | {ours_str:<18}")
-        print("="*60 + "\n")
+            b = vals['Baseline']
+            o = vals['Ours']
+            b_str = f"{b['RMSE']:.4f} / {b['MAE']:.4f} / {b['Pearson_r']:.4f}"
+            o_str = f"{o['RMSE']:.4f} / {o['MAE']:.4f} / {o['Pearson_r']:.4f}"
+            print(f"{key:<10} | {b_str:<33} | {o_str:<33}")
+        print("="*85 + "\n")
 
-    def _plot_sir_scatter(self, p_true, p_ours, p_base, R0_true, R0_ours, R0_base):
-        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+        # JSON 파일로 저장
+        save_path = os.path.join(self.results_path, 'sir_comparison_metrics.json')
+        with open(save_path, 'w') as f:
+            json.dump(metrics, f, indent=4)
+        print(f"  -> Saved quantitative metrics to {save_path}")
+        
+        return metrics
+
+    def _plot_sir_scatter(self, p_true, p_ours, p_base, R0_true, R0_ours, R0_base, metrics_dict):
+        fig, axes = plt.subplots(1, 3, figsize=(16, 5.5))
         titles = [r'Infection Rate ($\beta$)', r'Recovery Rate ($\gamma$)', r'Basic Reproduction Number ($\mathcal{R}_0$)']
+        keys = ["Beta", "Gamma", "R0"]
         
         true_vals = [p_true[:, 0], p_true[:, 1], R0_true]
         ours_vals = [p_ours[:, 0], p_ours[:, 1], R0_ours]
@@ -532,9 +555,12 @@ class SIRAnalyzer(BaseAnalyzer):
 
         for i in range(3):
             ax = axes[i]
-            ax.scatter(true_vals[i], base_vals[i], alpha=0.5, color='indianred', label='Baseline (Single)', marker='x')
-            ax.scatter(true_vals[i], ours_vals[i], alpha=0.6, color='steelblue', label='Ours (Alternating)', marker='o', edgecolors='white', linewidth=0.5)
             
+            # Scatter plots
+            ax.scatter(true_vals[i], base_vals[i], alpha=0.4, color='indianred', label='Baseline (Single)', marker='x')
+            ax.scatter(true_vals[i], ours_vals[i], alpha=0.5, color='steelblue', label='Ours (Alternating)', marker='o', edgecolors='white', linewidth=0.5)
+            
+            # y=x line
             min_val = min(np.min(true_vals[i]), np.min(ours_vals[i]), np.min(base_vals[i]))
             max_val = max(np.max(true_vals[i]), np.max(ours_vals[i]), np.max(base_vals[i]))
             ax.plot([min_val, max_val], [min_val, max_val], 'k--', lw=2, label='Ideal ($y=x$)')
@@ -544,22 +570,40 @@ class SIRAnalyzer(BaseAnalyzer):
                 ax.axvline(1.0, color='gray', linestyle=':', alpha=0.7)
                 ax.axhline(1.0, color='gray', linestyle=':', alpha=0.7)
 
-            ax.set_title(titles[i], fontsize=14)
+            # Metric Text Box 삽입 (좌측 상단)
+            b_mets = metrics_dict[keys[i]]['Baseline']
+            o_mets = metrics_dict[keys[i]]['Ours']
+            
+            textstr = '\n'.join((
+                r'$\bf{Baseline}$',
+                f'RMSE: {b_mets["RMSE"]:.4f}',
+                f'r: {b_mets["Pearson_r"]:.4f}',
+                '',
+                r'$\bf{Ours}$',
+                f'RMSE: {o_mets["RMSE"]:.4f}',
+                f'r: {o_mets["Pearson_r"]:.4f}'
+            ))
+            
+            props = dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='lightgray')
+            ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=10,
+                    verticalalignment='top', bbox=props)
+
+            ax.set_title(titles[i], fontsize=14, pad=15)
             ax.set_xlabel('True Value')
             ax.set_ylabel('Predicted Value')
-            ax.legend()
+            ax.legend(loc='lower right')
             ax.grid(True, alpha=0.3)
 
         plt.tight_layout()
         save_path = os.path.join(self.results_path, 'sir_scatter_comparison.png')
         plt.savefig(save_path, dpi=300)
         plt.close()
-        print(f"  -> Saved {save_path}")
+        print(f"  -> Saved scatter plots to {save_path}")
 
     def _plot_trajectory_comparison(self, p_true, p_ours, p_base, R0_true):
+        # (이전과 동일한 _plot_trajectory_comparison 코드 유지)
         from scipy.integrate import solve_ivp
         
-        # R0 > 1 과 R0 < 1 인 대표 케이스 추출
         try:
             idx_epidemic = np.where(R0_true > 1.2)[0][0]
             idx_decay = np.where(R0_true < 0.8)[0][0]
@@ -573,7 +617,7 @@ class SIRAnalyzer(BaseAnalyzer):
         fig, axes = plt.subplots(2, 2, figsize=(12, 10))
         t_span = (0, 110)
         t_eval = np.linspace(0, 110, 200)
-        y0 = [49.0, 1.0, 0.0] # Data Generator 초기값 기준
+        y0 = [49.0, 1.0, 0.0]
 
         def sir_ode(t, y, beta, gamma):
             S, I, R = y
@@ -610,49 +654,385 @@ class SIRAnalyzer(BaseAnalyzer):
         save_path = os.path.join(self.results_path, 'sir_trajectory_comparison.png')
         plt.savefig(save_path, dpi=300)
         plt.close()
-        print(f"  -> Saved {save_path}")
+        print(f"  -> Saved trajectory plots to {save_path}")
 
 class LotkaVolterraAnalyzer(BaseAnalyzer):
     def run_comparison(self, baseline_model):
+        """
+        Lotka-Volterra 모델에 대한 Baseline vs Ours 비교 분석
+        """
         print("\n=== Running Lotka-Volterra Comparison Analysis ===")
-        # LV 전용 Phase Portrait, Time-series Aliasing 비교 코드
-        pass
 
-class OgttSimulAnalyzer(BaseAnalyzer):
-    def run_comparison(self, baseline_model):
-        print("\n=== Running OGTT Comparison Analysis ===")
-        # OGTT 전용 Loss Landscape (Valley) 시각화, S_I vs sigma Joint Scatter 등
-    
-    # OGTT에만 있는 기존 메서드는 이쪽으로 이동시킵니다.
+        if baseline_model is None:
+            print("  -> [Warning] Baseline model not provided. Skipping LV comparison.")
+            return
 
-    def evaluate_real_data(self, real_test_loader):
-        print(f"\n=== Real Data Evaluation ({len(real_test_loader.dataset)} samples) ===")
         self.f_theta.eval()
         self.g_phi.eval()
-        
+        baseline_model.eval()
+
         all_p_true = []
-        all_p_pred = []
-        
+        all_p_ours = []
+        all_p_base = []
+        sample_x_for_plot = None # 시각화를 위한 샘플 데이터 저장
+
         with torch.no_grad():
-            for x_batch, _, p_batch in real_test_loader:
+            for x_batch, _, p_batch in self.test_loader:
                 x_batch = x_batch.to(self.config.DEVICE)
                 p_batch = p_batch.to(self.config.DEVICE)
                 
-                p_pred_norm = self._run_fixed_point_iteration(x_batch, 
+                if sample_x_for_plot is None:
+                    sample_x_for_plot = x_batch[0].cpu().numpy()
+                
+                # 1. True
+                p_true_phys = self.normalizer.denormalize_params(p_batch).cpu().numpy()
+                all_p_true.append(p_true_phys)
+                
+                # 2. Baseline
+                p_base_norm = baseline_model(x_batch)
+                p_base_phys = self.normalizer.denormalize_params(p_base_norm).cpu().numpy()
+                all_p_base.append(p_base_phys)
+                
+                # 3. Ours
+                p_ours_norm = self._run_fixed_point_iteration(x_batch, 
                                                               max_iter=self.config.ITERATIONS,
                                                               tol=1e-6)
-                
-                # Denormalize for metric calculation
-                p_pred_phys = self.normalizer.denormalize_params(p_pred_norm)
-                p_true_phys = self.normalizer.denormalize_params(p_batch)
-                
-                all_p_true.append(p_true_phys.cpu().numpy())
-                all_p_pred.append(p_pred_phys.cpu().numpy())
+                p_ours_phys = self.normalizer.denormalize_params(p_ours_norm).cpu().numpy()
+                all_p_ours.append(p_ours_phys)
 
-        pred_params = np.concatenate(all_p_pred)
-        true_params = np.concatenate(all_p_true)
+        p_true = np.concatenate(all_p_true, axis=0)
+        p_ours = np.concatenate(all_p_ours, axis=0)
+        p_base = np.concatenate(all_p_base, axis=0)
+
+        # 4. 정량 지표 계산 및 저장
+        metrics_dict = self._calculate_and_save_metrics(p_true, p_ours, p_base)
         
-        self.plot_scatter(true_params, pred_params, prefix="real_data")\
+        # 5. 시각화 
+        self._plot_lv_scatter(p_true, p_ours, p_base, metrics_dict)
+        self._plot_lv_trajectories_and_phase(p_true, p_ours, p_base)
+
+    def _calculate_and_save_metrics(self, p_true, p_ours, p_base):
+        def calc_metrics(true, pred):
+            rmse = float(np.sqrt(np.mean((true - pred)**2)))
+            mae = float(np.mean(np.abs(true - pred)))
+            r = float(pearsonr(true, pred)[0]) if len(true) > 1 else 0.0
+            return {"RMSE": rmse, "MAE": mae, "Pearson_r": r}
+
+        metrics = {}
+        for i, p_name in enumerate(self.system.param_names):
+            metrics[p_name] = {
+                "Baseline": calc_metrics(p_true[:, i], p_base[:, i]),
+                "Ours": calc_metrics(p_true[:, i], p_ours[:, i])
+            }
+
+        print("\n" + "="*85)
+        print(f"{'Metric':<10} | {'Baseline (RMSE / MAE / r)':<33} | {'Ours (RMSE / MAE / r)':<33}")
+        print("-" * 85)
+        for key, vals in metrics.items():
+            b, o = vals['Baseline'], vals['Ours']
+            b_str = f"{b['RMSE']:.4f} / {b['MAE']:.4f} / {b['Pearson_r']:.4f}"
+            o_str = f"{o['RMSE']:.4f} / {o['MAE']:.4f} / {o['Pearson_r']:.4f}"
+            print(f"{key:<10} | {b_str:<33} | {o_str:<33}")
+        print("="*85 + "\n")
+
+        save_path = os.path.join(self.results_path, 'lv_comparison_metrics.json')
+        with open(save_path, 'w') as f:
+            json.dump(metrics, f, indent=4)
+        return metrics
+
+    def _plot_lv_scatter(self, p_true, p_ours, p_base, metrics_dict):
+        num_params = len(self.system.param_names)
+        fig, axes = plt.subplots(1, num_params, figsize=(5*num_params, 5.5))
+        if num_params == 1: axes = [axes]
+
+        for i, p_name in enumerate(self.system.param_names):
+            ax = axes[i]
+            true_v, ours_v, base_v = p_true[:, i], p_ours[:, i], p_base[:, i]
+            
+            ax.scatter(true_v, base_v, alpha=0.4, color='indianred', label='Baseline', marker='x')
+            ax.scatter(true_v, ours_v, alpha=0.5, color='steelblue', label='Ours', marker='o', edgecolors='white', lw=0.5)
+            
+            min_v, max_v = min(np.min(true_v), np.min(base_v)), max(np.max(true_v), np.max(base_v))
+            ax.plot([min_v, max_v], [min_v, max_v], 'k--', lw=2, label='Ideal')
+            
+            b_mets, o_mets = metrics_dict[p_name]['Baseline'], metrics_dict[p_name]['Ours']
+            textstr = '\n'.join((
+                r'$\bf{Baseline}$', f'RMSE: {b_mets["RMSE"]:.4f}', f'r: {b_mets["Pearson_r"]:.4f}', '',
+                r'$\bf{Ours}$', f'RMSE: {o_mets["RMSE"]:.4f}', f'r: {o_mets["Pearson_r"]:.4f}'
+            ))
+            props = dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='lightgray')
+            ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=10, verticalalignment='top', bbox=props)
+
+            ax.set_title(f"Parameter: {p_name}", fontsize=14, pad=15)
+            ax.set_xlabel('True Value')
+            ax.set_ylabel('Predicted Value')
+            ax.legend(loc='lower right')
+            ax.grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(self.results_path, 'lv_scatter_comparison.png'), dpi=300)
+        plt.close()
+
+    def _plot_lv_trajectories_and_phase(self, p_true, p_ours, p_base):
+        from scipy.integrate import solve_ivp
+        
+        # 진폭이 큰 극단적 케이스 하나를 랜덤(또는 특정 룰)으로 추출
+        idx = np.random.randint(0, len(p_true))
+        
+        fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+        t_span = (0, 50) # LV 시스템의 시간에 맞게 조절 필요 (예: 0~50)
+        t_eval = np.linspace(0, 50, 500)
+        
+        # 시스템 초기값 가져오기
+        y0 = self.system.initial_conditions
+        y0 = [y[0] if isinstance(y, list) else y for y in y0]
+
+        # 동적으로 파라미터 언패킹 (alpha, beta, delta, gamma 가정)
+        def lv_ode(t, y, *params):
+            x, y_predator = y
+            alpha, beta, delta, gamma = params[0], params[1], params[2], params[3]
+            dxdt = alpha * x - beta * x * y_predator
+            dydt = delta * x * y_predator - gamma * y_predator
+            return [dxdt, dydt]
+
+        sol_true = solve_ivp(lv_ode, t_span, y0, args=tuple(p_true[idx]), t_eval=t_eval)
+        sol_base = solve_ivp(lv_ode, t_span, y0, args=tuple(p_base[idx]), t_eval=t_eval)
+        sol_ours = solve_ivp(lv_ode, t_span, y0, args=tuple(p_ours[idx]), t_eval=t_eval)
+
+        # 1. Prey (x) Trajectory
+        ax = axes[0]
+        ax.plot(sol_true.t, sol_true.y[0], 'k-', lw=2, label='True Prey')
+        ax.plot(sol_base.t, sol_base.y[0], 'indianred', linestyle='--', lw=2, label='Baseline')
+        ax.plot(sol_ours.t, sol_ours.y[0], 'steelblue', linestyle='-.', lw=2, label='Ours')
+        ax.set_title("Prey Dynamics (Observed)")
+        ax.set_xlabel("Time"); ax.legend(); ax.grid(True, alpha=0.3)
+
+        # 2. Predator (y) Trajectory
+        ax = axes[1]
+        ax.plot(sol_true.t, sol_true.y[1], 'k-', lw=2, label='True Predator')
+        ax.plot(sol_base.t, sol_base.y[1], 'indianred', linestyle='--', lw=2, label='Baseline')
+        ax.plot(sol_ours.t, sol_ours.y[1], 'steelblue', linestyle='-.', lw=2, label='Ours')
+        ax.set_title("Predator Dynamics (Hidden)")
+        ax.set_xlabel("Time"); ax.legend(); ax.grid(True, alpha=0.3)
+
+        # 3. Phase Portrait (Prey vs Predator)
+        ax = axes[2]
+        ax.plot(sol_true.y[0], sol_true.y[1], 'k-', lw=2, label='True Limit Cycle')
+        ax.plot(sol_base.y[0], sol_base.y[1], 'indianred', linestyle='--', lw=2, label='Baseline')
+        ax.plot(sol_ours.y[0], sol_ours.y[1], 'steelblue', linestyle='-.', lw=2, label='Ours')
+        ax.set_title("Phase Portrait")
+        ax.set_xlabel("Prey (x)"); ax.set_ylabel("Predator (y)")
+        ax.legend(); ax.grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(self.results_path, 'lv_dynamics_comparison.png'), dpi=300)
+        plt.close()
+
+class OgttSimulAnalyzer(BaseAnalyzer):
+    def run_comparison(self, baseline_model):
+        print("\n=== Running OGTT Simulation Comparison Analysis ===")
+        if baseline_model is None:
+            print("  -> [Warning] Baseline model not provided.")
+            return
+
+        p_true, p_ours, p_base = self._get_predictions(self.test_loader, baseline_model)
+
+        metrics_dict = self._calculate_and_save_metrics(p_true, p_ours, p_base, filename="ogtt_sim_metrics.json")
+        self._plot_ogtt_scatter(p_true, p_ours, p_base, metrics_dict, prefix="sim")
+        self._plot_symmetric_collapse(p_true, p_ours, p_base, prefix="sim")
+        self._plot_ogtt_trajectories(p_true, p_ours, p_base)
+
+    def evaluate_real_data(self, real_test_loader, baseline_model=None):
+        """
+        Real Dataset(Sumner)에 대해 Baseline과 Ours를 동시 평가합니다.
+        """
+        print(f"\n=== Running OGTT REAL DATA Comparison ({len(real_test_loader.dataset)} samples) ===")
+        
+        p_true, p_ours, p_base = self._get_predictions(real_test_loader, baseline_model)
+
+        metrics_dict = self._calculate_and_save_metrics(p_true, p_ours, p_base, filename="ogtt_real_metrics.json")
+        self._plot_ogtt_scatter(p_true, p_ours, p_base, metrics_dict, prefix="real")
+        self._plot_symmetric_collapse(p_true, p_ours, p_base, prefix="real")
+
+    def _get_predictions(self, loader, baseline_model):
+        """Loader에서 데이터를 뽑아 P_true, P_ours, P_base를 반환합니다."""
+        self.f_theta.eval()
+        self.g_phi.eval()
+        if baseline_model: baseline_model.eval()
+
+        all_p_true, all_p_ours, all_p_base = [], [], []
+
+        with torch.no_grad():
+            for x_batch, _, p_batch in loader:
+                x_batch = x_batch.to(self.config.DEVICE)
+                p_batch = p_batch.to(self.config.DEVICE)
+                
+                # 1. True
+                all_p_true.append(self.normalizer.denormalize_params(p_batch).cpu().numpy())
+                
+                # 2. Ours
+                p_ours_norm = self._run_fixed_point_iteration(x_batch, max_iter=self.config.ITERATIONS, tol=1e-6)
+                all_p_ours.append(self.normalizer.denormalize_params(p_ours_norm).cpu().numpy())
+                
+                # 3. Baseline
+                if baseline_model:
+                    p_base_norm = baseline_model(x_batch)
+                    all_p_base.append(self.normalizer.denormalize_params(p_base_norm).cpu().numpy())
+                else:
+                    all_p_base.append(np.zeros_like(all_p_true[-1]))
+
+        return np.concatenate(all_p_true, axis=0), np.concatenate(all_p_ours, axis=0), np.concatenate(all_p_base, axis=0)
+
+    def _calculate_and_save_metrics(self, p_true, p_ours, p_base, filename):
+        def calc_metrics(true, pred):
+            rmse = float(np.sqrt(np.mean((true - pred)**2)))
+            mae = float(np.mean(np.abs(true - pred)))
+            r = float(pearsonr(true, pred)[0]) if len(true) > 1 else 0.0
+            return {"RMSE": rmse, "MAE": mae, "Pearson_r": r}
+
+        metrics = {}
+        for i, p_name in enumerate(self.system.param_names):
+            metrics[p_name] = {
+                "Baseline": calc_metrics(p_true[:, i], p_base[:, i]),
+                "Ours": calc_metrics(p_true[:, i], p_ours[:, i])
+            }
+
+        print("\n" + "="*85)
+        print(f"{'OGTT Metric':<12} | {'Baseline (RMSE / MAE / r)':<33} | {'Ours (RMSE / MAE / r)':<33}")
+        print("-" * 85)
+        for key, vals in metrics.items():
+            b, o = vals['Baseline'], vals['Ours']
+            print(f"{key:<12} | {b['RMSE']:.4f} / {b['MAE']:.4f} / {b['Pearson_r']:.4f} | {o['RMSE']:.4f} / {o['MAE']:.4f} / {o['Pearson_r']:.4f}")
+        print("="*85 + "\n")
+
+        with open(os.path.join(self.results_path, filename), 'w') as f:
+            json.dump(metrics, f, indent=4)
+        return metrics
+
+    def _plot_symmetric_collapse(self, p_true, p_ours, p_base, prefix="sim"):
+        """보내주신 코드를 바탕으로 Baseline과 Ours를 함께 비교하는 핵심 플롯"""
+        print(f"[Info] Generating Symmetric Collapse Visualization ({prefix})")
+        
+        idx_si, idx_sigma = 0, 1 # S_I와 Sigma의 인덱스
+        
+        si_true, sigma_true = p_true[:, idx_si], p_true[:, idx_sigma]
+        si_ours, sigma_ours = p_ours[:, idx_si], p_ours[:, idx_sigma]
+        si_base, sigma_base = p_base[:, idx_si], p_base[:, idx_sigma]
+        
+        k_true = si_true * sigma_true
+        k_ours = si_ours * sigma_ours
+        k_base = si_base * sigma_base
+        
+        sns.set_style("ticks")
+        fig = plt.figure(figsize=(20, 6))
+        
+        # --- Panel 1: Log-Log Joint Distribution ---
+        ax1 = fig.add_subplot(131)
+        ax1.scatter(si_true, sigma_true, c='grey', alpha=0.15, s=20, label='Ground Truth')
+        # Baseline은 붉은색 X로 (대각선으로 붕괴됨을 보여줌)
+        ax1.scatter(si_base, sigma_base, c='crimson', alpha=0.5, s=15, marker='x', label='Baseline')
+        # Ours는 푸른색 O로 (분포를 따라감을 보여줌)
+        ax1.scatter(si_ours, sigma_ours, c='steelblue', alpha=0.6, s=15, edgecolors='white', lw=0.5, label='Ours')
+        
+        ax1.set_xscale('log'); ax1.set_yscale('log')
+        vmin, vmax = min(si_true.min(), sigma_true.min()), max(si_true.max(), sigma_true.max())
+        ax1.plot([vmin, vmax], [vmin, vmax], 'b--', linewidth=1.5, label='y=x (Symmetric Line)')
+        
+        ax1.set_xlabel("$S_I$ [Log]", fontsize=12); ax1.set_ylabel("$\sigma$ [Log]", fontsize=12)
+        ax1.set_title("1. Log-Log Joint Distribution", fontsize=14, fontweight='bold')
+        ax1.legend(loc='upper left'); ax1.grid(True, alpha=0.2)
+        
+        # --- Panel 2: Product Distribution ---
+        ax2 = fig.add_subplot(132)
+        sns.kdeplot(np.log10(k_true), ax=ax2, color='grey', fill=True, alpha=0.3, linewidth=2, label='Log($K_{true}$)')
+        sns.kdeplot(np.log10(k_base), ax=ax2, color='crimson', linestyle='--', linewidth=2, label='Log($K_{base}$)')
+        sns.kdeplot(np.log10(k_ours), ax=ax2, color='steelblue', linewidth=2, label='Log($K_{ours}$)')
+        
+        ax2.set_xlabel("Log Product ($\log_{10} K$)", fontsize=12); ax2.set_ylabel("Density", fontsize=12)
+        ax2.set_title("2. Product Consistency (Stiff Direction)", fontsize=14, fontweight='bold')
+        ax2.legend(); ax2.grid(True, alpha=0.2)
+        
+        # --- Panel 3: S_I Correlation (Sloppy Direction Failure) ---
+        # 개별 파라미터(S_I)에 대해 Baseline이 얼마나 망가졌고 Ours가 얼마나 맞추는지 보여줍니다.
+        ax3 = fig.add_subplot(133)
+        ax3.scatter(np.log10(si_true), np.log10(si_base), c='crimson', alpha=0.4, s=15, marker='x', label='Baseline')
+        ax3.scatter(np.log10(si_true), np.log10(si_ours), c='steelblue', alpha=0.5, s=15, edgecolors='white', lw=0.5, label='Ours')
+        
+        min_log, max_log = np.log10(si_true).min(), np.log10(si_true).max()
+        ax3.plot([min_log, max_log], [min_log, max_log], 'k--', lw=2, label='Ideal (y=x)')
+        
+        ax3.set_xlabel("Log True $S_I$", fontsize=12); ax3.set_ylabel("Log Pred $S_I$", fontsize=12)
+        ax3.set_title("3. $S_I$ Prediction (Sloppy Direction)", fontsize=14, fontweight='bold')
+        ax3.legend(); ax3.grid(True, alpha=0.2)
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(self.results_path, f'{prefix}_symmetric_collapse.png'), dpi=300)
+        plt.close()
+
+    def _plot_ogtt_scatter(self, p_true, p_ours, p_base, metrics_dict, prefix="sim"):
+        # 기존과 동일한 개별 파라미터 산점도
+        num_params = len(self.system.param_names)
+        fig, axes = plt.subplots(1, num_params, figsize=(5*num_params, 5.5))
+        if num_params == 1: axes = [axes]
+
+        for i, p_name in enumerate(self.system.param_names):
+            ax = axes[i]
+            true_v, ours_v, base_v = p_true[:, i], p_ours[:, i], p_base[:, i]
+            
+            ax.scatter(true_v, base_v, alpha=0.3, color='indianred', label='Baseline', marker='x')
+            ax.scatter(true_v, ours_v, alpha=0.5, color='steelblue', label='Ours', marker='o', edgecolors='white', lw=0.5)
+            
+            min_v, max_v = min(np.min(true_v), np.min(base_v)), max(np.max(true_v), np.max(base_v))
+            ax.plot([min_v, max_v], [min_v, max_v], 'k--', lw=2, label='Ideal')
+            
+            b_mets, o_mets = metrics_dict[p_name]['Baseline'], metrics_dict[p_name]['Ours']
+            textstr = '\n'.join((
+                r'$\bf{Baseline}$', f'RMSE: {b_mets["RMSE"]:.4f}', f'r: {b_mets["Pearson_r"]:.4f}', '',
+                r'$\bf{Ours}$', f'RMSE: {o_mets["RMSE"]:.4f}', f'r: {o_mets["Pearson_r"]:.4f}'
+            ))
+            props = dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='lightgray')
+            ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=10, verticalalignment='top', bbox=props)
+
+            ax.set_title(f"{p_name}", fontsize=14, pad=15)
+            ax.set_xlabel('True Value'); ax.set_ylabel('Predicted Value')
+            ax.legend(loc='lower right'); ax.grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(self.results_path, f'{prefix}_scatter_comparison.png'), dpi=300)
+        plt.close()
+
+    def _plot_ogtt_trajectories(self, p_true, p_ours, p_base):
+        from scipy.integrate import solve_ivp
+        idx = np.argmax(np.abs(p_true[:, 0] - p_base[:, 0])) # 오차가 가장 큰 샘플
+        
+        fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+        t_span = (0, 120); t_eval = np.linspace(0, 120, 200)
+        y0 = self.system.initial_conditions
+        y0 = [y[0] if isinstance(y, list) else y for y in y0]
+
+        def ogtt_ode(t, y, *params): return self.system.ode_func(t, y, params)
+
+        sol_true = solve_ivp(ogtt_ode, t_span, y0, args=tuple(p_true[idx]), t_eval=t_eval)
+        sol_base = solve_ivp(ogtt_ode, t_span, y0, args=tuple(p_base[idx]), t_eval=t_eval)
+        sol_ours = solve_ivp(ogtt_ode, t_span, y0, args=tuple(p_ours[idx]), t_eval=t_eval)
+
+        ax = axes[0]
+        ax.plot(sol_true.t, sol_true.y[0], 'k-', lw=2, label='True Glucose')
+        ax.plot(sol_base.t, sol_base.y[0], 'indianred', linestyle='--', lw=2, label='Baseline')
+        ax.plot(sol_ours.t, sol_ours.y[0], 'steelblue', linestyle='-.', lw=2, label='Ours')
+        ax.set_title("Glucose Dynamics (Observed)")
+        ax.set_xlabel("Time (min)"); ax.legend(); ax.grid(True, alpha=0.3)
+
+        ax = axes[1]
+        ax.plot(sol_true.t, sol_true.y[1], 'k-', lw=2, label='True Insulin (Hidden)')
+        ax.plot(sol_base.t, sol_base.y[1], 'indianred', linestyle='--', lw=2, label='Baseline (Failed)')
+        ax.plot(sol_ours.t, sol_ours.y[1], 'steelblue', linestyle='-.', lw=2, label='Ours')
+        ax.set_title("Insulin Dynamics (Hidden State Failure)")
+        ax.set_xlabel("Time (min)"); ax.legend(); ax.grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(self.results_path, 'sim_trajectory_comparison.png'), dpi=300)
+        plt.close()
 
 
 # ==========================================
