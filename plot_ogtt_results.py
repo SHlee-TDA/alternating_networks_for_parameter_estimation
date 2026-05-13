@@ -9,6 +9,7 @@ import torch
 import numpy as np
 from scipy.stats import pearsonr
 from scipy.integrate import solve_ivp
+import pandas as pd
 
 from config import Config
 from models import ParameterEstimator, HiddenVarPredictor, SingleNetworkBaseline
@@ -230,7 +231,104 @@ def plot_ogtt_trajectories(p_true, p_ours, p_base, system, save_dir, prefix="sim
     plt.close()
     print(f"[Success] Plot saved to: {save_path}")
 
+def evaluate_robustness(Hnet, Pnet, base_model, x_norm, p_true_tensor, normalizer, target_dir):
+    print("\n\033[1;36m=== Running Robustness Stress Test with Variance Analysis ===\033[0m")
+    
+    noise_levels = [0.0, 0.5, 1.0, 2.0, 3.0, 5.0, 10.0, 20.0, 30.0, 50.0] 
+    results = []
+    x_std = x_norm.std(dim=0, keepdim=True)
+    
+    for nl_val in noise_levels:
+        nl = nl_val / 100.0
+        print(f"[Testing] Noise Level: {nl_val:.1f}% ...", end="\r")
+        
+        torch.manual_seed(42)
+        noise = torch.randn_like(x_norm) * (x_std * nl)
+        x_noisy = x_norm + noise
+        
+        p_true_phys, p_ours_phys, p_base_phys = run_inference(Hnet, Pnet, base_model, x_noisy, p_true_tensor, normalizer)
+        
+        def safe_pearsonr(x, y, eps=1e-12):
+            """
+            부동 소수점 오차를 고려하여 분산이 거의 0인 경우를 안전하게 처리합니다.
+            """
+            var_x = np.var(x)
+            var_y = np.var(y)
+            
+            # 분산이 시스템 허용 오차(eps)보다 작으면 상관관계가 없다고 판단(0.0 반환)
+            if var_x < eps or var_y < eps:
+                # 이 경우가 발생한다면 '매니폴드 붕괴'의 확실한 증거가 됩니다.
+                return 0.0
+            
+            r, _ = pearsonr(x, y)
+            return r if np.isfinite(r) else 0.0
 
+        r_si_base = safe_pearsonr(p_true_phys[:, 0], p_base_phys[:, 0])
+        r_sigma_base = safe_pearsonr(p_true_phys[:, 1], p_base_phys[:, 1])
+        r_si_ours = safe_pearsonr(p_true_phys[:, 0], p_ours_phys[:, 0])
+        r_sigma_ours = safe_pearsonr(p_true_phys[:, 1], p_ours_phys[:, 1])
+
+        results.append({
+            'noise_level': nl_val,
+            'Base_SI_Pearson': r_si_base, 'Base_Sigma_Pearson': r_sigma_base,
+            'Ours_SI_Pearson': r_si_ours, 'Ours_Sigma_Pearson': r_sigma_ours,
+            'Var_SI_GT': np.var(p_true_phys[:, 0]), 'Var_Sigma_GT': np.var(p_true_phys[:, 1]),
+            'Var_SI_Base': np.var(p_base_phys[:, 0]), 'Var_Sigma_Base': np.var(p_base_phys[:, 1]),
+            'Var_SI_Ours': np.var(p_ours_phys[:, 0]), 'Var_Sigma_Ours': np.var(p_ours_phys[:, 1])
+        })
+
+    df = pd.DataFrame(results)
+    df.to_csv(target_dir / "robustness_metrics_with_variance.csv", index=False)
+
+    # --- 시각화: Pearson R(상관성)과 Variance(표현력) 동시 비교 ---
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+
+    # Panel 1 & 2: Pearson Correlation (기존과 동일)
+    for i, (param, label) in enumerate(zip(['SI', 'Sigma'], ['$S_I$', '$\sigma$'])):
+        ax = axes[0, i]
+        ax.plot(df['noise_level'], df[f'Base_{param}_Pearson'], 'ro--', label=f'Baseline ({label})')
+        ax.plot(df['noise_level'], df[f'Ours_{param}_Pearson'], 'bo-', label=f'Ours ({label})')
+        ax.set_ylim(-0.1, 1.1)
+        ax.set_title(f"{label} Prediction Robustness (Pearson $r$)", fontsize=14, fontweight='bold')
+        ax.set_xlabel("Noise Level (%)"); ax.set_ylabel("Correlation ($r$)")
+        ax.grid(True, alpha=0.3); ax.legend()
+
+    # Panel 3 & 4: Variance Comparison (붕괴 여부 진단)
+    for i, (param, label) in enumerate(zip(['SI', 'Sigma'], ['$S_I$', '$\sigma$'])):
+        ax = axes[1, i]
+        
+        # 1. 시각적 가독성을 위해 GT 분산을 기준으로 데이터를 정규화하거나 로그 스케일 검토
+        gt_var = df[f'Var_{param}_GT'].iloc[0]
+        base_var = df[f'Var_{param}_Base']
+        ours_var = df[f'Var_{param}_Ours']
+
+        limit = 0.2
+        base_var_clipped = np.clip(base_var, None, limit + 0.1)
+        ours_var_clipped = np.clip(ours_var, None, limit + 0.1)
+
+        # 3. 로그 스케일 적용 (분산이 수십 배 차이 날 때 유용)
+        # 만약 로그 스케일을 쓰고 싶다면 ax.set_yscale('log')를 사용하세요.
+        # 여기서는 연구자님의 요청대로 1.0 임계값 클리핑 방식을 적용합니다.
+        
+        ax.axhline(y=gt_var, color='grey', linestyle='-', alpha=0.5, label='Ground Truth Var')
+        ax.plot(df['noise_level'], base_var_clipped, 'ro--', label='Baseline Var')
+        ax.plot(df['noise_level'], ours_var_clipped, 'bo-', label='Ours Var')
+
+        # 4. '폭발 구역' 시각화
+        ax.axhspan(limit, limit + 0.05, color='red', alpha=0.1)
+        ax.text(df['noise_level'].mean(), limit + 0.025, "Divergence Zone", 
+                color='red', fontsize=10, ha='center', fontweight='bold')
+
+        ax.set_ylim(0.0, limit + 0.05) # 상단을 고정하여 바닥의 Ours 분산을 보호
+        ax.set_title(f"{label} Variance: Stability vs. Explosion", fontsize=14, fontweight='bold')
+        ax.set_xlabel("Noise Level (%)")
+        ax.set_ylabel("Variance")
+        ax.grid(True, alpha=0.2)
+        ax.legend()
+
+    plt.tight_layout()
+    plt.savefig(target_dir / "robustness_and_variance_analysis_final.png", dpi=300)
+    plt.show()
 
 def main():
     try:
@@ -287,7 +385,10 @@ def main():
             p_true_real, p_ours_real, p_base_real = run_inference(Hnet, Pnet, base_model, real_data[0], real_data[1], normalizer)
             plot_symmetric_collapse(p_true_real, p_ours_real, p_base_real, target_dir, prefix="real")
             plot_ogtt_trajectories(p_true_real, p_ours_real, p_base_real, system, target_dir, prefix="real")
-            
+        
+        # --- 3. Robustness Stress Test ---
+        evaluate_robustness(Hnet, Pnet, base_model, sim_data[0], sim_data[1], normalizer, target_dir)
+        
         print(f"\n\033[1;32m[완료] 모든 분석 플롯이 '{target_dir}' 폴더에 저장되었습니다!\033[0m")
             
     except Exception as e:

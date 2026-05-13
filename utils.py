@@ -19,7 +19,7 @@ import pandas as pd
 from scipy.interpolate import UnivariateSpline, lagrange
 
 
-# --- 1. Derivative Estimation Strategy ---
+# Derivative Estimation Strategy ---
 class DerivativeEstimator(ABC):
     """
     Abstract Base Class for estimating derivatives (dy/dt) from discrete observations.
@@ -102,7 +102,7 @@ def get_derivative_estimator(method='spline', **kwargs):
     return estimators[method](**kwargs)
 
 
-# --- 2. Data Normalization ---
+# Data Normalization ---
 class Normalizer:
     """
     Handles data normalization to ensure stability during neural network training.
@@ -207,7 +207,7 @@ class Normalizer:
             return p_log
         
 
-# --- 3. SDE Solver (Euler-Maruyama) ---
+# SDE solver
 def euler_maruyama(drift_func, diffusion_func, t_span, y0, t_eval, params, seed=None, dt_sim=1.0, system=None):
     """
     Euler-Maruyama method for solving SDEs with fine time steps.
@@ -283,8 +283,6 @@ def euler_maruyama(drift_func, diffusion_func, t_span, y0, t_eval, params, seed=
         
     return y_out
 
-
-# --- 4. Experiment Logger ---
 
 
 class ExperimentLogger:
