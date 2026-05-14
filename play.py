@@ -1,5 +1,5 @@
 """
-Web-based GUI for Alternating Networks Experiment Runner using Gradio.
+Web-based GUI for Iteration Networks Experiment Runner using Gradio.
 
 Installation:
     pip install gradio
@@ -121,8 +121,8 @@ def toggle_h_net_visibility(is_baseline):
 # =====================================================================
 # Gradio UI Layout Definition
 # =====================================================================
-with gr.Blocks(title="Alternating Networks Dashboard", theme=gr.themes.Soft()) as demo:
-    gr.Markdown("# 🚀 Alternating Networks Experiment Runner")
+with gr.Blocks(title="Iteration Networks Dashboard", theme=gr.themes.Soft()) as demo:
+    gr.Markdown("# 🚀 Iteration Networks Experiment Runner")
     gr.Markdown("""
     **Quick Start Guide:**
     * **Tab 1: Global Settings**
