@@ -41,17 +41,17 @@ class SupervisedLoss(BaseLoss):
     def forward(self, x_true, y_true, p_true):
         # Predict hidden variables using H_phi
         y_pred = self.H_phi(x_true, p_true)
-        loss_f = self.mse_loss(y_pred, y_true)
+        hidden_state_loss = self.mse_loss(y_pred, y_true)
         
         # Predict parameters using P_psi
         p_pred = self.P_psi(x_true, y_true)
-        loss_g = self.mse_loss(p_pred, p_true)
+        param_loss = self.mse_loss(p_pred, p_true)
         
-        total_loss = loss_f + loss_g
+        total_loss = hidden_state_loss + param_loss
         
         metrics = {
-            'loss_f': loss_f.item(),
-            'loss_g': loss_g.item()
+            'hidden_state_loss': hidden_state_loss.item(),
+            'param_loss': param_loss.item()
         }
         
         return total_loss, metrics

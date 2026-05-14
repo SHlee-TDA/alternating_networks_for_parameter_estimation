@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.integrate import solve_ivp
-
+from tqdm import tqdm
 from .metrics import (
     calculate_point_metrics, 
     calculate_prediction_interval, 
@@ -193,7 +193,7 @@ def run_full_analysis(hidden_cvae, param_cvae, baseline_model, test_loader, conf
     """
     print("\n\033[1;36m=== Running Probabilistic Analysis & Evaluation ===\033[0m")
     
-    save_dir = os.path.join(config.RESULTS_DIR, config.EXPERIMENT_NAME + "_prob", "plots")
+    save_dir = os.path.join(config.RESULTS_DIR, config.EXPERIMENT_NAME, "plots")
     os.makedirs(save_dir, exist_ok=True)
     
     hidden_cvae.eval()
@@ -205,40 +205,50 @@ def run_full_analysis(hidden_cvae, param_cvae, baseline_model, test_loader, conf
     all_theta_base = []
     
     print("Evaluating entire test set and generating samples...")
-    # 1. 전체 데이터셋 순회하며 샘플 수집
-    for x_batch, y_batch, theta_batch in test_loader:
+    for x_batch, y_batch, theta_batch in tqdm(test_loader, desc="Gibbs Sampling Progress"):
         x_batch = x_batch.to(config.DEVICE)
         
-        # 확률 모델 추론 (Samples)
-        y_samples, theta_samples = pseudo_gibbs_sampling(
-            hidden_cvae, param_cvae, x_batch, num_chains=50, num_steps=60, burn_in=10
+        # 1. 확률 모델 추론 (Normalized Samples)
+        y_samples_norm, theta_samples_norm = pseudo_gibbs_sampling(
+            hidden_cvae, param_cvae, x_batch, 
+            num_chains=config.INFERENCE_CHAINS, 
+            num_steps=config.INFERENCE_STEPS, 
+            burn_in=config.INFERENCE_BURN_IN
         )
         
-        # Baseline 추론 (Point)
+        # 2. Baseline 추론
         if baseline_model:
             with torch.no_grad():
                 theta_base_norm = baseline_model(x_batch)
-                theta_base = normalizer.denormalize_params(theta_base_norm).cpu().numpy()
+                theta_base_phys = normalizer.denormalize_params(theta_base_norm).cpu().numpy()
         else:
-            theta_base = np.zeros_like(theta_batch.cpu().numpy())
+            theta_base_phys = np.zeros_like(theta_batch.cpu().numpy())
             
-        # Denormalization (물리적 스케일 복원)
-        # (주의: Y 궤적도 정규화되어 있다면 normalizer.denormalize_trajectory 등이 필요합니다)
-        theta_true = normalizer.denormalize_params(theta_batch).cpu().numpy()
+        # ==============================================================
+        # [수정된 부분] X, Y, Theta 완벽한 역정규화 (Denormalization)
+        # ==============================================================
         
-        # 역정규화된 샘플들 저장
-        # theta_samples 형태: [batch, num_chains, dim]
-        theta_samples_phys = np.zeros_like(theta_samples)
-        for i in range(theta_samples.shape[1]):
+        # Y (인슐린 궤적) 역정규화
+        y_true_phys = normalizer.denormalize_inputs(y_batch, variable_type='hidden').cpu().numpy()
+        y_samples_phys = np.zeros_like(y_samples_norm)
+        for i in range(y_samples_norm.shape[1]): # num_chains 차원
+            y_samples_phys[:, i, :] = normalizer.denormalize_inputs(
+                torch.tensor(y_samples_norm[:, i, :]).to(config.DEVICE), variable_type='hidden'
+            ).cpu().numpy()
+            
+        # Theta (파라미터) 역정규화
+        theta_true_phys = normalizer.denormalize_params(theta_batch).cpu().numpy()
+        theta_samples_phys = np.zeros_like(theta_samples_norm)
+        for i in range(theta_samples_norm.shape[1]):
             theta_samples_phys[:, i, :] = normalizer.denormalize_params(
-                torch.tensor(theta_samples[:, i, :]).to(config.DEVICE)
+                torch.tensor(theta_samples_norm[:, i, :]).to(config.DEVICE)
             ).cpu().numpy()
 
-        all_y_true.append(y_batch.cpu().numpy())
-        all_theta_true.append(theta_true)
-        all_y_samples.append(y_samples)
+        all_y_true.append(y_true_phys)
+        all_theta_true.append(theta_true_phys)
+        all_y_samples.append(y_samples_phys)
         all_theta_samples.append(theta_samples_phys)
-        all_theta_base.append(theta_base)
+        all_theta_base.append(theta_base_phys)
 
     # 데이터 병합
     y_true_full = np.concatenate(all_y_true, axis=0)
@@ -247,7 +257,7 @@ def run_full_analysis(hidden_cvae, param_cvae, baseline_model, test_loader, conf
     theta_samples_full = np.concatenate(all_theta_samples, axis=0)
     theta_base_full = np.concatenate(all_theta_base, axis=0)
 
-    # 2. 정량적 지표 계산 (전체 데이터셋 평균)
+    # 정량적 지표 계산
     rmse, pearson = calculate_point_metrics(theta_true_full, theta_samples_full)
     picp, mpiw = calculate_prediction_interval(theta_true_full, theta_samples_full)
     crps = calculate_crps(theta_true_full, theta_samples_full)
@@ -259,17 +269,18 @@ def run_full_analysis(hidden_cvae, param_cvae, baseline_model, test_loader, conf
     print(f"RMSE (Mean Est.)    : {np.mean(rmse):.4f}")
     print(f"Pearson r           : {np.mean(pearson):.4f}")
     
-    # 3. 시각화 (인덱스 0번 샘플을 대표로 시각화)
+    # 시각화 (인덱스 0번 샘플 사용)
     print("\nGenerating Visual Proofs...")
     sample_idx = 0
     time_points = np.linspace(0, 120, y_true_full.shape[1])
     
-    # x_sparse도 필요하면 역정규화
-    x_sample = normalizer.denormalize_x(test_loader.dataset[sample_idx][0].to(config.DEVICE)).cpu().numpy()
+    # [에러 해결 부분] X (관측치) 올바른 역정규화 호출
+    x_sample_norm = test_loader.dataset[sample_idx][0].to(config.DEVICE)
+    x_sample_phys = normalizer.denormalize_inputs(x_sample_norm, variable_type='observed').cpu().numpy()
     
     # (1) 궤적 커버리지 플롯
     plot_trajectory_coverage(
-        x_sample, y_true_full[sample_idx], y_samples_full[sample_idx], 
+        x_sample_phys, y_true_full[sample_idx], y_samples_full[sample_idx], 
         time_points, save_path=os.path.join(save_dir, "1_trajectory_coverage.png")
     )
     
@@ -280,7 +291,7 @@ def run_full_analysis(hidden_cvae, param_cvae, baseline_model, test_loader, conf
     )
     
     if baseline_model:
-        # (3) 대칭 붕괴 해결 증명 (Log-Log 공간)
+        # (3) 대칭 붕괴 해결 증명
         plot_symmetric_collapse_probabilistic(
             theta_true_full, theta_samples_full, theta_base_full, 
             save_path=os.path.join(save_dir, "3_symmetric_collapse.png")
@@ -288,7 +299,7 @@ def run_full_analysis(hidden_cvae, param_cvae, baseline_model, test_loader, conf
         
         # (4) ODE 기반 물리적 궤적 대역 증명
         y0 = [val[0] if isinstance(val, list) else val for val in system.initial_conditions]
-        def ode_func(t, y, *params): return system.ode_func(t, y, params)
+        def ode_func(t, y, *params): return system.ode_func(t, y, list(params))
         
         plot_ogtt_trajectories_probabilistic(
             ode_func, y0, theta_true_full[sample_idx], theta_samples_full[sample_idx], theta_base_full[sample_idx], 

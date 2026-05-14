@@ -83,6 +83,13 @@ class ProbabilisticTrainer:
             self.sched_hidden.step(combined_val_loss)
             self.sched_param.step(combined_val_loss)
             
+            if epoch % 1000 == 0 or epoch == self.config.EPOCHS - 1:
+                h_loss = np.mean(epoch_train_losses['hidden_loss'])
+                p_loss = np.mean(epoch_train_losses['param_loss'])
+                print(f"Epoch {epoch+1:04d}/{self.config.EPOCHS} | Beta: {beta:.2f} | "
+                      f"Net A Loss: {h_loss:.4f} | Net B Loss: {p_loss:.4f} | "
+                      f"Val Loss: {combined_val_loss:.4f}")
+            
             # Update History
             for k, v in epoch_train_losses.items():
                 history[f'train_{k}'].append(np.mean(v))

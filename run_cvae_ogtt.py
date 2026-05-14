@@ -1,14 +1,16 @@
 import os
 import torch
-import random
 import numpy as np
 import json
+import argparse
 from torch.utils.data import TensorDataset, DataLoader, random_split, Subset
 
 # 1. 시스템 및 유틸리티 (기존 자원 100% 재사용)
 from systems.ogtt_simul import OgttSimul
 from data_loader import DataGenerator, RealOGTTDataLoader
 from utils import Normalizer
+from tools.exp_tools import set_seed
+from tools.interactive_file_selector import interactive_file_selector
 
 # 2. 확률론적 패러다임 전용 모듈
 from prob_models.config import ProbConfig
@@ -16,14 +18,11 @@ from prob_models.models import HiddenStateCVAE, ParameterCVAE
 from prob_models.trainer import ProbabilisticTrainer
 from prob_models.analysis import run_full_analysis
 
-def set_seed(seed):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
-
 def main():
+    parser = argparse.ArgumentParser(description="Run Probabilistic CVAE Pipeline")
+    parser.add_argument('--load', action='store_true', help="Skip training and load pre-trained weights")
+    args = parser.parse_args()
+    
     print("\n\033[1;35m========================================================\033[0m")
     print("\033[1;35m  Probabilistic Pipeline: Alternating CVAEs for OGTT  \033[0m")
     print("\033[1;35m========================================================\033[0m")
@@ -95,9 +94,43 @@ def main():
     # =================================================================
     # Phase 3: Independent Training
     # =================================================================
-    # (이미 가중치 파일이 있다면 학습을 스킵하는 로직을 나중에 추가할 수도 있습니다)
-    trainer = ProbabilisticTrainer(train_loader, val_loader, config, hidden_cvae, param_cvae)
-    hidden_cvae, param_cvae, history = trainer.train()
+    save_dir = os.path.join(config.RESULTS_DIR, config.EXPERIMENT_NAME)
+    hnet_path = os.path.join(save_dir, 'hidden_cvae.pth')
+    pnet_path = os.path.join(save_dir, 'param_cvae.pth')
+
+    if args.load and os.path.exists(hnet_path) and os.path.exists(pnet_path):
+        print(f"\n\033[1;32m[Phase 3] --load flag detected. Skipping training...\033[0m")
+        print(f"Loading weights from:\n - {hnet_path}\n - {pnet_path}")
+        
+        hidden_cvae.load_state_dict(torch.load(hnet_path, map_location=config.DEVICE))
+        param_cvae.load_state_dict(torch.load(pnet_path, map_location=config.DEVICE))
+        hidden_cvae.eval()
+        param_cvae.eval()
+    else:
+        if args.load:
+            base_search_dir = "./results"
+        
+            # Hnet 선택 (Pnet는 문자열 치환으로 자동 유추)
+            rel_Hnet_path = interactive_file_selector(
+                prompt_msg="제안 모델 가중치 (hidden_cvae.pth)를 선택하세요 (param_cvae.pth는 자동 로드됨):", 
+                start_dir=base_search_dir
+            )
+            Hnet_path = os.path.join(base_search_dir, rel_Hnet_path)
+            Pnet_path = Hnet_path.replace('hidden_cvae.pth', 'param_cvae.pth')
+            if os.path.exists(Hnet_path) and os.path.exists(Pnet_path):
+                print(f"\n\033[1;32m[Phase 3] --load flag detected. Loading selected weights...\033[0m")
+                print(f"Loading weights from:\n - {Hnet_path}\n - {Pnet_path}")
+                
+                hidden_cvae.load_state_dict(torch.load(Hnet_path, map_location=config.DEVICE))
+                param_cvae.load_state_dict(torch.load(Pnet_path, map_location=config.DEVICE))
+                hidden_cvae.eval()
+                param_cvae.eval()
+            else:
+                print(f"\n\033[1;31m[Warning] --load flag provided, but weight files not found. Starting training...\033[0m")
+        else:
+            print(f"\n[Phase 3] Starting Independent Training...")   
+            trainer = ProbabilisticTrainer(train_loader, val_loader, config, hidden_cvae, param_cvae)
+            hidden_cvae, param_cvae, history = trainer.train()
     
     # =================================================================
     # Phase 4: Analysis on Simulation Data

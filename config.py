@@ -30,7 +30,7 @@ class Config:
     EXPERIMENT_NAME: str = 'baseline_comparison'
     SEED: int = 42
     DEVICE: str = "cuda" if torch.cuda.is_available() else "cpu"
-    RESULTS_DIR: str = 'results/baseline_comparison'
+    RESULTS_DIR: str = 'results'
     RUN_BASELINE: bool = False  # Whether to run the single-network baseline for comparison
     # --------------------------------------------------------------------------
     # 2. Data Generation and Data Loading

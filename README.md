@@ -14,7 +14,9 @@ To overcome this, we decouple the joint inverse problem into two conditional tas
 ### 📁 Repository Structure
 We strictly adhere to object-oriented and modular design principles to ensure extensibility:
 ```
+├── play.py                # Interactive Web Dashboard (Easiest way to run)
 ├── main.py                # Pipeline orchestrator (Phase 1 to Phase 3)
+├── config.py              # Configuration registry and CLI argument parser
 ├── data_loader.py         # ODE/SDE parallel simulation & dataset generation
 ├── infer.py               # Alternating Inference Engine (Fixed-point iteration)
 ├── analyzer.py            # BaseAnalyzer and System-specific visualization modules
@@ -24,19 +26,58 @@ We strictly adhere to object-oriented and modular design principles to ensure ex
 ```
 
 ### 🚀 Getting Started
-1. Installation
+1. Environment Setup
+We strongly recommend using an isolated virtual environment to avoid version conflicts.
+- Using `conda` (Recommended):
     ```
-    pip install torch numpy scipy pandas matplotlib seaborn tqdm scikit-learn
+    conda create -n param_estim python=3.9 -y
+    conda activate param_estim
     ```
-2. Run Experiments
-The entire pipeline (Data Generation $\rightarrow$ Training $\rightarrow$ Inference & Evaluation) can be executed with a single command:
+- Using Python `venv`:
     ```
-    # Run the pipeline with default configuration
-    python main.py
+    python -m venv venv
+    source venv/bin/activate  
+    # On Windows use: venv\Scripts\activate
+    ```
+2. Install Dependencies
 
-    # Override epochs for a quick test
-    python main.py --epochs 100
     ```
+    pip install -r requirements.txt
+    ```
+
+#### 💻 Quick Start: Interactive Web Dashboard (Recommended)
+We provide a user-friendly Web GUI powered by *Gradio*. 
+This is the easiest way to explore the framework without digging into the codebase.
+
+```
+python play.py
+```
+
+After running the command, open the provided local URL (e.g., http://127.0.0.1:7860) in your web browser.
+
+**How to use the dashboard**:
+
+- Select the target dynamical system (SIR, Lotka-Volterra, OGTT).
+
+- Set basic hyperparameters (Epochs, Batch Size, LR, Seed).
+
+- Configure advanced data features like Derivative Methods (Lagrangian, Spline, ).
+
+- Design your neural network architecture (Hidden layers & Activations) or toggle Spectral Normalization.
+
+- Click 'Run Experiment' and monitor the live logs and evaluation plots directly on your screen!
+
+#### 🛠️ Advanced Usage: Programmatic Control
+
+For deeper, fine-grained control over the experiments (e.g., batch processing, custom loss weighting, or remote server execution), you can directly interact with the orchestrator.
+
+For the highest level of control, you can directly modify `config.py`.
+This allows you to set up complex multi-scenario experiments, modify data-generation bounds, or change the default logging behaviors.
+
+```
+python main.py
+```
+
 
 ## 🧪 Benchmark Dynamical Systems & Results
 We evaluate our framework on three diverse dynamical systems. 

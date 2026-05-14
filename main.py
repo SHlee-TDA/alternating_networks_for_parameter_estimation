@@ -86,7 +86,7 @@ def run_experiment_pipeline(global_config):
             baseline_net = SingleNetworkBaseline(
                 flat_x_dim=sample_x.shape[1], flat_y_dim=sample_p.shape[1],
                 model_config=run_config.MODEL_CONFIG['param_net'],
-                use_spectral_norm=run_config.USE_SPECTRAL_NORM
+                use_spectral_norm=None
             ).to(device)
             hidden_net, param_net = None, None
         else:
@@ -117,9 +117,9 @@ def run_experiment_pipeline(global_config):
         # Abstracted heavy plotting/loading logic to an external function
         run_evaluation_phase(
             run_config, logger, system, history, 
-            hidden_net, param_net, baseline_net, 
+            hidden_net, param_net, 
             test_l, real_test_loader, p_init, normalizer, 
-            sample_x, sample_p, device
+            device
         )
             
         torch.cuda.empty_cache()

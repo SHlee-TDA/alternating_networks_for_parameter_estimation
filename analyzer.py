@@ -7,7 +7,7 @@ import torch
 import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import pearsonr
-from sklearn.metrics import mean_squared_error
+import warnings
 
 plt.style.use('seaborn-v0_8-whitegrid')
 sns.set_palette("deep")
@@ -33,11 +33,17 @@ class BaseAnalyzer:
     # ==========================================
 
     def calculate_and_save_metrics(self, p_true, p_ours, p_base, filename="comparison_metrics.json", extra_metrics=None):
-        """Computes RMSE, MAE, and Pearson R, and saves to JSON."""
+        """Computes RMSE, MAE, and Pearson R, handling empty (zero) baselines safely."""
         def calc_metrics(true, pred):
+            if np.all(pred == 0):  # Safe check for zero baseline (no baseline case)
+                return {"RMSE": np.nan, "MAE": np.nan, "Pearson_r": np.nan}
+            
             rmse = float(np.sqrt(np.mean((true - pred)**2)))
             mae = float(np.mean(np.abs(true - pred)))
-            r = float(pearsonr(true, pred)[0]) if len(true) > 1 else 0.0
+            
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                r = float(pearsonr(true, pred)[0]) if len(true) > 1 and np.std(pred) > 1e-8 else 0.0
             return {"RMSE": rmse, "MAE": mae, "Pearson_r": r}
 
         metrics = {}
@@ -59,7 +65,8 @@ class BaseAnalyzer:
         print("-" * 85)
         for key, vals in metrics.items():
             b, o = vals['Baseline'], vals['Ours']
-            print(f"{key:<12} | {b['RMSE']:.4f} / {b['MAE']:.4f} / {b['Pearson_r']:.4f} | {o['RMSE']:.4f} / {o['MAE']:.4f} / {o['Pearson_r']:.4f}")
+            b_str = f"{b['RMSE']:.4f} / {b['MAE']:.4f} / {b['Pearson_r']:.4f}" if not np.isnan(b['RMSE']) else "N/A (No Baseline)"
+            print(f"{key:<12} | {b_str:<33} | {o['RMSE']:.4f} / {o['MAE']:.4f} / {o['Pearson_r']:.4f}")
         print("="*85 + "\n")
 
         save_path = os.path.join(self.results_path, filename)
@@ -249,36 +256,49 @@ class BaseAnalyzer:
         ax.set_title(f"Dynamics: {name1} vs {name2}")
         ax.grid(True, alpha=0.3)
         
-    def plot_scatter_comparison(self, true_vals_list, ours_vals_list, base_vals_list, metrics_dict, param_names, prefix="sim"):
+    def plot_scatter_comparison(self, true_vals_list, ours_vals_list, base_vals_list, metrics_dict, param_keys, param_titles=None, prefix="sim"):
         """
         Generates parity (scatter) plots uniformly for any system.
         Args:
             true_vals_list, ours_vals_list, base_vals_list: Lists of 1D arrays to plot.
             param_names: Titles/keys for each subplot.
         """
-        num_params = len(param_names)
+        param_titles = param_titles or param_keys
+        num_params = len(param_keys)
         fig, axes = plt.subplots(1, num_params, figsize=(5*num_params, 5.5))
         if num_params == 1: axes = [axes]
 
-        for i, p_name in enumerate(param_names):
+        for i, p_key in enumerate(param_keys):
             ax = axes[i]
             t_v, o_v, b_v = true_vals_list[i], ours_vals_list[i], base_vals_list[i]
             
-            ax.scatter(t_v, b_v, alpha=0.4, color='indianred', label='Baseline', marker='x')
-            ax.scatter(t_v, o_v, alpha=0.5, color='steelblue', label='Ours', marker='o', edgecolors='white', lw=0.5)
+            is_dummy_base = np.all(b_v == 0)
+            is_dummy_ours = np.all(o_v == 0)
             
-            min_v, max_v = min(np.min(t_v), np.min(o_v), np.min(b_v)), max(np.max(t_v), np.max(o_v), np.max(b_v))
+            if not is_dummy_base:
+                ax.scatter(t_v, b_v, alpha=0.4, color='indianred', label='Baseline', marker='x')
+            if not is_dummy_ours:
+                ax.scatter(t_v, o_v, alpha=0.5, color='steelblue', label='Ours', marker='o', edgecolors='white', lw=0.5)
+            
+            # Automatic axis scaling
+            min_vals, max_vals = [np.min(t_v)], [np.max(t_v)]
+            if not is_dummy_base:
+                min_vals.append(np.min(b_v)); max_vals.append(np.max(b_v))
+            if not is_dummy_ours:
+                min_vals.append(np.min(o_v)); max_vals.append(np.max(o_v))
+                
+            min_v, max_v = min(min_vals), max(max_vals)
             ax.plot([min_v, max_v], [min_v, max_v], 'k--', lw=2, label='Ideal')
             
-            b_mets, o_mets = metrics_dict[p_name]['Baseline'], metrics_dict[p_name]['Ours']
-            textstr = '\n'.join((
-                r'$\bf{Baseline}$', f'RMSE: {b_mets["RMSE"]:.4f}', f'r: {b_mets["Pearson_r"]:.4f}', '',
-                r'$\bf{Ours}$', f'RMSE: {o_mets["RMSE"]:.4f}', f'r: {o_mets["Pearson_r"]:.4f}'
-            ))
+            b_mets, o_mets = metrics_dict[p_key]['Baseline'], metrics_dict[p_key]['Ours']
+            b_text = f'RMSE: {b_mets["RMSE"]:.4f}\nr: {b_mets["Pearson_r"]:.4f}' if not np.isnan(b_mets["RMSE"]) else 'N/A'
+            o_text = f'RMSE: {o_mets["RMSE"]:.4f}\nr: {o_mets["Pearson_r"]:.4f}' if not np.isnan(o_mets["RMSE"]) else 'N/A'
+            
+            textstr = '\n'.join((r'$\bf{Baseline}$', b_text, '', r'$\bf{Ours}$', o_text))
             props = dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='lightgray')
             ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=10, verticalalignment='top', bbox=props)
 
-            ax.set_title(p_name, fontsize=14, pad=15)
+            ax.set_title(param_titles[i], fontsize=14, pad=15)
             ax.set_xlabel('True Value'); ax.set_ylabel('Predicted Value')
             ax.legend(loc='lower right'); ax.grid(True, alpha=0.3)
 
@@ -289,44 +309,44 @@ class BaseAnalyzer:
     def plot_trajectory_panel(self, ax, t, y_true, y_base, y_ours, title, ylabel=None, xlabel="Time"):
         """Draws a single trajectory comparison on a given matplotlib axis."""
         ax.plot(t, y_true, 'k-', lw=2, label='True Dynamics')
-        ax.plot(t, y_base, 'indianred', linestyle='--', lw=2, label='Baseline')
-        ax.plot(t, y_ours, 'steelblue', linestyle='-.', lw=2, label='Ours')
-        ax.set_title(title)
-        ax.set_xlabel(xlabel)
+        if not np.all(y_base == 0):
+            ax.plot(t, y_base, 'indianred', linestyle='--', lw=2, label='Baseline')
+        if not np.all(y_ours == 0):
+            ax.plot(t, y_ours, 'steelblue', linestyle='-.', lw=2, label='Ours')
+        ax.set_title(title); ax.set_xlabel(xlabel)
         if ylabel: ax.set_ylabel(ylabel)
-        ax.legend()
-        ax.grid(True, alpha=0.3)
+        ax.legend(); ax.grid(True, alpha=0.3)
         
 # ==========================================
 # Benchmark Specific Analyzers (Child Classes)
 # ==========================================
 
 class SIRAnalyzer(BaseAnalyzer):
-    def run_comparison(self, p_true, p_ours, p_base):
-        print("\n=== Running SIR Comparison Analysis ===")
-
-        # 파생 지표 R0 계산
+    def evaluate_simulation(self, p_true, p_ours, p_base):
+        valid_base = not np.all(p_base == 0)
+        valid_ours = not np.all(p_ours == 0)
+        
         R0_true = p_true[:, 0] / p_true[:, 1]
-        R0_ours = p_ours[:, 0] / p_ours[:, 1]
-        R0_base = p_base[:, 0] / p_base[:, 1]
+        R0_ours = p_ours[:, 0] / p_ours[:, 1] if valid_ours else np.zeros_like(R0_true)
+        R0_base = p_base[:, 0] / p_base[:, 1] if valid_base else np.zeros_like(R0_true)
         
         metrics_dict = self.calculate_and_save_metrics(
             p_true, p_ours, p_base, "sir_comparison_metrics.json", 
             extra_metrics={"R0": (R0_true, R0_ours, R0_base)}
         )
         
-        # 1. Scatter Plot (부모 메서드 활용 - 코드가 한 줄로 끝납니다)
         t_vals = [p_true[:, 0], p_true[:, 1], R0_true]
         o_vals = [p_ours[:, 0], p_ours[:, 1], R0_ours]
         b_vals = [p_base[:, 0], p_base[:, 1], R0_base]
-        p_names = [r'Infection Rate ($\beta$)', r'Recovery Rate ($\gamma$)', r'Basic Reproduction ($\mathcal{R}_0$)']
         
-        self.plot_scatter_comparison(t_vals, o_vals, b_vals, metrics_dict, p_names, prefix="sir")
+        # [핵심 버그 픽스] 키 값과 타이틀 값을 분리하여 전달합니다.
+        p_keys = list(self.system.param_names) + ["R0"]
+        p_titles = [r'Infection Rate ($\beta$)', r'Recovery Rate ($\gamma$)', r'Basic Reproduction ($\mathcal{R}_0$)']
         
-        # 2. Trajectory Plot
-        self._plot_trajectory_comparison(p_true, p_ours, p_base, R0_true)
+        self.plot_scatter_comparison(t_vals, o_vals, b_vals, metrics_dict, p_keys, p_titles, prefix="sir")
+        self._plot_trajectory_comparison(p_true, p_ours, p_base, R0_true, valid_base, valid_ours)
 
-    def _plot_trajectory_comparison(self, p_true, p_ours, p_base, R0_true):
+    def _plot_trajectory_comparison(self, p_true, p_ours, p_base, R0_true, valid_base, valid_ours):
         from scipy.integrate import solve_ivp
         try:
             idx_epidemic, idx_decay = np.where(R0_true > 1.2)[0][0], np.where(R0_true < 0.8)[0][0]
@@ -335,163 +355,139 @@ class SIRAnalyzer(BaseAnalyzer):
 
         fig, axes = plt.subplots(2, 2, figsize=(12, 10))
         t_eval = np.linspace(0, 110, 200)
-        
-        def sir_ode(t, y, beta, gamma):
-            return [-beta * y[0] * y[1] / 50.0, beta * y[0] * y[1] / 50.0 - gamma * y[1], gamma * y[1]]
+        def sir_ode(t, y, beta, gamma): return [-beta * y[0] * y[1] / 50.0, beta * y[0] * y[1] / 50.0 - gamma * y[1], gamma * y[1]]
 
         for i, idx in enumerate([idx_epidemic, idx_decay]):
             title_prefix = f"Epidemic (R0={R0_true[idx]:.2f})" if i == 0 else f"Decay (R0={R0_true[idx]:.2f})"
             sol_t = solve_ivp(sir_ode, (0, 110), [49., 1., 0.], args=tuple(p_true[idx]), t_eval=t_eval)
-            sol_b = solve_ivp(sir_ode, (0, 110), [49., 1., 0.], args=tuple(p_base[idx]), t_eval=t_eval)
-            sol_o = solve_ivp(sir_ode, (0, 110), [49., 1., 0.], args=tuple(p_ours[idx]), t_eval=t_eval)
+            
+            y_o_s, y_o_i = np.zeros_like(sol_t.y[0]), np.zeros_like(sol_t.y[1])
+            if valid_ours:
+                sol_o = solve_ivp(sir_ode, (0, 110), [49., 1., 0.], args=tuple(p_ours[idx]), t_eval=t_eval)
+                y_o_s, y_o_i = sol_o.y[0], sol_o.y[1]
+                
+            y_b_s, y_b_i = np.zeros_like(sol_t.y[0]), np.zeros_like(sol_t.y[1])
+            if valid_base:
+                sol_b = solve_ivp(sir_ode, (0, 110), [49., 1., 0.], args=tuple(p_base[idx]), t_eval=t_eval)
+                y_b_s, y_b_i = sol_b.y[0], sol_b.y[1]
 
-            # 부모 클래스의 Trajectory Panel 활용
-            self.plot_trajectory_panel(axes[i, 0], sol_t.t, sol_t.y[0], sol_b.y[0], sol_o.y[0], f"S(t) | {title_prefix}", "Population")
-            self.plot_trajectory_panel(axes[i, 1], sol_t.t, sol_t.y[1], sol_b.y[1], sol_o.y[1], f"I(t) Hidden | {title_prefix}")
+            self.plot_trajectory_panel(axes[i, 0], sol_t.t, sol_t.y[0], y_b_s, y_o_s, f"S(t) | {title_prefix}", "Population")
+            self.plot_trajectory_panel(axes[i, 1], sol_t.t, sol_t.y[1], y_b_i, y_o_i, f"I(t) Hidden | {title_prefix}")
 
         plt.tight_layout()
         plt.savefig(os.path.join(self.results_path, 'sir_trajectory_comparison.png'), dpi=300)
         plt.close()
 
-
 class LotkaVolterraAnalyzer(BaseAnalyzer):
-    def run_comparison(self, p_true, p_ours, p_base):
-        print("\n=== Running Lotka-Volterra Comparison Analysis ===")
+    def evaluate_simulation(self, p_true, p_ours, p_base):
         metrics_dict = self.calculate_and_save_metrics(p_true, p_ours, p_base, "lv_comparison_metrics.json")
-        
-        # 1. Scatter Plot (부모 메서드 활용)
         t_vals = [p_true[:, i] for i in range(p_true.shape[1])]
         o_vals = [p_ours[:, i] for i in range(p_ours.shape[1])]
         b_vals = [p_base[:, i] for i in range(p_base.shape[1])]
         
         self.plot_scatter_comparison(t_vals, o_vals, b_vals, metrics_dict, self.system.param_names, prefix="lv")
-        
-        # 2. Trajectory & Phase Plot
         self._plot_lv_trajectories_and_phase(p_true, p_ours, p_base)
 
     def _plot_lv_trajectories_and_phase(self, p_true, p_ours, p_base):
         from scipy.integrate import solve_ivp
-        idx = np.random.randint(0, len(p_true))
+        idx, valid_base, valid_ours = np.random.randint(0, len(p_true)), not np.all(p_base == 0), not np.all(p_ours == 0)
         fig, axes = plt.subplots(1, 3, figsize=(18, 5))
-        
         def lv_ode(t, y, a, b, d, g): return [a*y[0] - b*y[0]*y[1], d*y[0]*y[1] - g*y[1]]
         y0 = [y[0] if isinstance(y, list) else y for y in self.system.initial_conditions]
         
         sol_t = solve_ivp(lv_ode, (0, 50), y0, args=tuple(p_true[idx]), t_eval=np.linspace(0, 50, 500))
-        sol_b = solve_ivp(lv_ode, (0, 50), y0, args=tuple(p_base[idx]), t_eval=np.linspace(0, 50, 500))
-        sol_o = solve_ivp(lv_ode, (0, 50), y0, args=tuple(p_ours[idx]), t_eval=np.linspace(0, 50, 500))
+        
+        y_o_x, y_o_y = np.zeros_like(sol_t.y[0]), np.zeros_like(sol_t.y[1])
+        if valid_ours:
+            sol_o = solve_ivp(lv_ode, (0, 50), y0, args=tuple(p_ours[idx]), t_eval=np.linspace(0, 50, 500))
+            y_o_x, y_o_y = sol_o.y[0], sol_o.y[1]
+            
+        y_b_x, y_b_y = np.zeros_like(sol_t.y[0]), np.zeros_like(sol_t.y[1])
+        if valid_base:
+            sol_b = solve_ivp(lv_ode, (0, 50), y0, args=tuple(p_base[idx]), t_eval=np.linspace(0, 50, 500))
+            y_b_x, y_b_y = sol_b.y[0], sol_b.y[1]
 
-        # 부모 클래스의 Trajectory Panel 활용
-        self.plot_trajectory_panel(axes[0], sol_t.t, sol_t.y[0], sol_b.y[0], sol_o.y[0], "Prey (Observed)")
-        self.plot_trajectory_panel(axes[1], sol_t.t, sol_t.y[1], sol_b.y[1], sol_o.y[1], "Predator (Hidden)")
+        self.plot_trajectory_panel(axes[0], sol_t.t, sol_t.y[0], y_b_x, y_o_x, "Prey (Observed)")
+        self.plot_trajectory_panel(axes[1], sol_t.t, sol_t.y[1], y_b_y, y_o_y, "Predator (Hidden)")
 
-        # Phase Portrait
         axes[2].plot(sol_t.y[0], sol_t.y[1], 'k-', lw=2, label='True Cycle')
-        axes[2].plot(sol_b.y[0], sol_b.y[1], 'indianred', linestyle='--', lw=2, label='Baseline')
-        axes[2].plot(sol_o.y[0], sol_o.y[1], 'steelblue', linestyle='-.', lw=2, label='Ours')
-        axes[2].set_title("Phase Portrait"); axes[2].set_xlabel("Prey"); axes[2].set_ylabel("Predator")
-        axes[2].legend(); axes[2].grid(True, alpha=0.3)
-
-        plt.tight_layout()
-        plt.savefig(os.path.join(self.results_path, 'lv_dynamics_comparison.png'), dpi=300)
-        plt.close()
-
+        if valid_base: axes[2].plot(y_b_x, y_b_y, 'indianred', linestyle='--', lw=2, label='Baseline')
+        if valid_ours: axes[2].plot(y_o_x, y_o_y, 'steelblue', linestyle='-.', lw=2, label='Ours')
+        axes[2].set_title("Phase Portrait"); axes[2].set_xlabel("Prey"); axes[2].set_ylabel("Predator"); axes[2].legend(); axes[2].grid(True, alpha=0.3)
+        plt.tight_layout(); plt.savefig(os.path.join(self.results_path, 'lv_dynamics_comparison.png'), dpi=300); plt.close()
 
 class OgttSimulAnalyzer(BaseAnalyzer):
     def evaluate_simulation(self, p_true, p_ours, p_base):
-        print("\n=== Running OGTT Simulation Analysis ===")
         metrics = self.calculate_and_save_metrics(p_true, p_ours, p_base, "ogtt_sim_metrics.json")
         self._do_ogtt_plots(p_true, p_ours, p_base, metrics, "sim")
         self._plot_ogtt_trajectories(p_true, p_ours, p_base)
 
     def evaluate_real_data(self, p_true, p_ours, p_base):
-        print(f"\n=== Running OGTT REAL DATA Analysis ===")
         metrics = self.calculate_and_save_metrics(p_true, p_ours, p_base, "ogtt_real_metrics.json")
         self._do_ogtt_plots(p_true, p_ours, p_base, metrics, "real")
 
     def _do_ogtt_plots(self, p_true, p_ours, p_base, metrics_dict, prefix):
-        # 1. Scatter Plot (부모 메서드 활용)
         t_vals = [p_true[:, i] for i in range(p_true.shape[1])]
         o_vals = [p_ours[:, i] for i in range(p_ours.shape[1])]
         b_vals = [p_base[:, i] for i in range(p_base.shape[1])]
-        self.plot_scatter_comparison(t_vals, o_vals, b_vals, metrics_dict, self.system.param_names, prefix)
-        
-        # 2. OGTT-specific Symmetric Collapse
+        self.plot_scatter_comparison(t_vals, o_vals, b_vals, metrics_dict, self.system.param_names, prefix=prefix)
         self._plot_symmetric_collapse(p_true, p_ours, p_base, prefix)
 
     def _plot_ogtt_trajectories(self, p_true, p_ours, p_base):
         from scipy.integrate import solve_ivp
-        idx = np.argmax(np.abs(p_true[:, 0] - p_base[:, 0])) 
+        idx, valid_base, valid_ours = np.random.randint(0, len(p_true)), not np.all(p_base == 0), not np.all(p_ours == 0)
         fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-        
         y0 = [y[0] if isinstance(y, list) else y for y in self.system.initial_conditions]
         
         sol_t = solve_ivp(lambda t, y: self.system.ode_func(t, y, tuple(p_true[idx])), (0, 120), y0, t_eval=np.linspace(0, 120, 200))
-        sol_b = solve_ivp(lambda t, y: self.system.ode_func(t, y, tuple(p_base[idx])), (0, 120), y0, t_eval=np.linspace(0, 120, 200))
-        sol_o = solve_ivp(lambda t, y: self.system.ode_func(t, y, tuple(p_ours[idx])), (0, 120), y0, t_eval=np.linspace(0, 120, 200))
+        
+        y_o_g, y_o_i = np.zeros_like(sol_t.y[0]), np.zeros_like(sol_t.y[1])
+        if valid_ours:
+            sol_o = solve_ivp(lambda t, y: self.system.ode_func(t, y, tuple(p_ours[idx])), (0, 120), y0, t_eval=np.linspace(0, 120, 200))
+            y_o_g, y_o_i = sol_o.y[0], sol_o.y[1]
+            
+        y_b_g, y_b_i = np.zeros_like(sol_t.y[0]), np.zeros_like(sol_t.y[1])
+        if valid_base:
+            sol_b = solve_ivp(lambda t, y: self.system.ode_func(t, y, tuple(p_base[idx])), (0, 120), y0, t_eval=np.linspace(0, 120, 200))
+            y_b_g, y_b_i = sol_b.y[0], sol_b.y[1]
 
-        # 부모 클래스의 Trajectory Panel 활용
-        self.plot_trajectory_panel(axes[0], sol_t.t, sol_t.y[0], sol_b.y[0], sol_o.y[0], "Glucose (Observed)", "mg/dL", "Time (min)")
-        self.plot_trajectory_panel(axes[1], sol_t.t, sol_t.y[1], sol_b.y[1], sol_o.y[1], "Insulin (Hidden Error)", "uU/mL", "Time (min)")
-
-        plt.tight_layout()
-        plt.savefig(os.path.join(self.results_path, 'sim_trajectory_comparison.png'), dpi=300)
-        plt.close()
+        self.plot_trajectory_panel(axes[0], sol_t.t, sol_t.y[0], y_b_g, y_o_g, "Glucose (Observed)", "mg/dL", "Time (min)")
+        self.plot_trajectory_panel(axes[1], sol_t.t, sol_t.y[1], y_b_i, y_o_i, "Insulin (Hidden Error)", "uU/mL", "Time (min)")
+        plt.tight_layout(); plt.savefig(os.path.join(self.results_path, f'sim_trajectory_comparison.png'), dpi=300); plt.close()
         
     def _plot_symmetric_collapse(self, p_true, p_ours, p_base, prefix="sim"):
-        print(f"  -> Generating Symmetric Collapse Visualization ({prefix})")
-        
+        valid_base, valid_ours = not np.all(p_base == 0), not np.all(p_ours == 0)
         idx_si, idx_sigma = 0, 1 
         si_true, sigma_true = p_true[:, idx_si], p_true[:, idx_sigma]
         si_ours, sigma_ours = p_ours[:, idx_si], p_ours[:, idx_sigma]
         si_base, sigma_base = p_base[:, idx_si], p_base[:, idx_sigma]
         
-        k_true = si_true * sigma_true
-        k_ours = si_ours * sigma_ours
-        k_base = si_base * sigma_base
-        
         sns.set_style("ticks")
         fig = plt.figure(figsize=(20, 6))
         
-        # --- Panel 1: Log-Log Joint Distribution ---
         ax1 = fig.add_subplot(131)
         ax1.scatter(si_true, sigma_true, c='grey', alpha=0.15, s=20, label='Ground Truth')
-        ax1.scatter(si_base, sigma_base, c='crimson', alpha=0.5, s=15, marker='x', label='Baseline')
-        ax1.scatter(si_ours, sigma_ours, c='steelblue', alpha=0.6, s=15, edgecolors='white', lw=0.5, label='Ours')
-        
+        if valid_base: ax1.scatter(si_base, sigma_base, c='crimson', alpha=0.5, s=15, marker='x', label='Baseline')
+        if valid_ours: ax1.scatter(si_ours, sigma_ours, c='steelblue', alpha=0.6, s=15, edgecolors='white', lw=0.5, label='Ours')
         ax1.set_xscale('log'); ax1.set_yscale('log')
         vmin, vmax = min(si_true.min(), sigma_true.min()), max(si_true.max(), sigma_true.max())
         ax1.plot([vmin, vmax], [vmin, vmax], 'b--', linewidth=1.5, label='y=x (Symmetric Line)')
+        ax1.set_title("1. Log-Log Joint Distribution", fontsize=14, fontweight='bold'); ax1.legend(loc='upper left'); ax1.grid(True, alpha=0.2)
         
-        ax1.set_xlabel("$S_I$ [Log]", fontsize=12); ax1.set_ylabel("$\sigma$ [Log]", fontsize=12)
-        ax1.set_title("1. Log-Log Joint Distribution", fontsize=14, fontweight='bold')
-        ax1.legend(loc='upper left'); ax1.grid(True, alpha=0.2)
-        
-        # --- Panel 2: Product Distribution ---
         ax2 = fig.add_subplot(132)
-        sns.kdeplot(np.log10(k_true), ax=ax2, color='grey', fill=True, alpha=0.3, linewidth=2, label='Log($K_{true}$)')
-        sns.kdeplot(np.log10(k_base), ax=ax2, color='crimson', linestyle='--', linewidth=2, label='Log($K_{base}$)')
-        sns.kdeplot(np.log10(k_ours), ax=ax2, color='steelblue', linewidth=2, label='Log($K_{ours}$)')
+        sns.kdeplot(np.log10(si_true * sigma_true), ax=ax2, color='grey', fill=True, alpha=0.3, linewidth=2, label='Log($K_{true}$)')
+        if valid_base: sns.kdeplot(np.log10(si_base * sigma_base), ax=ax2, color='crimson', linestyle='--', linewidth=2, label='Log($K_{base}$)')
+        if valid_ours: sns.kdeplot(np.log10(si_ours * sigma_ours), ax=ax2, color='steelblue', linewidth=2, label='Log($K_{ours}$)')
+        ax2.set_title("2. Product Consistency (Stiff Direction)", fontsize=14, fontweight='bold'); ax2.legend(); ax2.grid(True, alpha=0.2)
         
-        ax2.set_xlabel("Log Product ($\log_{10} K$)", fontsize=12); ax2.set_ylabel("Density", fontsize=12)
-        ax2.set_title("2. Product Consistency (Stiff Direction)", fontsize=14, fontweight='bold')
-        ax2.legend(); ax2.grid(True, alpha=0.2)
-        
-        # --- Panel 3: S_I Correlation (Sloppy Direction Failure) ---
         ax3 = fig.add_subplot(133)
-        ax3.scatter(np.log10(si_true), np.log10(si_base), c='crimson', alpha=0.4, s=15, marker='x', label='Baseline')
-        ax3.scatter(np.log10(si_true), np.log10(si_ours), c='steelblue', alpha=0.5, s=15, edgecolors='white', lw=0.5, label='Ours')
-        
+        if valid_base: ax3.scatter(np.log10(si_true), np.log10(si_base), c='crimson', alpha=0.4, s=15, marker='x', label='Baseline')
+        if valid_ours: ax3.scatter(np.log10(si_true), np.log10(si_ours), c='steelblue', alpha=0.5, s=15, edgecolors='white', lw=0.5, label='Ours')
         min_log, max_log = np.log10(si_true).min(), np.log10(si_true).max()
         ax3.plot([min_log, max_log], [min_log, max_log], 'k--', lw=2, label='Ideal (y=x)')
+        ax3.set_title("3. $S_I$ Prediction (Sloppy Direction)", fontsize=14, fontweight='bold'); ax3.legend(); ax3.grid(True, alpha=0.2)
         
-        ax3.set_xlabel("Log True $S_I$", fontsize=12); ax3.set_ylabel("Log Pred $S_I$", fontsize=12)
-        ax3.set_title("3. $S_I$ Prediction (Sloppy Direction)", fontsize=14, fontweight='bold')
-        ax3.legend(); ax3.grid(True, alpha=0.2)
-        
-        plt.tight_layout()
-        plt.savefig(os.path.join(self.results_path, f'{prefix}_symmetric_collapse.png'), dpi=300)
-        plt.close()
+        plt.tight_layout(); plt.savefig(os.path.join(self.results_path, f'{prefix}_symmetric_collapse.png'), dpi=300); plt.close()
 
 # ==========================================
 # 3. Factory Function 
