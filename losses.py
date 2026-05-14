@@ -12,10 +12,10 @@ class BaseLoss(nn.Module):
     Abstract base class for loss functions.
     All custom loss functions should inherit from this class and implement the forward method.
     """
-    def __init__(self, f_theta, g_phi, config):
+    def __init__(self, hidden_net, param_net, config):
         super(BaseLoss, self).__init__()
-        self.f_theta = f_theta
-        self.g_phi = g_phi
+        self.H_phi = hidden_net
+        self.P_psi = param_net
         self.config = config
         self.mse_loss = nn.MSELoss()
         
@@ -39,12 +39,12 @@ class SupervisedLoss(BaseLoss):
     Supervised loss function that computes MSE loss for both hidden variables and parameters.
     """
     def forward(self, x_true, y_true, p_true):
-        # Predict hidden variables using f_theta
-        y_pred = self.f_theta(x_true, p_true)
+        # Predict hidden variables using H_phi
+        y_pred = self.H_phi(x_true, p_true)
         loss_f = self.mse_loss(y_pred, y_true)
         
-        # Predict parameters using g_phi
-        p_pred = self.g_phi(x_true, y_true)
+        # Predict parameters using P_psi
+        p_pred = self.P_psi(x_true, y_true)
         loss_g = self.mse_loss(p_pred, p_true)
         
         total_loss = loss_f + loss_g
@@ -60,8 +60,8 @@ class RecurrentLoss(BaseLoss):
     """
     Recurrent loss function that computes multi-step prediction loss for parameters.
     """
-    def __init__(self, f_theta, g_phi, config, iter=2, gamma=1.0):
-        super(RecurrentLoss, self).__init__(f_theta, g_phi, config)
+    def __init__(self, hidden_net, param_net, config, iter=2, gamma=1.0):
+        super(RecurrentLoss, self).__init__(hidden_net, param_net, config)
         self.iter = iter # Number of recurrent steps
         self.gamma = gamma # Discount factor
         
@@ -76,8 +76,8 @@ class RecurrentLoss(BaseLoss):
         
         # Unrolled Optimization Loop (BPTT)
         for k in range(1, self.iter + 1):
-            y_pred = self.f_theta(x_true, p_curr)
-            p_next = self.g_phi(x_true, y_pred)
+            y_pred = self.H_phi(x_true, p_curr)
+            p_next = self.P_psi(x_true, y_pred)
             step_loss = self.mse_loss(p_next, p_true)
             
             weight = self.gamma ** (k - 1)
@@ -97,8 +97,8 @@ class RecurrentLoss(BaseLoss):
         return total_loss, metrics
     
 class CompositeLoss(BaseLoss):
-    def __init__(self, f_theta, g_phi, config, components_with_weights):
-        super(CompositeLoss, self).__init__(f_theta, g_phi, config)
+    def __init__(self, hidden_net, param_net, config, components_with_weights):
+        super(CompositeLoss, self).__init__(hidden_net, param_net, config)
         
         # components_with_weights: [(module, weight), (module, weight), ...]
         self.components = nn.ModuleList([c for c, w in components_with_weights])
@@ -120,7 +120,7 @@ class CompositeLoss(BaseLoss):
         return total_loss, merged_metrics
     
 # Factory function
-def get_loss_function(f_theta, g_phi, config):
+def get_loss_function(hidden_net, param_net, config):
     loss_config = getattr(config, 'LOSS_CONFIG', [('supervised', 1.0)])
     
     component_map = {
@@ -139,7 +139,7 @@ def get_loss_function(f_theta, g_phi, config):
         if name not in component_map:
             raise ValueError(f"Unknown loss type: {name}")
             
-        comp_instance = component_map[name](f_theta, g_phi, config)
+        comp_instance = component_map[name](hidden_net, param_net, config)
         active_components_with_weights.append((comp_instance, weight))
         
-    return CompositeLoss(f_theta, g_phi, config, active_components_with_weights)
+    return CompositeLoss(hidden_net, param_net, config, active_components_with_weights)
