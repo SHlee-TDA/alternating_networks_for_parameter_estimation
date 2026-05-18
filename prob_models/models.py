@@ -32,23 +32,24 @@ def build_mlp(input_dim, output_dim, hidden_dims):
     
     return nn.Sequential(*layers)
 
-class  BaselineCVAE(nn.Module):
-    def __init__(self, x_dim, theta_dim, y_dim, latent_dim=16, hidden_dims=[256, 256, 256, 256]):
+class SingleCVAE(nn.Module):
+    def __init__(self, x_dim, theta_dim, latent_dim=16, hidden_dims=[256, 256, 256, 256]):
         super().__init__()
         self.latent_dim = latent_dim
         
-        encoder_input_dim = y_dim + x_dim + theta_dim
+        encoder_input_dim = x_dim + theta_dim
         self.encoder_net = build_mlp(encoder_input_dim, hidden_dims[-1], hidden_dims[:-1])
         self.fc_mu = nn.Linear(hidden_dims[-1], latent_dim)
         self.fc_logvar = nn.Linear(hidden_dims[-1], latent_dim)
         
-        decoder_input_dim = latent_dim + x_dim + theta_dim
+        decoder_input_dim = latent_dim + x_dim
         self.decoder_net = nn.Sequential(
             build_mlp(decoder_input_dim, theta_dim, hidden_dims),
-            nn.Tanh()
+            nn.Tanh() 
         )
-    def encode(self, x, y, theta):
-        inputs = torch.cat([x, y, theta], dim=-1)
+
+    def encode(self, x, theta):
+        inputs = torch.cat([x, theta], dim=-1)
         h = self.encoder_net(inputs)
         mu = self.fc_mu(h)
         logvar = self.fc_logvar(h)
@@ -59,25 +60,24 @@ class  BaselineCVAE(nn.Module):
         eps = torch.randn_like(std)
         return mu + eps * std
     
-    def decode(self, z, x, theta):
-        inputs = torch.cat([z, x, theta], dim=-1)
+    def decode(self, z, x):
+        inputs = torch.cat([z, x], dim=-1)
         theta_hat = self.decoder_net(inputs)
         return theta_hat
     
-    def forward(self, x, y, theta):
-        mu, logvar = self.encode(x, y, theta)
+    def forward(self, x, theta):
+        mu, logvar = self.encode(x, theta)
         z = self.reparameterize(mu, logvar)
-        theta_hat = self.decode(z, x, theta)
+        theta_hat = self.decode(z, x)
         return theta_hat, mu, logvar
     
-    def sample(self, x, theta, num_samples=1):
+    def sample(self, x, num_samples=1):
         batch_size = x.size(0)
         z = torch.randn(num_samples * batch_size, self.latent_dim).to(x.device)
         
         x_repeated = x.repeat_interleave(num_samples, dim=0)
-        theta_repeated = theta.repeat_interleave(num_samples, dim=0)
         
-        theta_sampled = self.decode(z, x_repeated, theta_repeated)
+        theta_sampled = self.decode(z, x_repeated)
         return theta_sampled.view(batch_size, num_samples, -1)
     
 
