@@ -7,8 +7,8 @@ from torch.utils.data import TensorDataset, DataLoader, random_split, Subset
 
 # 1. 시스템 및 유틸리티 (기존 자원 100% 재사용)
 from systems.ogtt_simul import OgttSimul
-from data_loader import DataGenerator, RealOGTTDataLoader
-from utils import Normalizer
+from src.data_loader import DataGenerator, RealOGTTDataLoader
+from src.utils import Normalizer
 from tools.exp_tools import set_seed
 from tools.interactive_file_selector import interactive_file_selector
 

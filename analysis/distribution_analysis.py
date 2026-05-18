@@ -23,7 +23,7 @@ project_root = current_dir.parent
 sys.path.append(str(project_root))
 
 from config import Config
-from data_loader import RealOGTTDataLoader
+from src.data_loader import RealOGTTDataLoader
 
 def remove_outliers(data, lower=1, upper=99):
     """1% ~ 99% 사이의 데이터만 남김"""

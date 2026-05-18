@@ -15,10 +15,10 @@ project_root = current_dir.parent
 sys.path.append(str(project_root))
 
 from config import Config
-from models import ParameterEstimator, HiddenVarPredictor
+from src.models import ParameterEstimator, HiddenVarPredictor
 from systems.ogtt_simul import OgttSimul
-from utils import Normalizer
-from data_loader import DataGenerator
+from src.utils import Normalizer
+from src.data_loader import DataGenerator
 
 def load_experiment_context(experiment_name_query, device_override=None):
     """

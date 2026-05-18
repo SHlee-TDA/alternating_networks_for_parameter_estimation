@@ -23,7 +23,7 @@ current_dir = Path(__file__).resolve().parent
 project_root = current_dir.parent
 sys.path.append(str(project_root))
 
-from data_loader import RealOGTTDataLoader
+from src.data_loader import RealOGTTDataLoader
 from config import Config
 
 def calculate_scaling():

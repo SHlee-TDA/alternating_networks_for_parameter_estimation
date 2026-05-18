@@ -12,10 +12,10 @@ from scipy.integrate import solve_ivp
 import pandas as pd
 
 from config import Config
-from models import ParameterEstimator, HiddenVarPredictor, SingleNetworkBaseline
+from src.models import ParameterEstimator, HiddenVarPredictor, SingleNetworkBaseline
 from systems.ogtt_simul import OgttSimul
-from utils import Normalizer
-from data_loader import DataGenerator, RealOGTTDataLoader
+from src.utils import Normalizer
+from src.data_loader import DataGenerator, RealOGTTDataLoader
 from tools.interactive_file_selector import interactive_file_selector
 
 

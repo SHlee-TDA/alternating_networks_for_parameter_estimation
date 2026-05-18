@@ -5,8 +5,8 @@ import time
 import os
 
 from config import Config
-from data_loader import DataGenerator
-from utils import Normalizer
+from src.data_loader import DataGenerator
+from src.utils import Normalizer
 
 # 초기값(p_init)을 입력으로 함께 받는 조건부 Direct 모델
 class ConditionalDirectPredictor(nn.Module):
@@ -116,7 +116,7 @@ class DirectMLEstimator:
         T, obs_dim = x_obs.shape
         
         if getattr(self.config, 'USE_DERIVATIVE', False):
-            from utils import get_derivative_estimator
+            from src.utils import get_derivative_estimator
             method = getattr(self.config, 'DERIVATIVE_METHOD', 'finite_diff')
             kwargs = {'order': 3} if method == 'poly' else {}
             estimator = get_derivative_estimator(method, **kwargs)

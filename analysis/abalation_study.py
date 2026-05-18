@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from config import Config
-from trainer import Trainer
+from src.trainer import Trainer
 # TODO: 실제 구현된 모델과 평가 함수(또는 Trainer)를 임포트하세요.
 # from models import AlternatingNetwork
 # from data_loader import DataLoader, ... (테스트 데이터 로드용)

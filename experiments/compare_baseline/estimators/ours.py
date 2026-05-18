@@ -3,11 +3,11 @@ import numpy as np
 import time
 import os
 
-from utils import Normalizer
-from data_loader import DataGenerator
+from src.utils import Normalizer
+from src.data_loader import DataGenerator
 from config import Config
-from trainer import Trainer
-from models import HiddenVarPredictor, ParameterEstimator
+from src.trainer import Trainer
+from src.models import HiddenVarPredictor, ParameterEstimator
 from torch.utils.data import TensorDataset, DataLoader, random_split # DataLoader 추가
 
 class ProposedEstimator:
@@ -127,7 +127,7 @@ class ProposedEstimator:
         
         if getattr(self.config, 'USE_DERIVATIVE', False):
             # data_loader에서 사용한 것과 완벽히 동일한 미분기 로드
-            from utils import get_derivative_estimator
+            from src.utils import get_derivative_estimator
             method = getattr(self.config, 'DERIVATIVE_METHOD', 'finite_diff')
             kwargs = {'order': 3} if method == 'poly' else {}
             

@@ -17,11 +17,11 @@ import numpy as np
 import torch
 
 from config import Config
-from data_loader import DataGenerator, setup_dataloaders
-from models import HiddenVarPredictor, ParameterEstimator, SingleNetworkBaseline
-from trainer import Trainer
+from src.data_loader import DataGenerator, setup_dataloaders
+from src.models import HiddenVarPredictor, ParameterEstimator, SingleNetworkBaseline
+from src.trainer import Trainer
+from src.infer import run_evaluation_phase  
 from tools.exp_tools import ExperimentLogger, set_seed, get_system_class
-from infer import run_evaluation_phase  
 
 
 def run_experiment_pipeline(global_config):
@@ -127,11 +127,29 @@ def run_experiment_pipeline(global_config):
 
 if __name__ == "__main__":
     config = Config()
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Training and Evaluation for Iterative Parameter Estimation")
+    parser.add_argument('--system', type=str, default=None, help="Dataset system name (e.g., sir, lotka_volterra, ogtt_simul)")
+    parser.add_argument('--run_baseline', type=str, default=None, help="'true' for Single Network, 'false' for Iterative")
     parser.add_argument('--epochs', type=int, default=None, help="Override default epochs")
+    parser.add_argument("--results_dir", type=str, default=None, help="Path to save checkpoints and evaluation plots")
     args = parser.parse_args()
     
-    if args.epochs: 
+    if args.system is not None:
+        config.SYSTEM_NAME = args.system
+        
+    if args.run_baseline is not None:
+        # Transform string coming from bash to boolean
+        config.RUN_BASELINE = (args.run_baseline.lower() in ['true', '1', 't', 'y', 'yes'])
+        
+    if args.epochs is not None:
         config.EPOCHS = args.epochs
+        
+    if args.results_dir is not None:
+        config.RESULTS_DIR = args.results_dir
+        
+    print(f"\n🚀 Pipeline Start")
+    print(f" - System: {config.SYSTEM_NAME}")
+    print(f" - Baseline (Single Net): {config.RUN_BASELINE}")
+    print(f" - Results Directory: {config.RESULTS_DIR}")
         
     run_experiment_pipeline(config)

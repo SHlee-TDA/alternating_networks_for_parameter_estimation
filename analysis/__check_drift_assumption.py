@@ -8,7 +8,7 @@ import pandas as pd
 
 # 기존 모듈 활용
 from systems.ogtt_simul import OGTTModel, ode_params, sys_params
-from data_loader import RealOGTTDataLoader
+from src.data_loader import RealOGTTDataLoader
 from config import Config
 
 def remove_outliers(data, lower=1, upper=99):

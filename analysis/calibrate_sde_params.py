@@ -14,7 +14,7 @@ project_root = current_dir.parent
 sys.path.append(str(project_root))
 
 from systems.ogtt_simul import OGTTModel, ode_params, sys_params
-from data_loader import RealOGTTDataLoader
+from src.data_loader import RealOGTTDataLoader
 from config import Config
 
 def plot_variable_analysis(stats_list, var_name, color, save_path):

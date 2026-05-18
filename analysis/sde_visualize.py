@@ -13,9 +13,9 @@ project_root = current_dir.parent
 sys.path.append(str(project_root))
 
 from config import Config
-from data_loader import RealOGTTDataLoader
+from src.data_loader import RealOGTTDataLoader
 from systems.ogtt_simul import OgttSimul, OGTTModel, ode_params, sys_params
-from utils import euler_maruyama
+from src.utils import euler_maruyama
 
 # 시각화 스타일 설정
 sns.set_theme(style="whitegrid")

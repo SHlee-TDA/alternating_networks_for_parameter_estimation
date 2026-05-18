@@ -19,11 +19,11 @@ project_root = current_dir.parent
 sys.path.append(str(project_root))
 
 from systems.ogtt_simul import OGTTModel, ode_params, sys_params
-from data_loader import RealOGTTDataLoader
+from src.data_loader import RealOGTTDataLoader
 from config import Config
 # 기존 시스템 정의 모듈 활용
 from systems.ogtt_simul import OGTTModel, ode_params, sys_params
-from data_loader import RealOGTTDataLoader
+from src.data_loader import RealOGTTDataLoader
 from config import Config
 
 

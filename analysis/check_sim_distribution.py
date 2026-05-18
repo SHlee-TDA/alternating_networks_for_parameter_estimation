@@ -16,7 +16,7 @@ from scipy import stats
 # 프로젝트 모듈 임포트
 from config import Config
 from systems.ogtt_simul import OgttSimul
-from data_loader import DataGenerator
+from src.data_loader import DataGenerator
 
 
 
