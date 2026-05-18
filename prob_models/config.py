@@ -32,19 +32,29 @@ class ProbConfig:
     # --- 3. Training & Optimization ---
     EPOCHS: int = 3000
     LEARNING_RATE: float = 1e-3
-    KL_WARMUP_EPOCHS: int = 150       # CVAE 붕괴 방지를 위한 긴 웜업
+    KL_MAX_BETA: float = 0.01
+    KL_WARMUP_EPOCHS: int = 300     # CVAE 붕괴 방지를 위한 긴 웜업
     EARLY_STOPPING_PATIENCE: int = 200
     EARLY_STOPPING_MIN_DELTA: float = 1e-5
     
     # --- 4. CVAE Architecture ---
     HIDDEN_DIMS: List[int] = field(default_factory=lambda: [128, 128, 128, 128])
-    LATENT_DIM_HIDDEN: int = 16  # Network A의 Z 공간
-    LATENT_DIM_PARAM: int = 16    # Network B의 Z 공간
+    LATENT_DIM_HIDDEN: int = 4  # Network A의 Z 공간
+    LATENT_DIM_PARAM: int = 2    # Network B의 Z 공간
     
     # --- 5. Inference (Pseudo-Gibbs Sampling) ---
     INFERENCE_CHAINS: int = 50   # MCMC 체인 수 (그려질 밴드의 두께감 결정)
-    INFERENCE_STEPS: int = 60    # 핑퐁 횟수
-    INFERENCE_BURN_IN: int = 15  # 예열 기간 폐기 샘플 수
+    INFERENCE_STEPS: int = 150    # 핑퐁 횟수
+    INFERENCE_BURN_IN: int = 50  # 예열 기간 폐기 샘플 수
 
+    # --- 6. Denoising Autoencoder (선택적) ---
+    CONDITION_NOISE_STD_Y: float = 0.05  # H-net 훈련 시 Y에 주입할 노이즈 표준편차
+    CONDITION_NOISE_STD_P: float = 0.05  # P-net 훈
+    TARGET_NOISE_STD_Y: float = 0.05     # H-net 훈련 시 Y 타겟에 주입할 노이즈 표준편차
+    TARGET_NOISE_STD_P: float = 0.05     # P-net 훈
+   
+    INFER_NOISE_Y = 0.05  # 추론 단계에서 공간 탐색을 위해 더해줄 노이즈
+    INFER_NOISE_P = 0.05  # 추론 단계에서 공간 탐색을 위해 더해줄 노이즈
+    
     def __post_init__(self):
         os.makedirs(os.path.join(self.RESULTS_DIR, self.EXPERIMENT_NAME), exist_ok=True)

@@ -43,8 +43,10 @@ class  BaselineCVAE(nn.Module):
         self.fc_logvar = nn.Linear(hidden_dims[-1], latent_dim)
         
         decoder_input_dim = latent_dim + x_dim + theta_dim
-        self.decoder_net = build_mlp(decoder_input_dim, theta_dim, hidden_dims)
-        
+        self.decoder_net = nn.Sequential(
+            build_mlp(decoder_input_dim, theta_dim, hidden_dims),
+            nn.Tanh()
+        )
     def encode(self, x, y, theta):
         inputs = torch.cat([x, y, theta], dim=-1)
         h = self.encoder_net(inputs)
@@ -91,8 +93,10 @@ class HiddenStateCVAE(nn.Module):
         self.fc_logvar = nn.Linear(hidden_dims[-1], latent_dim)
         
         decoder_input_dim = latent_dim + x_dim + theta_dim
-        self.decoder_net = build_mlp(decoder_input_dim, y_dim, hidden_dims)
-
+        self.decoder_net = nn.Sequential(
+            build_mlp(decoder_input_dim, y_dim, hidden_dims),
+            nn.Sigmoid()
+        )
     def encode(self, x, y, theta):
         inputs = torch.cat([x, y, theta], dim=-1)
         h = self.encoder_net(inputs)
@@ -138,8 +142,10 @@ class ParameterCVAE(nn.Module):
         self.fc_logvar = nn.Linear(hidden_dims[-1], latent_dim)
         
         decoder_input_dim = latent_dim + x_dim + y_dim
-        self.decoder_net = build_mlp(decoder_input_dim, theta_dim, hidden_dims)
-
+        self.decoder_net = nn.Sequential(
+            build_mlp(decoder_input_dim, theta_dim, hidden_dims),
+            nn.Tanh()
+        )
     def encode(self, x, y, theta):
         inputs = torch.cat([x, y, theta], dim=-1)
         h = self.encoder_net(inputs)
@@ -174,8 +180,7 @@ class ParameterCVAE(nn.Module):
         return theta_sampled.view(batch_size, num_samples, -1)
     
 def elbo_loss(recon_x, x, mu, logvar, beta=1.0):
-    recon_loss = F.mse_loss(recon_x, x, reduction='mean')
-    
+    recon_loss = F.mse_loss(recon_x, x, reduction='none').sum(dim=1).mean()
     kld_loss = -0.5 * torch.mean(torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1))
     
     total_loss = recon_loss + beta * kld_loss

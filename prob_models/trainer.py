@@ -25,8 +25,8 @@ class ProbabilisticTrainer:
         self.opt_hidden = torch.optim.Adam(self.hidden_net.parameters(), lr=config.LEARNING_RATE)
         self.opt_param = torch.optim.Adam(self.param_net.parameters(), lr=config.LEARNING_RATE)
 
-        self.sched_hidden = torch.optim.lr_scheduler.ReduceLROnPlateau(self.opt_hidden, mode='min', factor=0.5, patience=10)
-        self.sched_param = torch.optim.lr_scheduler.ReduceLROnPlateau(self.opt_param, mode='min', factor=0.5, patience=10)
+        self.sched_hidden = torch.optim.lr_scheduler.ReduceLROnPlateau(self.opt_hidden, mode='min', factor=0.5, patience=100)
+        self.sched_param = torch.optim.lr_scheduler.ReduceLROnPlateau(self.opt_param, mode='min', factor=0.5, patience=100)
 
     def train(self):
         print(f"Training Probabilistic Models for {self.config.EXPERIMENT_NAME}...")
@@ -42,7 +42,8 @@ class ProbabilisticTrainer:
             
             # KL Annealing
             warmup_epochs = getattr(self.config, 'KL_WARMUP_EPOCHS', 20)
-            beta = min(1.0, epoch / warmup_epochs) if warmup_epochs > 0 else 1.0
+            max_beta = getattr(self.config, 'KL_MAX_BETA', 1.0)
+            beta = min(max_beta, epoch / warmup_epochs) if warmup_epochs > 0 else 1.0
             
             pbar = tqdm(self.train_loader, desc=f"Epoch {epoch+1}/{self.config.EPOCHS}", leave=False)
             
@@ -50,17 +51,44 @@ class ProbabilisticTrainer:
                 x_batch = x_batch.to(self.config.DEVICE)
                 y_batch = y_batch.to(self.config.DEVICE)
                 p_batch = p_batch.to(self.config.DEVICE)
+                
+                # 1. Condition Noise (Theorem 1: Local Contraction 유도)
+                cond_std_y = getattr(self.config, 'COND_NOISE_STD_Y', 0.05)
+                cond_std_p = getattr(self.config, 'COND_NOISE_STD_P', 0.05)
+                
+                y_cond_noisy = y_batch + torch.randn_like(y_batch) * cond_std_y
+                p_cond_noisy = p_batch + torch.randn_like(p_batch) * cond_std_p
 
+                # 2. Target Noise (Theorem 2: Score Matching & Attraction 유도)
+                target_std_y = getattr(self.config, 'TARGET_NOISE_STD_Y', 0.05)
+                target_std_p = getattr(self.config, 'TARGET_NOISE_STD_P', 0.05)
+                
+                y_target_noisy = y_batch + torch.randn_like(y_batch) * target_std_y
+                p_target_noisy = p_batch + torch.randn_like(p_batch) * target_std_p
+                
+                # ==========================================
+                # Train Hidden State CVAE (H_net)
+                # ==========================================
                 self.opt_hidden.zero_grad()
-                y_hat, mu_h, logvar_h = self.hidden_net(x_batch, y_batch, p_batch)
+                # Encoder Input: Target Noisy (y_target_noisy)
+                # Condition Input: Condition Noisy (p_cond_noisy)
+                y_hat, mu_h, logvar_h = self.hidden_net(x_batch, y_target_noisy, p_cond_noisy)
+                
+                # Loss Calculation: Reconstruct the CLEAN target (y_batch)
                 loss_h, recon_h, kld_h = elbo_loss(y_hat, y_batch, mu_h, logvar_h, beta)
                 
                 loss_h.backward()
                 torch.nn.utils.clip_grad_norm_(self.hidden_net.parameters(), 1.0)
                 self.opt_hidden.step()
 
+                # ==========================================
+                # Train Parameter CVAE (P_net)
+                # ==========================================
                 self.opt_param.zero_grad()
-                p_hat, mu_p, logvar_p = self.param_net(x_batch, y_batch, p_batch)
+                # Encoder Input: Target Noisy (p_target_noisy)
+                # Condition Input: Condition Noisy (y_cond_noisy)
+                p_hat, mu_p, logvar_p = self.param_net(x_batch, y_cond_noisy, p_target_noisy)                
+                # Loss Calculation: Reconstruct the CLEAN target (p_batch)
                 loss_p, recon_p, kld_p = elbo_loss(p_hat, p_batch, mu_p, logvar_p, beta)
                 
                 loss_p.backward()
@@ -80,15 +108,18 @@ class ProbabilisticTrainer:
             
             # Update Schedulers based on combined validation loss
             combined_val_loss = val_losses['val_hidden_loss'] + val_losses['val_param_loss']
-            self.sched_hidden.step(combined_val_loss)
-            self.sched_param.step(combined_val_loss)
+            combined_val_recon = val_losses['val_hidden_recon'] + val_losses['val_param_recon']
+            
+            self.sched_hidden.step(combined_val_recon)
+            self.sched_param.step(combined_val_recon)
+            
             
             if epoch % 1000 == 0 or epoch == self.config.EPOCHS - 1:
                 h_loss = np.mean(epoch_train_losses['hidden_loss'])
                 p_loss = np.mean(epoch_train_losses['param_loss'])
                 print(f"Epoch {epoch+1:04d}/{self.config.EPOCHS} | Beta: {beta:.2f} | "
                       f"Net A Loss: {h_loss:.4f} | Net B Loss: {p_loss:.4f} | "
-                      f"Val Loss: {combined_val_loss:.4f}")
+                      f"Val Loss: {combined_val_loss:.4f} | Val Recon: {combined_val_recon:.4f}")
             
             # Update History
             for k, v in epoch_train_losses.items():
@@ -97,15 +128,15 @@ class ProbabilisticTrainer:
                 history[k].append(v)
             
             # Checkpointing & Early Stopping 
-            if combined_val_loss < best_val_loss - getattr(self.config, 'EARLY_STOPPING_MIN_DELTA', 1e-4):
-                best_val_loss = combined_val_loss
+            if combined_val_recon < best_val_loss - getattr(self.config, 'EARLY_STOPPING_MIN_DELTA', 1e-4):
+                best_val_loss = combined_val_recon  
                 patience_counter = 0
                 self._save_checkpoint(epoch, best_val_loss)
             else:
                 patience_counter += 1
                 
             if getattr(self.config, 'USE_EARLY_STOPPING', False) and patience_counter >= self.config.EARLY_STOPPING_PATIENCE:
-                print(f"\n[Early Stopping] Epoch {epoch+1}")
+                print(f"\n[Early Stopping] Epoch {epoch+1} (No improvement in Validation Recon Loss)")
                 break
 
         self._save_final_artifacts()
