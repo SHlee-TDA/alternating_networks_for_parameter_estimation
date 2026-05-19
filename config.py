@@ -45,6 +45,9 @@ class Config:
     TEST_SPLIT: float = 0.2
     BATCH_SIZE: int = 256
     
+    NORMALIZER_STATE_SCALES: list = None
+    NORMALIZER_PARAM_BOUNDS: list = None
+    
     # --------------------------------------------------------------------------
     # 3. Trainig Hyperparameters
     # --------------------------------------------------------------------------

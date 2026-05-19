@@ -113,7 +113,8 @@ class Normalizer:
         to a consistent range (typically [-1, 1] or similar) to prevent gradient explosion
         and accelerate convergence.
     """
-    def __init__(self, system, device, 
+    def __init__(self, system, device,
+                 config=None, 
                  state_scales=None, param_bounds=None, use_log_params=False,
                  use_normalization=True):
         self.system = system
@@ -121,25 +122,31 @@ class Normalizer:
         self.use_log_params = use_log_params
         self.use_normalization = use_normalization
         
-        # 1. State Scales (Max Absolute Value)
-        self.state_scales = torch.tensor(state_scales if state_scales else [1.0] * 2, 
-                                       dtype=torch.float32, device=device)
+        # 1. 값 불러오기 (우선순위: Config > Argument > Default)
+        _state_scales = getattr(config, 'NORMALIZER_STATE_SCALES', None) if config else None
+        _state_scales = _state_scales or state_scales or [1.0, 1.0]
         
-        # 2. Parameter Bounds (Min, Max)
-        if param_bounds:
-            p_min, p_max = param_bounds
-            if self.use_log_params:
-                # Convert physical bounds to log space
-                self.p_min = torch.tensor(np.log(p_min + 1e-9), dtype=torch.float32, device=device)
-                self.p_max = torch.tensor(np.log(p_max + 1e-9), dtype=torch.float32, device=device)
-            else:
-                self.p_min = torch.tensor(p_min, dtype=torch.float32, device=device)
-                self.p_max = torch.tensor(p_max, dtype=torch.float32, device=device)
+        _p_bounds = getattr(config, 'NORMALIZER_PARAM_BOUNDS', None) if config else None
+        _p_bounds = _p_bounds or param_bounds
+        
+        # 2. State Scales 할당
+        self.state_scales = torch.tensor(_state_scales, dtype=torch.float32, device=device)
+        
+        # 3. Parameter Bounds 전처리 (JSON 리스트가 들어와도 에러가 나지 않도록 numpy 배열로 강제 변환)
+        if _p_bounds:
+            p_min = np.array(_p_bounds[0], dtype=np.float32)
+            p_max = np.array(_p_bounds[1], dtype=np.float32)
         else:
-            ranges = [self.system.param_ranges[n] for n in self.system.param_names]
-            p_arr = np.array(ranges)
-            self.p_min = torch.tensor(p_arr[:, 0], dtype=torch.float32, device=device)
-            self.p_max = torch.tensor(p_arr[:, 1], dtype=torch.float32, device=device)
+            ranges = np.array([self.system.param_ranges[n] for n in self.system.param_names])
+            p_min, p_max = ranges[:, 0], ranges[:, 1]
+
+        # 4. Log 변환 및 Tensor 할당
+        if self.use_log_params:
+            p_min = np.log(p_min + 1e-9)
+            p_max = np.log(p_max + 1e-9)
+            
+        self.p_min = torch.tensor(p_min, dtype=torch.float32, device=device)
+        self.p_max = torch.tensor(p_max, dtype=torch.float32, device=device)
 
     def normalize_inputs(self, x, variable_type='observed'):
         """

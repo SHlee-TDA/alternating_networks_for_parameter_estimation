@@ -332,60 +332,107 @@ class RealOGTTDataLoader:
 
 
 # DataLoader Setup Module for experiments
+# data_loader.py (Update setup_dataloaders function)
+
 def setup_dataloaders(exp_config, sim_data_tuple, system, global_config):
     """
-    Constructs PyTorch DataLoaders for Train, Val, and Test.
-    Manages robust normalization and Hybrid Mixing (Synthetic + Real).
-    
+    Creates PyTorch DataLoaders for Training, Validation, and Testing.
+    Ensures strict data separation to prevent data leakage and handles
+    robust scaling (normalization) of the variables.
+
     Returns:
-        tuple: (train_loader, val_loader, test_loader, real_test_loader, p_initial_guess, normalizer)
+        train_loader, val_loader, test_loader, real_test_loader, p_initial_guess, normalizer
     """
-    # 1. Unpack Simulation Data
     obs_sim, hid_sim, params_sim, t_points = sim_data_tuple
+    total_len = len(obs_sim)
+
+    # ---------------------------------------------------------
+    # Step 1: Split Data First (Prevents Data Leakage)
+    # We split the raw data before normalization so that the test set
+    # does not secretly influence our scaling rules.
+    # ---------------------------------------------------------
+    g = torch.Generator().manual_seed(global_config.SEED)
+    shuffled_indices = torch.randperm(total_len, generator=g).tolist()
     
-    # 2. Initialize Normalizer (Data-Driven via 99.9th percentile to reject extreme outliers)
-    scale_obs = np.percentile(np.abs(obs_sim), 99.9)
-    scale_hid = np.percentile(np.abs(hid_sim), 99.9)
-    calc_scales = [scale_obs * 1.2, scale_hid * 1.2] # 20% stability margin
+    test_len = int(total_len * global_config.TEST_SPLIT)
+    val_len = int(total_len * global_config.TEST_SPLIT)
+    train_len = total_len - val_len - test_len
     
-    p_min = np.min(params_sim, axis=0)
-    p_max = np.max(params_sim, axis=0)
-    p_bounds = (p_min / 1.2, p_max * 1.2) # Margin for log-space stability
+    # Safely convert to numpy arrays for indexing
+    train_idx = np.array(shuffled_indices[:train_len])
+    val_idx = np.array(shuffled_indices[train_len:train_len+val_len])
+    test_idx = np.array(shuffled_indices[train_len+val_len:])
     
+    # Isolate splits
+    obs_train, obs_val, obs_test = obs_sim[train_idx], obs_sim[val_idx], obs_sim[test_idx]
+    hid_train, hid_val, hid_test = hid_sim[train_idx], hid_sim[val_idx], hid_sim[test_idx]
+    params_train, params_val, params_test = params_sim[train_idx], params_sim[val_idx], params_sim[test_idx]
+
+    # ---------------------------------------------------------
+    # Step 2: Initialize Normalizer (Using Train Data Only)
+    # Scales data to a stable range (e.g., [-1, 1]) for neural networks.
+    # ---------------------------------------------------------
     use_log = (global_config.SYSTEM_NAME == 'ogtt_simul')
     use_normalization = (global_config.SYSTEM_NAME == 'ogtt_simul')
+    
+    # Check if we are loading a previously saved experiment
+    loaded_scales = getattr(global_config, 'NORMALIZER_STATE_SCALES', None)
+    loaded_bounds = getattr(global_config, 'NORMALIZER_PARAM_BOUNDS', None)
+
+    if loaded_scales and loaded_bounds:
+        print("  -> [Normalizer] Loading pre-calculated scales from config.")
+        calc_scales = loaded_scales
+        p_bounds = (np.array(loaded_bounds[0]), np.array(loaded_bounds[1]))
+    else:
+        print("  -> [Normalizer] Calculating scales safely from the training split.")
+        # Use 99.9th percentile to ignore extreme outliers, with a 1e-6 safety minimum
+        scale_obs = max(np.percentile(np.abs(obs_train), 99.9), 1e-6)
+        scale_hid = max(np.percentile(np.abs(hid_train), 99.9), 1e-6)
+        calc_scales = [float(scale_obs * 1.2), float(scale_hid * 1.2)] # 20% margin
+        
+        # Calculate safe boundaries for parameters (10% margin on the range)
+        p_min = np.min(params_train, axis=0)
+        p_max = np.max(params_train, axis=0)
+        p_range = p_max - p_min
+        p_bounds = (p_min - 0.1 * p_range, p_max + 0.1 * p_range)
+        
+        # Save these rules to config so they can be re-used during inference/testing
+        global_config.NORMALIZER_STATE_SCALES = calc_scales
+        global_config.NORMALIZER_PARAM_BOUNDS = [p_bounds[0].tolist(), p_bounds[1].tolist()]
+
     normalizer = Normalizer(
         system, 
         global_config.DEVICE, 
+        config=global_config,
         state_scales=calc_scales, 
         param_bounds=p_bounds,
         use_log_params=use_log,
         use_normalization=use_normalization
     )
     
-    # 3. Create Normalized Simulation Dataset
-    X_sim = torch.FloatTensor(obs_sim).view(len(obs_sim), -1).to(global_config.DEVICE)
-    Y_sim = torch.FloatTensor(hid_sim).view(len(hid_sim), -1).to(global_config.DEVICE)
-    P_sim = torch.FloatTensor(params_sim).to(global_config.DEVICE)
-    
-    dataset_sim = TensorDataset(
-        normalizer.normalize_inputs(X_sim, 'observed'),
-        normalizer.normalize_inputs(Y_sim, 'hidden'),
-        normalizer.normalize_params(P_sim)
-    )
-    
-    # Random Split
-    total_len = len(dataset_sim)
-    test_len = int(total_len * global_config.TEST_SPLIT)
-    val_len = int(total_len * global_config.TEST_SPLIT)
-    train_len = total_len - val_len - test_len
-    
-    sim_train, sim_val, sim_test = random_split(
-        dataset_sim, [train_len, val_len, test_len],
-        generator=torch.Generator().manual_seed(global_config.SEED)
-    )
+    # ---------------------------------------------------------
+    # Step 3: Build Normalized Datasets
+    # We keep data on CPU here to prevent GPU Out-Of-Memory (OOM) errors.
+    # ---------------------------------------------------------
+    def _build_normalized_dataset(obs, hid, params):
+        X = torch.FloatTensor(obs).view(len(obs), -1)
+        Y = torch.FloatTensor(hid).view(len(hid), -1)
+        P = torch.FloatTensor(params)
+        return TensorDataset(
+            normalizer.normalize_inputs(X, 'observed'),
+            normalizer.normalize_inputs(Y, 'hidden'),
+            normalizer.normalize_params(P)
+        )
+        
+    sim_train = _build_normalized_dataset(obs_train, hid_train, params_train)
+    sim_val = _build_normalized_dataset(obs_val, hid_val, params_val)
+    sim_test = _build_normalized_dataset(obs_test, hid_test, params_test)
 
-    # 4. Prepare Real Data (Domain Adaptation for OGTT)
+    # ---------------------------------------------------------
+    # Step 4: Prepare Real Clinical Data (If applicable)
+    # Applies the exact same normalization rules learned from simulation.
+    # ---------------------------------------------------------
+    real_train, real_test = None, None
     if global_config.SYSTEM_NAME == 'ogtt_simul':
         real_loader = RealOGTTDataLoader(
             file_path='data/clean_sumner_n_612.xlsx', 
@@ -394,10 +441,9 @@ def setup_dataloaders(exp_config, sim_data_tuple, system, global_config):
         )
         obs_real, hid_real, params_real, _ = real_loader.load_data()
         
-        # Align real data distributions using the Normalizer fitted on Simulation data
-        X_real = torch.FloatTensor(obs_real).view(len(obs_real), -1).to(global_config.DEVICE)
-        Y_real = torch.FloatTensor(hid_real).view(len(hid_real), -1).to(global_config.DEVICE)
-        P_real = torch.FloatTensor(params_real).to(global_config.DEVICE)
+        X_real = torch.FloatTensor(obs_real).view(len(obs_real), -1)
+        Y_real = torch.FloatTensor(hid_real).view(len(hid_real), -1)
+        P_real = torch.FloatTensor(params_real)
         
         dataset_real = TensorDataset(
             normalizer.normalize_inputs(X_real, 'observed'),
@@ -409,18 +455,18 @@ def setup_dataloaders(exp_config, sim_data_tuple, system, global_config):
             split_data = json.load(f)
         real_train = Subset(dataset_real, split_data['train_indices'])
         real_test = Subset(dataset_real, split_data['test_indices'])
-    else:
-        real_train = None
-        real_test = None
 
-    # 5. Construct Final Dataloaders (Scenario routing)
+    # ---------------------------------------------------------
+    # Step 5: Finalize DataLoaders
+    # Routes to Hybrid (Sim + Real) or Simulation-Only mode.
+    # ---------------------------------------------------------
     scenario = exp_config.get('SCENARIO', 'sim_only')
     
     if scenario == 'hybrid' and real_train is not None:
-        print(f"  -> [Hybrid Mode] Mixing Sim ({len(sim_train)}) + Real ({len(real_train)})")
+        print(f"  -> [Hybrid Mode] Mixing Simulation ({len(sim_train)}) and Real Data ({len(real_train)})")
         final_train_set = ConcatDataset([sim_train, real_train])
         
-        # Weighted Sampling to balance the ratio between Simulation and Sparse Real data
+        # Oversample the smaller real dataset to balance training ratios
         real_ratio = exp_config.get('REAL_RATIO', 0.3)
         w_sim = (1 - real_ratio) / len(sim_train)
         w_real = real_ratio / len(real_train)
@@ -435,8 +481,12 @@ def setup_dataloaders(exp_config, sim_data_tuple, system, global_config):
     val_loader = DataLoader(sim_val, batch_size=global_config.BATCH_SIZE, shuffle=False)
     test_loader = DataLoader(sim_test, batch_size=global_config.BATCH_SIZE, shuffle=False)
     
-    # Establish robust initial parameter guess (Geometric Mean protects against extreme tails)
-    P_sim_safe = torch.maximum(P_sim, torch.tensor(1e-6).to(global_config.DEVICE))
-    p_initial_guess = torch.exp(torch.log(P_sim_safe).mean(dim=0))
+    # ---------------------------------------------------------
+    # Step 6: Initial Parameter Guess (For inference speedup)
+    # Calculates the geometric mean of training parameters safely.
+    # ---------------------------------------------------------
+    params_train_tensor = torch.FloatTensor(params_train)
+    P_sim_safe = torch.clamp(params_train_tensor, min=1e-6)
+    p_initial_guess = torch.exp(torch.log(P_sim_safe).mean(dim=0)).to(global_config.DEVICE)
     
     return train_loader, val_loader, test_loader, real_test, p_initial_guess, normalizer
