@@ -435,25 +435,42 @@ class OgttSimulAnalyzer(BaseAnalyzer):
 
     def _plot_ogtt_trajectories(self, p_true, p_ours, p_base):
         from scipy.integrate import solve_ivp
-        idx, valid_base, valid_ours = np.random.randint(0, len(p_true)), not np.all(p_base == 0), not np.all(p_ours == 0)
-        fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-        y0 = [y[0] if isinstance(y, list) else y for y in self.system.initial_conditions]
+        from systems.ogtt_simul import OGTTModel, SYS_PARAMS, ODE_PARAMS
         
-        sol_t = solve_ivp(lambda t, y: self.system.ode_func(t, y, tuple(p_true[idx])), (0, 120), y0, t_eval=np.linspace(0, 120, 200))
+        idx = np.random.randint(0, len(p_true)) 
+        valid_base, valid_ours = not np.all(p_base == 0), not np.all(p_ours == 0)
+        fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+        
+        y0_2d = [y[0] if isinstance(y, list) else y for y in self.system.initial_conditions][:2]
+        G0, I0 = y0_2d[0], y0_2d[1]
+        
+        # 2. 파라미터(theta)에 맞춰 N5, N6의 Steady State를 계산하여 4차원 벡터로 패딩하는 헬퍼 함수
+        def get_full_y0(params):
+            theta_dict = {name: val for name, val in zip(self.system.param_names, params)}
+            model = OGTTModel(ODE_PARAMS, SYS_PARAMS, theta_dict)
+            n5_ss, n6_ss = model.find_steady_state_N(G0)
+            return [G0, I0, n5_ss, n6_ss]
+            
+        y0_true = get_full_y0(p_true[idx])
+        sol_t = solve_ivp(lambda t, y: self.system.ode_func(t, y, tuple(p_true[idx])), (0, 120), y0_true, t_eval=np.linspace(0, 120, 200))
         
         y_o_g, y_o_i = np.zeros_like(sol_t.y[0]), np.zeros_like(sol_t.y[1])
         if valid_ours:
-            sol_o = solve_ivp(lambda t, y: self.system.ode_func(t, y, tuple(p_ours[idx])), (0, 120), y0, t_eval=np.linspace(0, 120, 200))
+            y0_ours = get_full_y0(p_ours[idx])
+            sol_o = solve_ivp(lambda t, y: self.system.ode_func(t, y, tuple(p_ours[idx])), (0, 120), y0_ours, t_eval=np.linspace(0, 120, 200))
             y_o_g, y_o_i = sol_o.y[0], sol_o.y[1]
             
         y_b_g, y_b_i = np.zeros_like(sol_t.y[0]), np.zeros_like(sol_t.y[1])
         if valid_base:
-            sol_b = solve_ivp(lambda t, y: self.system.ode_func(t, y, tuple(p_base[idx])), (0, 120), y0, t_eval=np.linspace(0, 120, 200))
+            y0_base = get_full_y0(p_base[idx])
+            sol_b = solve_ivp(lambda t, y: self.system.ode_func(t, y, tuple(p_base[idx])), (0, 120), y0_base, t_eval=np.linspace(0, 120, 200))
             y_b_g, y_b_i = sol_b.y[0], sol_b.y[1]
 
         self.plot_trajectory_panel(axes[0], sol_t.t, sol_t.y[0], y_b_g, y_o_g, "Glucose (Observed)", "mg/dL", "Time (min)")
         self.plot_trajectory_panel(axes[1], sol_t.t, sol_t.y[1], y_b_i, y_o_i, "Insulin (Hidden Error)", "uU/mL", "Time (min)")
-        plt.tight_layout(); plt.savefig(os.path.join(self.results_path, f'sim_trajectory_comparison.png'), dpi=300); plt.close()
+        plt.tight_layout()
+        plt.savefig(os.path.join(self.results_path, 'sim_trajectory_comparison.png'), dpi=300)
+        plt.close()
         
     def _plot_symmetric_collapse(self, p_true, p_ours, p_base, prefix="sim"):
         valid_base, valid_ours = not np.all(p_base == 0), not np.all(p_ours == 0)

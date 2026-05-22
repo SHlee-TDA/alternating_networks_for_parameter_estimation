@@ -12,6 +12,8 @@ import os
 import gc
 import copy
 import argparse
+import json
+from dataclasses import asdict
 
 import numpy as np
 import torch
@@ -79,6 +81,14 @@ def run_experiment_pipeline(global_config):
         loaders = setup_dataloaders(exp_config, sim_data_tuple, system, run_config)
         train_l, val_l, test_l, real_test_loader, p_init, normalizer = loaders
 
+        # 
+        config_save_path = os.path.join(logger.results_dir, 'experiment_config.json')
+        if hasattr(run_config, 'save_to_json'):
+            run_config.save_to_json(config_save_path)
+        else:
+            with open(config_save_path, 'w') as f:
+                json.dump(asdict(run_config), f, indent=4)
+
         # Model Initialization
         sample_x, sample_y, sample_p = next(iter(train_l))
         
@@ -110,6 +120,7 @@ def run_experiment_pipeline(global_config):
         
         if getattr(run_config, 'RUN_BASELINE', False):
             baseline_net, history = trainer.train()
+            param_net = baseline_net  # For evaluation, treat baseline as param_net
         else:
             hidden_net, param_net, history = trainer.train()
         

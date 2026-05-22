@@ -35,6 +35,7 @@ def build_mlp(input_dim, output_dim, hidden_dims):
 class SingleCVAE(nn.Module):
     def __init__(self, x_dim, theta_dim, latent_dim=16, hidden_dims=[256, 256, 256, 256]):
         super().__init__()
+        self.theta_dim = theta_dim
         self.latent_dim = latent_dim
         
         encoder_input_dim = x_dim + theta_dim
@@ -85,6 +86,7 @@ class SingleCVAE(nn.Module):
 class HiddenStateCVAE(nn.Module):
     def __init__(self, x_dim, theta_dim, y_dim, latent_dim=16, hidden_dims=[256, 256, 256, 256]):
         super().__init__()
+        self.theta_dim = theta_dim
         self.latent_dim = latent_dim
         
         encoder_input_dim = y_dim + x_dim + theta_dim
@@ -134,6 +136,7 @@ class HiddenStateCVAE(nn.Module):
 class ParameterCVAE(nn.Module):
     def __init__(self, x_dim, y_dim, theta_dim, latent_dim=8, hidden_dims=[256, 256, 256, 256]):
         super().__init__()
+        self.theta_dim = theta_dim
         self.latent_dim = latent_dim
         
         encoder_input_dim = theta_dim + x_dim + y_dim

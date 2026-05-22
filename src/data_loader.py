@@ -15,7 +15,7 @@ from torch.utils.data import (
     ConcatDataset, WeightedRandomSampler, Subset
 )
 
-from utils import euler_maruyama, get_derivative_estimator, Normalizer
+from src.utils import euler_maruyama, get_derivative_estimator, Normalizer
 
 
 # Simulation Data Generation Utilities
@@ -316,7 +316,7 @@ class RealOGTTDataLoader:
         
         glucose_raw = df_clean[glu_cols].values
         insulin_raw = df_clean[ins_cols].values
-        params_data = df_clean[param_cols].values
+        params_data = df_clean[param_cols].values   # (n_subj, 2)
         
         # Feature Engineering
         if getattr(self.config, 'USE_DERIVATIVE', False):
@@ -443,7 +443,7 @@ def setup_dataloaders(exp_config, sim_data_tuple, system, global_config):
         
         X_real = torch.FloatTensor(obs_real).view(len(obs_real), -1)
         Y_real = torch.FloatTensor(hid_real).view(len(hid_real), -1)
-        P_real = torch.FloatTensor(params_real)
+        P_real = torch.FloatTensor(params_real) # 2d tensor
         
         dataset_real = TensorDataset(
             normalizer.normalize_inputs(X_real, 'observed'),
@@ -455,6 +455,7 @@ def setup_dataloaders(exp_config, sim_data_tuple, system, global_config):
             split_data = json.load(f)
         real_train = Subset(dataset_real, split_data['train_indices'])
         real_test = Subset(dataset_real, split_data['test_indices'])
+        real_test_loader = DataLoader(real_test, batch_size=global_config.BATCH_SIZE, shuffle=False)
 
     # ---------------------------------------------------------
     # Step 5: Finalize DataLoaders
@@ -489,4 +490,4 @@ def setup_dataloaders(exp_config, sim_data_tuple, system, global_config):
     P_sim_safe = torch.clamp(params_train_tensor, min=1e-6)
     p_initial_guess = torch.exp(torch.log(P_sim_safe).mean(dim=0)).to(global_config.DEVICE)
     
-    return train_loader, val_loader, test_loader, real_test, p_initial_guess, normalizer
+    return train_loader, val_loader, test_loader, real_test_loader, p_initial_guess, normalizer

@@ -106,12 +106,6 @@ def get_derivative_estimator(method='spline', **kwargs):
 class Normalizer:
     """
     Handles data normalization to ensure stability during neural network training.
-    
-    Note:
-        Neural networks are sensitive to the scale of input features. This class 
-        normalizes observed states (Glucose), hidden states (Insulin), and parameters
-        to a consistent range (typically [-1, 1] or similar) to prevent gradient explosion
-        and accelerate convergence.
     """
     def __init__(self, system, device,
                  config=None, 
@@ -132,7 +126,7 @@ class Normalizer:
         # 2. State Scales 할당
         self.state_scales = torch.tensor(_state_scales, dtype=torch.float32, device=device)
         
-        # 3. Parameter Bounds 전처리 (JSON 리스트가 들어와도 에러가 나지 않도록 numpy 배열로 강제 변환)
+        # 3. Parameter Bounds 전처리
         if _p_bounds:
             p_min = np.array(_p_bounds[0], dtype=np.float32)
             p_max = np.array(_p_bounds[1], dtype=np.float32)
@@ -140,71 +134,71 @@ class Normalizer:
             ranges = np.array([self.system.param_ranges[n] for n in self.system.param_names])
             p_min, p_max = ranges[:, 0], ranges[:, 1]
 
-        # 4. Log 변환 및 Tensor 할당
+        # 4. Log 변환 및 Tensor 할당 (음수 완벽 방어)
         if self.use_log_params:
-            p_min = np.log(p_min + 1e-9)
-            p_max = np.log(p_max + 1e-9)
+            # 음수나 0이 들어오면 강제로 1e-8로 끌어올린 뒤 로그를 취함
+            p_min = np.log(np.maximum(p_min, 1e-8))
+            p_max = np.log(np.maximum(p_max, 1e-8))
             
         self.p_min = torch.tensor(p_min, dtype=torch.float32, device=device)
         self.p_max = torch.tensor(p_max, dtype=torch.float32, device=device)
 
     def normalize_inputs(self, x, variable_type='observed'):
-        """
-        Normalizes observed (X) or hidden (Y) states.
-        x: (Batch, Time, Dim) or (Batch, FlatDim)
-        """
-        if variable_type == 'observed':
-            scale = self.state_scales[0] # Glucose scale
-        elif variable_type == 'hidden':
-            scale = self.state_scales[1] # Insulin scale
-        else:
-            scale = 1.0
-            
-        if self.use_normalization:
-            return x / (scale + 1e-8)
-        else:
+        if not self.use_normalization:
             return x
-
-    def denormalize_inputs(self, x_norm, variable_type='observed'):
+            
         if variable_type == 'observed':
             scale = self.state_scales[0]
         elif variable_type == 'hidden':
             scale = self.state_scales[1]
         else:
-            scale = 1.0
-        if self.use_normalization:    
-            return x_norm * scale
-        else:
+            scale = torch.tensor(1.0, dtype=torch.float32, device=x.device)
+            
+        # 디바이스 동기화 (x가 위치한 곳으로 scale을 보냄)
+        scale = scale.to(x.device)
+        
+        return x / (scale + 1e-8)
+
+    def denormalize_inputs(self, x_norm, variable_type='observed'):
+        if not self.use_normalization:
             return x_norm
+            
+        if variable_type == 'observed':
+            scale = self.state_scales[0]
+        elif variable_type == 'hidden':
+            scale = self.state_scales[1]
+        else:
+            scale = torch.tensor(1.0, dtype=torch.float32, device=x_norm.device)
+            
+        # 디바이스 동기화
+        scale = scale.to(x_norm.device)
+        
+        return x_norm * scale
 
     def normalize_params(self, p):
-        """
-        Physical Params -> Log Space -> [-1, 1] Range
-        """
         if self.use_log_params:
-            p = torch.log(p + 1e-9)
+            # 텐서 연산에서도 음수 방어 적용
+            p = torch.log(torch.clamp(p, min=1e-8))
+            
+        # 디바이스 동기화
+        p_min_device = self.p_min.to(p.device)
+        p_max_device = self.p_max.to(p.device)
         
         # Min-Max Scaling to [-1, 1]
-        p_norm = 2 * (p - self.p_min) / (self.p_max - self.p_min + 1e-8) - 1
+        p_norm = 2 * (p - p_min_device) / (p_max_device - p_min_device + 1e-8) - 1
+        
         if self.use_normalization:
             return p_norm
         else:
             return p
 
     def denormalize_params(self, p_norm):
-        """
-        Inverts the transformation applied by ``normalize_params``.
-
-        When ``use_normalization`` is ``True`` the incoming tensor is assumed
-        to lie in ``[-1,1]`` and is mapped back to the original parameter
-        range (in log space if ``use_log_params`` is ``True``).  When
-        ``use_normalization`` is ``False`` the tensor is returned unchanged
-        except that, if ``use_log_params`` is ``True``, it is exponentiated
-        to recover the physical value.
-        """
-        # handle normalization first, then apply log–exp if requested
+        # 디바이스 동기화
+        p_min_device = self.p_min.to(p_norm.device)
+        p_max_device = self.p_max.to(p_norm.device)
+        
         if self.use_normalization:
-            p_log = (p_norm + 1) / 2 * (self.p_max - self.p_min) + self.p_min
+            p_log = (p_norm + 1) / 2 * (p_max_device - p_min_device) + p_min_device
         else:
             p_log = p_norm
 

@@ -9,6 +9,7 @@ This module centralizes all hyperparameters and settings for:
 4. Training Protocol (LR, Epochs, Early Stopping)
 5. Experiment Scenarios (List of experiments to run)
 """
+import json
 from dataclasses import dataclass, field
 from typing import List, Tuple, Dict, Any
 
@@ -51,7 +52,7 @@ class Config:
     # --------------------------------------------------------------------------
     # 3. Trainig Hyperparameters
     # --------------------------------------------------------------------------
-    EPOCHS: int = 10000
+    EPOCHS: int = 5000
     LEARNING_RATE: float = 1e-3
     WEIGHT_DECAY: float = 0.0
     USE_EARLY_STOPPING: bool = True
@@ -106,6 +107,15 @@ class Config:
             # }
         ])
     EXPERIMENTS: List[Dict[str, Any]] = field(init=False)
+    
+    def save_to_json(self, filepath):
+        save_dict = {
+            key: value for key, value in self.__dict__.items() 
+            if not key.startswith('__') and not callable(value)
+        }
+        
+        with open(filepath, 'w') as f:
+            json.dump(save_dict, f, indent=4)
     
     def __post_init__(self):
         """

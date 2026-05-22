@@ -1,5 +1,8 @@
+import warnings
+
 import numpy as np
-from scipy.stats import pearsonr, multivariate_normal
+from scipy.stats import pearsonr, gaussian_kde
+
 
 def calculate_point_metrics(y_true, y_samples):
     """
@@ -59,12 +62,42 @@ def calculate_crps(y_true, y_samples):
     crps = diff_true - 0.5 * diff_samples
     return np.mean(crps, axis=0) 
 
-def calculate_parametric_nll(theta_true, theta_samples):
-    mean_vec = np.mean(theta_samples, axis=0)
-    cov_matrix = np.cov(theta_samples, rowvar=False)
-    try:
-        mvn = multivariate_normal(mean=mean_vec, cov=cov_matrix, allow_singular=True)
-        return -mvn.logpdf(theta_true)
-    except Exception:
-        return np.nan
+def calculate_kde_nll(theta_true, theta_samples):
+    """
+    각 샘플(Batch)별로 가우시안 커널 밀도 추정(KDE)을 수행하여 NLL을 계산합니다.
+    초승달 모양, Bimodal 등 비선형적인 사후 분포(Posterior) 평가에 필수적입니다.
+    
+    theta_true: [batch_size, feature_dim]
+    theta_samples: [batch_size, num_samples, feature_dim]
+    """
+    batch_size, num_samples, feature_dim = theta_samples.shape
+    nll_list = []
+    
+    for i in range(batch_size):
+        # gaussian_kde는 [차원 수, 샘플 수] 형태를 요구하므로 전치(Transpose)합니다.
+        samples_i = theta_samples[i].T 
+        true_i = theta_true[i]
+        
+        try:
+            # 모든 샘플이 한 점으로 붕괴했을 때 KDE가 터지는 것을 막기 위한 미세 노이즈
+            jitter = np.random.normal(0, 1e-6, samples_i.shape)
+            kde = gaussian_kde(samples_i + jitter)
+            
+            # logpdf는 배열을 반환하므로 [0]으로 스칼라 값을 추출
+            log_prob = kde.logpdf(true_i)[0]
+            
+            if not np.isfinite(log_prob):
+                nll_list.append(100.0) 
+            else:
+                nll_list.append(-log_prob)
+                
+        except Exception:
+            # 행렬 연산 실패 시 안전한 패널티 부여
+            nll_list.append(100.0)
+            
+    # 전체 Batch에 대한 평균 NLL 반환
+    avg_nll = np.mean(nll_list)
+    
+    # 다른 메트릭과 반환 형태를 맞추기 위해 배열 형태로 반환
+    return np.array([avg_nll] * feature_dim)
     

@@ -1,7 +1,7 @@
 # infer.py
 import numpy as np
 import torch
-from analyzer import get_analyzer_class
+from src.analyzer import get_analyzer_class
 
 # =============================================================================
 # 1. Inference Engine
@@ -126,8 +126,18 @@ def run_evaluation_phase(run_config, logger, system, history,
         print("\n  -> Extracting predictions for Real Clinical Data...")
         p_true_real, p_pred_real = engine.get_predictions(real_test_loader, p_init)
         
-        p_dummy_base_real = np.zeros_like(p_true_real)
-        analyzer.evaluate_real_data(p_true_real, p_pred_real, p_dummy_base_real)
+        # =====================================================================
+        param_dim = len(system.param_names) # 항상 2 (si, sigma)
+        
+        p_true_real = p_true_real.reshape(-1, param_dim)
+        p_pred_real = p_pred_real.reshape(-1, param_dim)
+        p_dummy_real = np.zeros_like(p_pred_real)
+        # =====================================================================
+
+        if getattr(run_config, 'RUN_BASELINE', False):
+            analyzer.evaluate_real_data(p_true_real, p_ours=p_dummy_real, p_base=p_pred_real)
+        else:
+            analyzer.evaluate_real_data(p_true_real, p_ours=p_pred_real, p_base=p_dummy_real)
 
     # 5. Final Logging
     test_mse = float(np.mean((p_true - p_pred)**2))

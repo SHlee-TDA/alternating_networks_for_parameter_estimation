@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 
-from losses import get_loss_function
+from src.losses import get_loss_function
 
 class Trainer:
     """
