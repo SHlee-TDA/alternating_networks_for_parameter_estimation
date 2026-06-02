@@ -71,5 +71,51 @@ def create_split():
     print(f" - Train: {len(train_idx)} samples")
     print(f" - Test : {len(test_idx)} samples")
 
+def create_sir_ood_split(data_path, save_path, total_target=10000, test_ratio=0.2, seed=42):
+    # Load SIR generated dataset
+    data = np.load(data_path)
+    params = data['params']  # shape: (N, 2) where columns
+    beta, gamma = params[:, 0], params[:, 1]
+    R0 = beta / gamma
+    
+    # Index filtering
+    valid_train_pool = np.where(R0 >= 1.2)[0]
+    valid_test_pool = np.where(R0 <= 0.8)[0]
+    
+    # Shuffle
+    np.random.seed(seed)
+    np.random.shuffle(valid_train_pool)
+    np.random.shuffle(valid_test_pool)
+    
+    # Count targets
+    n_test = int(total_target * test_ratio)
+    n_val = int(total_target * test_ratio)
+    n_train = total_target - n_test - n_val
+    
+    assert len(valid_train_pool) >= n_train + n_val, "Not enough samples for train/val split"
+    assert len(valid_test_pool) >= n_test, "Not enough samples for test split"
+    
+    # Assign indices
+    train_idx = valid_train_pool[:n_train].tolist()
+    val_idx = valid_train_pool[n_train:n_train+n_val].tolist()
+    test_idx = valid_test_pool[:n_test].tolist()
+    
+    # Save to JSON
+    split_dict = {
+        'source_file': str(data_path.name),
+        'total_samples': int(total_target),
+        'train_indices': train_idx,
+        'val_indices': val_idx,
+        'test_indices': test_idx,
+        'random_state': seed,
+        'note': "SIR OOD split based on R0 thresholds (Train/Val: R0>=1.2, Test: R0<=0.8)"
+    }
+
+    with open(save_path, 'w') as f:
+        json.dump(split_dict, f, indent=4)
+        
+    print(f"[Split] Created SIR OOD split file at: {save_path}")
 if __name__ == "__main__":
-    create_split()
+    data_path = Path(__file__).parent.parent / 'data' / 'sir' / 'augmented_data_ode_noderiv_20000.npz'
+    save_path = Path(__file__).parent.parent / 'data' / 'sir' / 'sir_ood_split.json'
+    create_sir_ood_split(data_path, save_path, total_target=10000, test_ratio=0.2, seed=42)

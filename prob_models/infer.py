@@ -47,9 +47,7 @@ def pseudo_gibbs_sampling(
     else:
         theta_curr = init_theta.repeat_interleave(num_chains, dim=0)
 
-    # 샘플을 저장할 리스트
-    y_samples_list = []
-    theta_samples_list = []
+    # [수정] 궤적(history)을 저장할 리스트만 남깁니다.
     theta_history = []
 
     base_noise_y = getattr(hidden_cvae, 'infer_noise_y', 0.05) 
@@ -60,6 +58,7 @@ def pseudo_gibbs_sampling(
     
     # Ping-pong loop
     for step in range(num_steps):
+        # 1. 은닉 상태(y) Langevin Step
         z_A = torch.randn(batch_size * num_chains, hidden_cvae.latent_dim, device=device)
         y_mean = hidden_cvae.decode(z_A, x_repeated, theta_curr)
         y_curr = y_mean + torch.randn_like(y_mean) * infer_noise_y
@@ -67,6 +66,7 @@ def pseudo_gibbs_sampling(
         if bounds_y is not None:
             y_curr = torch.clamp(y_curr, min=bounds_y[0], max=bounds_y[1])
             
+        # 2. 파라미터(theta) Langevin Step
         z_B = torch.randn(batch_size * num_chains, param_cvae.latent_dim, device=device)
         theta_mean = param_cvae.decode(z_B, x_repeated, y_curr)
         theta_curr = theta_mean + torch.randn_like(theta_mean) * infer_noise_p
@@ -74,15 +74,14 @@ def pseudo_gibbs_sampling(
         if bounds_p is not None:
             theta_curr = torch.clamp(theta_curr, min=bounds_p[0], max=bounds_p[1])
             
+        # 3. 궤적 기록 (매 스텝마다 저장)
         theta_history.append(theta_curr.view(batch_size, num_chains, -1).cpu())
-        
-        
-        if step >= burn_in:
-            y_samples_list.append(y_curr.view(batch_size, num_chains, -1))
-            theta_samples_list.append(theta_curr.view(batch_size, num_chains, -1))
 
-    final_y_samples = torch.cat(y_samples_list, dim=1)
-    final_theta_samples = torch.cat(theta_samples_list, dim=1)
-    theta_history = torch.stack(theta_history, dim=2)  # (batch_size, num_chains, num_steps, theta_dim)
+    # [수정] 4. 루프가 모두 끝난 후, 1,000개 체인의 가장 마지막 상태(Final)만 추출
+    final_y_samples = y_curr.view(batch_size, num_chains, -1)
+    final_theta_samples = theta_curr.view(batch_size, num_chains, -1)
+    
+    # History는 (Batch, Chains, Steps, Dim) 형태로 스택하여 추후 수렴성 분석에 사용
+    theta_history = torch.stack(theta_history, dim=2) 
     
     return final_y_samples, final_theta_samples, theta_history

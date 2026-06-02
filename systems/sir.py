@@ -25,11 +25,10 @@ class Sir(System):
     hidden_var_idx = 1    # I (Infected)
 
     def sample_initial_conditions(self, params_dict):
-        return [
-            self.initial_conditions[0][0],
-            self.initial_conditions[1][0],
-            self.initial_conditions[2][0]
-        ]
+        I0 = np.random.uniform(1.0, 10.0)
+        S0 = 50.0 - I0
+        R0 = 0.0
+        return S0, I0, R0
 
     @staticmethod
     def ode_func(t, y, params):

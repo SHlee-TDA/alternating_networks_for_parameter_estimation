@@ -68,7 +68,7 @@ class Trainer:
             ).to(config.DEVICE)
 
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode='min', factor=0.5, patience=20, min_lr=1e-8, verbose=True
+            self.optimizer, mode='min', factor=0.9, patience=200, min_lr=1e-8, verbose=True
         )
 
     def train(self):

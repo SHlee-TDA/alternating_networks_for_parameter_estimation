@@ -8,10 +8,9 @@ import seaborn as sns
 import torch
 import numpy as np
 
-# 프로젝트 루트 경로 추가 (main.py와 동일)
-#sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# 프로젝트 루트 경로 추가
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# [연구자님의 코어 모듈 임포트]
 from prob_models.config import ProbConfig
 from prob_models.models import SingleCVAE, HiddenStateCVAE, ParameterCVAE
 from prob_models.infer import single_cvae_sampling, pseudo_gibbs_sampling
@@ -20,44 +19,35 @@ from tools.exp_tools import get_system_class
 from tools.interactive_file_selector import interactive_file_selector
 
 # =====================================================================
-# 1. 완벽하게 동기화된 Context Loader (main.py 구조 100% 반영)
+# 1. 완벽하게 동기화된 Context Loader
 # =====================================================================
 def load_prob_experiment_context(config_path, prob_config_path, baseline_path, Hnet_path, Pnet_path, device_override="cuda"):
-    # Config 객체 초기화
     config = ProbConfig()
     
     print(f"[Info] Loading Global Config from: {config_path}")
     with open(config_path, 'r') as f:
-        saved_config = json.load(f)
-        for k, v in saved_config.items():
-            if not k.startswith('__'):
-                setattr(config, k, v)
+        for k, v in json.load(f).items():
+            if not k.startswith('__'): setattr(config, k, v)
                 
     print(f"[Info] Loading Prob Config from: {prob_config_path}")
     with open(prob_config_path, 'r') as f:
-        saved_prob_config = json.load(f)
-        for k, v in saved_prob_config.items():
-            if not k.startswith('__'):
-                setattr(config, k, v) # 두 config를 하나로 병합하여 사용
+        for k, v in json.load(f).items():
+            if not k.startswith('__'): setattr(config, k, v)
                 
     device = torch.device(device_override if torch.cuda.is_available() else "cpu")
     config.DEVICE = device
     
-    # System 초기화
     SystemClass = get_system_class(config.SYSTEM_NAME)
     system = SystemClass()
     
-    # 데이터 생성 및 Loader 셋업 (main.py와 완전히 동일한 로직)
     print(f"[Info] Generating/Loading Data Cache...")
     generator = DataGenerator(system, config)
     sim_data_tuple = generator.generate_data()
     
     print(f"[Info] Setting up DataLoaders...")
-    # main.py에서 사용한 setup_dataloaders 호출
     loaders = setup_dataloaders(vars(config), sim_data_tuple, system, config)
     train_l, val_l, test_l, real_test_loader, p_init, normalizer = loaders
     
-    # 모델 초기화를 위한 차원 추출
     sample_x, sample_y, sample_p = next(iter(test_l))
     x_dim, y_dim, theta_dim = sample_x.shape[1], sample_y.shape[1], sample_p.shape[1]
     
@@ -70,9 +60,8 @@ def load_prob_experiment_context(config_path, prob_config_path, baseline_path, H
     baseline_cvae = SingleCVAE(x_dim, theta_dim, latent_dim=latent_dim_base, hidden_dims=hidden_dims).to(device)
     Hnet = HiddenStateCVAE(x_dim, theta_dim, y_dim, latent_dim=latent_dim_h, hidden_dims=hidden_dims).to(device)
     Pnet = ParameterCVAE(x_dim, y_dim, theta_dim, latent_dim=latent_dim_p, hidden_dims=hidden_dims).to(device)
-    Pnet.theta_dim = theta_dim # infer.py 안전장치
+    Pnet.theta_dim = theta_dim
 
-    # 가중치 로드 함수
     def load_weight_safe(model, path, possible_keys):
         ckpt = torch.load(path, map_location=device)
         if isinstance(ckpt, dict):
@@ -97,7 +86,7 @@ def load_prob_experiment_context(config_path, prob_config_path, baseline_path, H
     return Hnet, Pnet, baseline_cvae, test_l, normalizer, target_dir
 
 # =====================================================================
-# 2. 동적 꼬리 탐색 및 필터링 함수 (이전과 동일)
+# 2. 동적 꼬리 탐색 및 필터링 함수
 # =====================================================================
 def find_best_mean_trap_sample(p_true_phys, p_single_global_phys, target_percentile=10):
     si_t, sig_t = p_true_phys[:, 0], p_true_phys[:, 1]
@@ -125,20 +114,13 @@ def find_best_mean_trap_sample(p_true_phys, p_single_global_phys, target_percent
     return best_idx
 
 def filter_outliers(data, si_max=10.0, sig_max=5.0):
-    """
-    data의 shape이 (N, D)일 때, 첫 번째 파라미터(S_I)와 두 번째 파라미터(sigma)만 보고 필터링합니다.
-    """
-    # 0번 인덱스(SI)와 1번 인덱스(sigma)에 대해서만 조건을 겁니다.
     mask = (data[:, 0] > 0) & (data[:, 0] < si_max) & (data[:, 1] > 0) & (data[:, 1] < sig_max)
-    
-    # [수정된 부분] 전체 행을 살리되, 위 마스크를 만족하는 행만 뽑아냅니다.
     return data[mask, :]
 
 # =====================================================================
-# 3. 플로팅 함수 (이전과 동일하게 분리됨)
+# 3. 플로팅 함수 (이론적 궤적 추가)
 # =====================================================================
 def plot_figure3_A_global_1D(global_true, global_single, global_iter, save_dir):
-    print(f"Shape of global_true: {global_true.shape}, global_single: {global_single.shape}, global_iter: {global_iter.shape}")
     sns.set_theme(style="whitegrid", context="paper", font_scale=1.5)
     fig, axes = plt.subplots(2, 1, figsize=(6, 8))
     gt_f, sg_f, it_f = filter_outliers(global_true), filter_outliers(global_single), filter_outliers(global_iter)
@@ -147,7 +129,7 @@ def plot_figure3_A_global_1D(global_true, global_single, global_iter, save_dir):
     sns.kdeplot(sg_f[:, 0], ax=ax, fill=True, color="royalblue", alpha=0.5, label="Single CVAE", clip=(0, 10))
     sns.kdeplot(it_f[:, 0], ax=ax, fill=True, color="forestgreen", alpha=0.5, label="Iter CVAEs", clip=(0, 10))
     sns.kdeplot(gt_f[:, 0], ax=ax, color="black", linestyle="--", linewidth=2, label="True Prior", clip=(0, 10))
-    ax.set(xlim=(0, 10), xlabel=r"Insulin Sensitivity ($S_I$)", ylabel="Density", title="A. Global 1D Marginals (Population)")
+    ax.set(xlim=(0, 5), xlabel=r"Insulin Sensitivity ($S_I$)", ylabel="Density", title="A. Global 1D Marginals (Population)")
     ax.legend(loc="upper right", fontsize=11)
 
     ax = axes[1]
@@ -165,27 +147,114 @@ def plot_figure3_B_global_2D(global_true, global_single, global_iter, save_dir):
     fig, ax = plt.subplots(figsize=(6, 6))
     gt_f, sg_f, it_f = filter_outliers(global_true), filter_outliers(global_single), filter_outliers(global_iter)
 
-    sns.kdeplot(x=gt_f[:, 0], y=gt_f[:, 1], ax=ax, cmap="Greys", fill=True, thresh=0.05, levels=8, alpha=0.4)
-    ax.scatter(sg_f[:, 0], sg_f[:, 1], color="royalblue", s=15, alpha=0.3, label="Single CVAE Samples")
-    ax.scatter(it_f[:, 0], it_f[:, 1], color="forestgreen", s=15, alpha=0.3, label="Iter CVAEs Samples")
+    # 1. Ground Truth 분포를 '지형(Landscape)'처럼 명확하게 렌더링
+    # 1-1. 옅은 쉐이딩 (바닥면)
+    sns.kdeplot(x=gt_f[:, 0], y=gt_f[:, 1], ax=ax, cmap="Greys", fill=True, thresh=0.05, levels=8, alpha=0.3)
+    # 1-2. 진한 등고선 라인 (지형의 등고선을 명확히 묘사하여 시인성 극대화)
+    sns.kdeplot(x=gt_f[:, 0], y=gt_f[:, 1], ax=ax, color="dimgrey", linewidths=1.5, thresh=0.05, levels=8, alpha=0.8)
+
+    # 2. 각 모델의 1-shot 예측 산점도 (구름처럼 흩뿌리기)
+    ax.scatter(sg_f[:, 0], sg_f[:, 1], color="royalblue", s=15, alpha=0.3)
+    ax.scatter(it_f[:, 0], it_f[:, 1], color="forestgreen", s=15, alpha=0.3)
     
-    ax.set(xlim=(0, 10), ylim=(0, 5), title=r"B. Global Joint $p(\theta)$", xlabel=r"Insulin Sensitivity ($S_I$)", ylabel=r"Secretion Capacity ($\sigma$)")
-    ax.legend(loc="upper right", fontsize=11)
+    ax.set(xlim=(0, 3), ylim=(0, 3), title=r"B. Global Joint $p(\theta)$", xlabel=r"Insulin Sensitivity ($S_I$)", ylabel=r"Secretion Capacity ($\sigma$)")
+    
+    # 3. 직관적인 커스텀 레전드(Legend) 생성
+    from matplotlib.patches import Patch
+    from matplotlib.lines import Line2D
+    legend_elements = [
+        # Ground Truth를 면(Patch)으로 표시하여 Contour임을 명시
+        Patch(facecolor='lightgrey', edgecolor='dimgrey', linewidth=1.5, label='True Prior Density'),
+        Line2D([0], [0], marker='o', color='w', markerfacecolor='royalblue', markersize=8, label='Single CVAE Samples'),
+        Line2D([0], [0], marker='o', color='w', markerfacecolor='forestgreen', markersize=8, label='Iter CVAEs Samples')
+    ]
+    ax.legend(handles=legend_elements, loc="upper right", fontsize=10)
     
     plt.tight_layout()
     plt.savefig(save_dir / "figure3_B_global_2D.pdf", dpi=300, bbox_inches='tight')
     plt.close()
 
 def plot_figure3_C_local_2D(local_true, local_single, local_iter, save_dir):
+    from matplotlib.patches import Circle, ConnectionPatch, Patch
+    from matplotlib.lines import Line2D
+    
     sns.set_theme(style="whitegrid", context="paper", font_scale=1.5)
     fig, ax = plt.subplots(figsize=(6, 6))
     
-    sns.kdeplot(x=local_single[:, 0], y=local_single[:, 1], ax=ax, cmap="Blues", fill=True, thresh=0.05, levels=6, alpha=0.6, label="Single $q(\theta|x_{obs})$", clip=((0, 10), (0, 5)))
-    sns.kdeplot(x=local_iter[:, 0], y=local_iter[:, 1], ax=ax, cmap="Greens", fill=True, thresh=0.05, levels=6, alpha=0.6, label="Iter $q(\theta|x_{obs})$", clip=((0, 10), (0, 5)))
-    ax.scatter(local_true[0], local_true[1], color="firebrick", marker="*", s=500, edgecolor='black', linewidth=1.5, label="Ground Truth", zorder=10)
+    # 1. Main Plot 렌더링
+    sns.kdeplot(x=local_single[:, 0], y=local_single[:, 1], ax=ax, cmap="Blues", fill=True, thresh=0.05, levels=6, alpha=0.6, clip=((0, 10), (0, 5)))
+    sns.kdeplot(x=local_iter[:, 0], y=local_iter[:, 1], ax=ax, cmap="Greens", fill=True, thresh=0.05, levels=6, alpha=0.6, clip=((0, 10), (0, 5)))
     
-    ax.set(xlim=(0, 10), ylim=(0, 5), title=r"C. Local Posterior $q(\theta | x_{obs})$", xlabel=r"Insulin Sensitivity ($S_I$)", ylabel=r"Secretion Capacity ($\sigma$)")
-    ax.legend(loc="upper right", fontsize=11)
+    # 2. 이론적 비식별성 매니폴드 곡선
+    C_val = local_true[0] * local_true[1]
+    si_range = np.linspace(0.05, 10, 500)
+    sigma_curve = C_val / si_range
+    ax.plot(si_range, sigma_curve, color='purple', linestyle='--', linewidth=2.5, alpha=0.8, zorder=5)
+
+    # 3. Ground Truth 정답 별표
+    ax.scatter(local_true[0], local_true[1], color="firebrick", marker="*", s=500, edgecolor='black', linewidth=1.5, zorder=10)
+    
+    # ---------------------------------------------------------
+    # 4. 현미경 뷰 (원형 돋보기) 생성 및 세팅
+    # ---------------------------------------------------------
+    single_mean_x = local_single[:, 0].mean()
+    single_mean_y = local_single[:, 1].mean()
+    single_std_x = local_single[:, 0].std()
+    single_std_y = local_single[:, 1].std()
+
+    # 원형이 찌그러지지 않도록 가로세로를 정사각형(square) 비율로 맞춤
+    margin = max(single_std_x * 6, single_std_y * 6, 0.05) 
+
+    # 범례 아래 공간(우측 상단)에 돋보기 축 생성
+    axins = ax.inset_axes([0.5, 0.4, 0.2, 0.2])
+    
+    # [추가 요청] 확대 뷰 안에 모든 요소를 'KDE'와 선으로 동일하게 렌더링!
+    sns.kdeplot(x=local_single[:, 0], y=local_single[:, 1], ax=axins, cmap="Blues", fill=True, thresh=0.05, levels=6, alpha=0.8)
+    sns.kdeplot(x=local_iter[:, 0], y=local_iter[:, 1], ax=axins, cmap="Greens", fill=True, thresh=0.05, levels=6, alpha=0.4)
+    axins.plot(si_range, sigma_curve, color='purple', linestyle='--', linewidth=3, alpha=0.8, zorder=5)
+    axins.scatter(local_true[0], local_true[1], color="firebrick", marker="*", s=300, edgecolor='black', linewidth=1.5, zorder=10)
+    
+    # 돋보기 초점(영역) 맞추기
+    axins.set_xlim(single_mean_x - margin, single_mean_x + margin)
+    axins.set_ylim(single_mean_y - margin, single_mean_y + margin)
+    
+    # --- [매직] 사각형 축을 '원형(Circle)'으로 깎아내는 클리핑 기법 ---
+    circle_patch = Circle((0.5, 0.5), 0.5, transform=axins.transAxes, fill=False, edgecolor='firebrick', linewidth=2.5, zorder=20)
+    axins.add_patch(circle_patch)
+    
+    # 현미경 안의 모든 그래프 요소(KDE 음영, 선 등)를 원 모양에 맞춰 자릅니다.
+    for c in axins.collections:
+        c.set_clip_path(circle_patch)
+    for l in axins.lines:
+        l.set_clip_path(circle_patch)
+        
+    axins.axis('off') # 사각형 테두리와 눈금선 숨김
+    #axins.set_title("Microscope View\n(Single vs Iter)", fontsize=11, color='firebrick', fontweight='bold', y=1.05)
+    
+    # ---------------------------------------------------------
+    # 5. 본래 플롯에 타겟 원(과녁) 그리고 연결선 긋기
+    # ---------------------------------------------------------
+    # 메인 플롯 위에 돋보기가 보고 있는 영역을 붉은 점선 원으로 표시
+    target_circle = Circle((single_mean_x, single_mean_y), margin, facecolor='none', edgecolor='firebrick', linewidth=1.5, linestyle='--', zorder=15)
+    ax.add_patch(target_circle)
+    
+    # 타겟 원의 맨 위(Top)와 현미경 렌즈의 맨 아래(Bottom)를 점선으로 연결
+    con = ConnectionPatch(xyA=(single_mean_x, single_mean_y + margin), xyB=(0.5, 0.0),
+                          coordsA="data", coordsB="axes fraction",
+                          axesA=ax, axesB=axins,
+                          color="firebrick", linewidth=1.5, linestyle=":", alpha=0.8, zorder=15)
+    ax.add_artist(con)
+
+    ax.set(xlim=(0, 2), ylim=(0, 2), title=r"C. Local Posterior $q(\theta | x_{obs})$", xlabel=r"Insulin Sensitivity ($S_I$)", ylabel=r"Secretion Capacity ($\sigma$)")
+    
+    # 6. Custom Legend (loc="upper right" 유지)
+    legend_elements = [
+        Patch(facecolor='royalblue', alpha=0.6, label=r'Single $q(\theta|x_{obs})$'),
+        Patch(facecolor='forestgreen', alpha=0.6, label=r'Iter $q(\theta|x_{obs})$'),
+        Line2D([0], [0], color='purple', linestyle='--', linewidth=2.5, label=rf"Theoretical Valley ($C={C_val:.1f}$)"),
+        Line2D([0], [0], marker='*', color='w', markerfacecolor='firebrick', markersize=15, markeredgecolor='black', label='Ground Truth')
+    ]
+    ax.legend(handles=legend_elements, loc="upper right", fontsize=10)
     
     plt.tight_layout()
     plt.savefig(save_dir / "figure3_C_local_2D.pdf", dpi=300, bbox_inches='tight')
@@ -212,14 +281,13 @@ def main():
         Hnet_path = os.path.join(base_search_dir, rel_Hnet_path)
         Pnet_path = Hnet_path.replace('hidden_cvae.pth', 'param_cvae.pth').replace('Hnet.pth', 'Pnet.pth')
 
-        # 1. 모델과 Test Loader 완벽 로드
+        # 1. 모델과 Test Loader 로드
         Hnet, Pnet, base_cvae, test_l, normalizer, target_dir = load_prob_experiment_context(
             config_path, prob_config_path, baseline_path, Hnet_path, Pnet_path
         )
         
         print("\n=== 1. Extracting Data from Test Loader ===")
         x_list, p_list = [], []
-        # Test 데이터 중 연산 속도를 위해 앞부분 일부 배치(약 1000개 수준)만 추출
         total_samples = 0
         for x_batch, _, p_batch in test_l:
             x_list.append(x_batch)
@@ -228,7 +296,7 @@ def main():
             if total_samples >= 1000:
                 break
         
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         x_global = torch.cat(x_list, dim=0).to(device)
         p_true_global = torch.cat(p_list, dim=0).to(device)
 
@@ -237,13 +305,11 @@ def main():
             p_single_global_norm = single_cvae_sampling(base_cvae, x_global, num_samples=1).squeeze(1)
             _, p_iter_global_norm, _ = pseudo_gibbs_sampling(Hnet, Pnet, x_global, num_chains=1, num_steps=30, burn_in=20)
         
-        # 훈련 시점의 완벽한 Normalizer로 물리적 값 복원
+        p_iter_global_norm = p_iter_global_norm.squeeze(1)
         
         p_true_phys = normalizer.denormalize_params(p_true_global).cpu().numpy()
         p_single_global_phys = normalizer.denormalize_params(p_single_global_norm).cpu().numpy()
-        p_iter_global_phys = normalizer.denormalize_params(p_iter_global_norm[:,-1, :]).cpu().numpy()
-
-        print(f"Global distribution shapes - True: {p_true_phys.shape}, Single CVAE: {p_single_global_phys.shape}, Iter CVAEs: {p_iter_global_phys.shape}")
+        p_iter_global_phys = normalizer.denormalize_params(p_iter_global_norm).cpu().numpy()
 
         print("\n=== 3. Finding Extreme Tail Sample ===")
         tail_idx = find_best_mean_trap_sample(p_true_phys, p_single_global_phys)

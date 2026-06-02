@@ -351,18 +351,29 @@ def setup_dataloaders(exp_config, sim_data_tuple, system, global_config):
     # We split the raw data before normalization so that the test set
     # does not secretly influence our scaling rules.
     # ---------------------------------------------------------
-    g = torch.Generator().manual_seed(global_config.SEED)
-    shuffled_indices = torch.randperm(total_len, generator=g).tolist()
-    
-    test_len = int(total_len * global_config.TEST_SPLIT)
-    val_len = int(total_len * global_config.TEST_SPLIT)
-    train_len = total_len - val_len - test_len
-    
-    # Safely convert to numpy arrays for indexing
-    train_idx = np.array(shuffled_indices[:train_len])
-    val_idx = np.array(shuffled_indices[train_len:train_len+val_len])
-    test_idx = np.array(shuffled_indices[train_len+val_len:])
-    
+    is_ood_split = exp_config.get('OOD_SPLIT', False) and (global_config.SYSTEM_NAME == 'sir')
+    if is_ood_split:
+        split_path = 'data/sir/sir_ood_split.json'
+        
+        with open(split_path, 'r') as f:
+            split_data = json.load(f)
+        
+        train_idx = np.array(split_data['train_indices'])
+        val_idx = np.array(split_data['val_indices'])
+        test_idx = np.array(split_data['test_indices'])
+    else:
+        g = torch.Generator().manual_seed(global_config.SEED)
+        shuffled_indices = torch.randperm(total_len, generator=g).tolist()
+        
+        test_len = int(total_len * global_config.TEST_SPLIT)
+        val_len = int(total_len * global_config.TEST_SPLIT)
+        train_len = total_len - val_len - test_len
+        
+        # Safely convert to numpy arrays for indexing
+        train_idx = np.array(shuffled_indices[:train_len])
+        val_idx = np.array(shuffled_indices[train_len:train_len+val_len])
+        test_idx = np.array(shuffled_indices[train_len+val_len:])
+        
     # Isolate splits
     obs_train, obs_val, obs_test = obs_sim[train_idx], obs_sim[val_idx], obs_sim[test_idx]
     hid_train, hid_val, hid_test = hid_sim[train_idx], hid_sim[val_idx], hid_sim[test_idx]
@@ -456,7 +467,9 @@ def setup_dataloaders(exp_config, sim_data_tuple, system, global_config):
         real_train = Subset(dataset_real, split_data['train_indices'])
         real_test = Subset(dataset_real, split_data['test_indices'])
         real_test_loader = DataLoader(real_test, batch_size=global_config.BATCH_SIZE, shuffle=False)
-
+    else:
+        real_test_loader = None
+        
     # ---------------------------------------------------------
     # Step 5: Finalize DataLoaders
     # Routes to Hybrid (Sim + Real) or Simulation-Only mode.

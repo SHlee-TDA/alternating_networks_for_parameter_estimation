@@ -27,16 +27,16 @@ class Config:
     # --------------------------------------------------------------------------
     # 1. System & Environment
     # --------------------------------------------------------------------------
-    SYSTEM_NAME: str = 'lotka_volterra' # 'lotka_volterra', 'sir', 'nc_sir', 'ogtt_simul'
-    EXPERIMENT_NAME: str = 'baseline_comparison'
+    SYSTEM_NAME: str = 'sir' # 'lotka_volterra', 'sir', 'nc_sir', 'ogtt_simul'
+    EXPERIMENT_NAME: str = 'ours_without_sn'
     SEED: int = 42
     DEVICE: str = "cuda" if torch.cuda.is_available() else "cpu"
-    RESULTS_DIR: str = 'results'
+    RESULTS_DIR: str = 'results/valid_theorems'
     RUN_BASELINE: bool = False  # Whether to run the single-network baseline for comparison
     # --------------------------------------------------------------------------
     # 2. Data Generation and Data Loading
     # -------------------------------------------------------------------------- 
-    NUM_SAMPLES: int = 50000
+    NUM_SAMPLES: int = 20000
     AUGMENTATION_FACTOR: int = 0   # Resampling number for SDE simulation
     SDE_SCALE_FACTORS: Dict[str, float] = field(default_factory=lambda: {
         'bias_scale': 1.0,
@@ -52,14 +52,14 @@ class Config:
     # --------------------------------------------------------------------------
     # 3. Trainig Hyperparameters
     # --------------------------------------------------------------------------
-    EPOCHS: int = 5000
+    EPOCHS: int = 50000
     LEARNING_RATE: float = 1e-3
     WEIGHT_DECAY: float = 0.0
     USE_EARLY_STOPPING: bool = True
     EARLY_STOPPING_PATIENCE: int = 200
     EARLY_STOPPING_MIN_DELTA: float = 1e-6
     
-    USE_DERIVATIVE: bool = True       # Whether to use derivative features in state variable input
+    USE_DERIVATIVE: bool = False       # Whether to use derivative features in state variable input
     DERIVATIVE_METHOD: str = 'spline'  # 'finite_diff', 'spline', 'lagrange', 'polynomial'
     
     LOSS_CONFIG: List[Tuple[str, float]] = field(default_factory=lambda: [
@@ -74,16 +74,16 @@ class Config:
     # --------------------------------------------------------------------------
     MODEL_CONFIG: Dict[str, Any] = field(default_factory=lambda: {
         'hidden_net': {
-            'hidden_dims': [64, 64, 64, 64],
+            'hidden_dims': [256, 256, 256],
             'activation': 'SiLU'
         },
         'param_net': {
-            'hidden_dims': [64, 64, 64, 64],
+            'hidden_dims': [256, 256, 256],
             'activation': 'SiLU'
         }
     })
     
-    USE_SPECTRAL_NORM: bool = True    # Whether to apply Spectral Normalization in models
+    USE_SPECTRAL_NORM: bool = False    # Whether to apply Spectral Normalization in models
     
     # --------------------------------------------------------------------------
     # 5. Experiment Scenarios
@@ -95,7 +95,8 @@ class Config:
                 'NAME': 'ode_only',
                 'USE_SDE': False,
                 'SCENARIO': 'sim_only',
-                'VAL_SOURCE': 'sim'
+                'VAL_SOURCE': 'sim',
+                'OOD_SPLIT': True
             },
             
             # Scenario 2: Training only on SDE data

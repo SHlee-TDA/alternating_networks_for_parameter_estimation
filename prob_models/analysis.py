@@ -8,6 +8,19 @@ from scipy.stats import pearsonr
 from sklearn.metrics import mean_squared_error
 from tqdm import tqdm
 
+import sys
+import json
+from pathlib import Path
+
+# 프로젝트 루트 경로 추가
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from prob_models.config import ProbConfig
+from prob_models.models import SingleCVAE, HiddenStateCVAE, ParameterCVAE
+from src.data_loader import DataGenerator, setup_dataloaders
+from tools.exp_tools import get_system_class
+from tools.interactive_file_selector import interactive_file_selector
+
 from prob_models.infer import pseudo_gibbs_sampling, single_cvae_sampling
 from prob_models.metrics import (
     calculate_prediction_interval, 
@@ -201,154 +214,124 @@ def run_prob_evaluation_phase(
 
     print(f"Analysis complete. Outputs saved to: {save_dir}")
 
+
 # =====================================================================
-# 4. Main Evaluation Pipeline
+# 4. Standalone Execution Pipeline (맨 아래에 추가)
 # =====================================================================
-def run_full_analysis(hidden_cvae, param_cvae, baseline_model, test_loader, config, system, normalizer):
-    print("\n\033[1;36m=== Running Probabilistic Analysis & Evaluation ===\033[0m")
-    
-    save_dir = os.path.join(config.RESULTS_DIR, config.EXPERIMENT_NAME, "plots")
-    os.makedirs(save_dir, exist_ok=True)
-    
-    hidden_cvae.eval()
-    param_cvae.eval()
-    if baseline_model: baseline_model.eval()
-
-    all_y_true, all_theta_true = [], []
-    all_y_samples, all_theta_samples = [], []
-    all_theta_base = []
-    
-    print("Evaluating entire test set and generating samples...")
-    all_theta_history = [] 
-    
-    for x_batch, y_batch, theta_batch in tqdm(test_loader, desc="Gibbs Sampling Progress"):
-        x_batch = x_batch.to(config.DEVICE)
+def main():
+    try:
+        print("\n\033[1;33m=== [Analysis 평가를 위한 파일 선택] ===\033[0m")
+        base_search_dir = "./results"
         
-        y_samples_norm, theta_samples_norm, theta_hist_norm = pseudo_gibbs_sampling(
-            hidden_cvae, param_cvae, x_batch, 
-            infer_noise_y=config.INFER_NOISE_Y,
-            infer_noise_p=config.INFER_NOISE_P,
-            num_chains=config.INFERENCE_CHAINS, 
-            num_steps=config.INFERENCE_STEPS, 
-            burn_in=config.INFERENCE_BURN_IN
+        # 1. 모델 및 설정 파일 인터랙티브 선택
+        rel_config_path = interactive_file_selector("[1/4] 실험 설정 파일 (config.json) 선택:", start_dir=base_search_dir)
+        config_path = os.path.join(base_search_dir, rel_config_path)
+        
+        rel_prob_config_path = interactive_file_selector("[2/4] 확률 모델 설정 파일 (prob_config.json) 선택:", start_dir=base_search_dir)
+        prob_config_path = os.path.join(base_search_dir, rel_prob_config_path)
+        
+        rel_baseline_path = interactive_file_selector("[3/4] Single CVAE 가중치 선택:", start_dir=base_search_dir)
+        baseline_path = os.path.join(base_search_dir, rel_baseline_path)
+        
+        rel_Hnet_path = interactive_file_selector("[4/4] Hidden CVAE 가중치 선택 (Param CVAE 자동로드):", start_dir=base_search_dir)
+        Hnet_path = os.path.join(base_search_dir, rel_Hnet_path)
+        Pnet_path = Hnet_path.replace('hidden_cvae.pth', 'param_cvae.pth').replace('Hnet.pth', 'Pnet.pth')
+
+        # 2. Config 병합 로드
+        config = ProbConfig()
+        print(f"\n[Info] Loading Config from: {config_path}")
+        with open(config_path, 'r') as f:
+            for k, v in json.load(f).items():
+                if not k.startswith('__'): setattr(config, k, v)
+                
+        print(f"[Info] Loading Prob Config from: {prob_config_path}")
+        with open(prob_config_path, 'r') as f:
+            for k, v in json.load(f).items():
+                if not k.startswith('__'): setattr(config, k, v)
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        config.DEVICE = device
+
+        # 3. System 및 Test DataLoader 완벽 로드
+        SystemClass = get_system_class(config.SYSTEM_NAME)
+        system = SystemClass()
+
+        print(f"[Info] Loading Data Cache...")
+        generator = DataGenerator(system, config)
+        sim_data_tuple = generator.generate_data()
+
+        print(f"[Info] Setting up DataLoaders (Preserving exact Normalizer)...")
+        loaders = setup_dataloaders(vars(config), sim_data_tuple, system, config)
+        _, _, test_l, _, _, normalizer = loaders
+
+        # 4. 차원 정보 추출 및 모델 초기화
+        sample_x, sample_y, sample_p = next(iter(test_l))
+        x_dim, y_dim, theta_dim = sample_x.shape[1], sample_y.shape[1], sample_p.shape[1]
+
+        latent_dim_h = getattr(config, 'LATENT_DIM_HIDDEN', 4)
+        latent_dim_p = getattr(config, 'LATENT_DIM_PARAM', 2)
+        latent_dim_base = getattr(config, 'LATENT_DIM_BASELINE', 2)
+        hidden_dims = getattr(config, 'HIDDEN_DIMS', [64, 64, 64, 64])
+
+        print(f"[Info] Initializing Models...")
+        baseline_cvae = SingleCVAE(x_dim, theta_dim, latent_dim=latent_dim_base, hidden_dims=hidden_dims).to(device)
+        Hnet = HiddenStateCVAE(x_dim, theta_dim, y_dim, latent_dim=latent_dim_h, hidden_dims=hidden_dims).to(device)
+        Pnet = ParameterCVAE(x_dim, y_dim, theta_dim, latent_dim=latent_dim_p, hidden_dims=hidden_dims).to(device)
+        Pnet.theta_dim = theta_dim # 속성 주입 (안전장치)
+
+        def load_weight_safe(model, path, possible_keys):
+            ckpt = torch.load(path, map_location=device)
+            if isinstance(ckpt, dict):
+                for key in possible_keys:
+                    if key in ckpt:
+                        model.load_state_dict(ckpt[key])
+                        return
+                for k, v in ckpt.items():
+                    if 'state_dict' in k and 'optimizer' not in k:
+                        model.load_state_dict(v)
+                        return
+            model.load_state_dict(ckpt)
+
+        print(f"[Info] Loading Checkpoints...")
+        load_weight_safe(baseline_cvae, baseline_path, ['baseline_cvae_state_dict'])
+        load_weight_safe(Hnet, Hnet_path, ['hidden_cvae_state_dict', 'Hnet_state_dict'])
+        load_weight_safe(Pnet, Pnet_path, ['param_cvae_state_dict', 'Pnet_state_dict'])
+
+        baseline_cvae.eval(); Hnet.eval(); Pnet.eval()
+        
+        # 5. Core Evaluation 실행 (Ours)
+        print("\n" + "="*50)
+        print("  Evaluating Iterative CVAEs (Proposed Method)")
+        print("="*50)
+        config.RUN_BASELINE = False
+        run_prob_evaluation_phase(
+            run_config=config,
+            state_estimator=Hnet,
+            param_estimator=Pnet,
+            test_l=test_l,
+            normalizer=normalizer,
+            device=device
         )
         
-        if baseline_model:
-            with torch.no_grad():
-                theta_base_norm = baseline_model(x_batch)
-                theta_base_phys = normalizer.denormalize_params(theta_base_norm).cpu().numpy()
-        else:
-            theta_base_phys = np.zeros_like(theta_batch.cpu().numpy())
-            
-        y_true_phys = normalizer.denormalize_inputs(y_batch, variable_type='hidden').cpu().numpy()
-        y_samples_phys = np.zeros_like(y_samples_norm)
-        for i in range(y_samples_norm.shape[1]):
-            y_samples_phys[:, i, :] = normalizer.denormalize_inputs(
-                torch.tensor(y_samples_norm[:, i, :]).to(config.DEVICE), variable_type='hidden'
-            ).cpu().numpy()
-            
-        theta_true_phys = normalizer.denormalize_params(theta_batch).cpu().numpy()
-        theta_samples_phys = np.zeros_like(theta_samples_norm)
-        for i in range(theta_samples_norm.shape[1]):
-            theta_samples_phys[:, i, :] = normalizer.denormalize_params(
-                torch.tensor(theta_samples_norm[:, i, :]).to(config.DEVICE)
-            ).cpu().numpy()
-            
-        if len(all_theta_history) == 0:
-            hist_phys = np.zeros_like(theta_hist_norm)
-            for c in range(theta_hist_norm.shape[1]): 
-                for s in range(theta_hist_norm.shape[2]): 
-                    hist_phys[:, c, s, :] = normalizer.denormalize_params(
-                        torch.tensor(theta_hist_norm[:, c, s, :]).to(config.DEVICE)
-                    ).cpu().numpy()
-            all_theta_history.append(hist_phys)
-                    
-        all_y_true.append(y_true_phys)
-        all_theta_true.append(theta_true_phys)
-        all_y_samples.append(y_samples_phys)
-        all_theta_samples.append(theta_samples_phys)
-        all_theta_base.append(theta_base_phys)
-
-    y_true_full = np.concatenate(all_y_true, axis=0)
-    theta_true_full = np.concatenate(all_theta_true, axis=0)
-    y_samples_full = np.concatenate(all_y_samples, axis=0)
-    theta_samples_full = np.concatenate(all_theta_samples, axis=0)
-    theta_base_full = np.concatenate(all_theta_base, axis=0)
-
-    # -------------------------------------------------------------
-    # [수정] 1. 평균 지표 대신 파라미터별(SI, Sigma)로 분리 계산 및 출력
-    # -------------------------------------------------------------
-    picp, mpiw = calculate_prediction_interval(theta_true_full, theta_samples_full)
-    crps = calculate_crps(theta_true_full, theta_samples_full)
-    
-    # 확실한 독립 계산을 위해 scikit-learn과 scipy.stats 직접 호출
-    theta_pred_mean = np.mean(theta_samples_full, axis=1)
-    rmse_si = np.sqrt(mean_squared_error(theta_true_full[:, 0], theta_pred_mean[:, 0]))
-    rmse_sigma = np.sqrt(mean_squared_error(theta_true_full[:, 1], theta_pred_mean[:, 1]))
-    pearson_si, _ = pearsonr(theta_true_full[:, 0], theta_pred_mean[:, 0])
-    pearson_sigma, _ = pearsonr(theta_true_full[:, 1], theta_pred_mean[:, 1])
-    
-    print("\n\033[1;32m[Parameter Estimation Metrics (Test Set)]\033[0m")
-    print(f"PICP (95% Coverage) : {np.mean(picp)*100:.2f}%")
-    print(f"MPIW (Width)        : {np.mean(mpiw):.4f}")
-    print(f"CRPS                : {np.mean(crps):.4f}")
-    
-    print(f"\n[\033[1;33m$S_I$ Metrics\033[0m]")
-    print(f"  RMSE      : {rmse_si:.4f}")
-    print(f"  Pearson r : {pearson_si:.4f}")
-    
-    print(f"\n[\033[1;33m$\sigma$ Metrics\033[0m]")
-    print(f"  RMSE      : {rmse_sigma:.4f}")
-    print(f"  Pearson r : {pearson_sigma:.4f}")
-
-    # -------------------------------------------------------------
-    # [추가] 2. Robustness Test (노이즈 주입 평가) 호출
-    # -------------------------------------------------------------
-    evaluate_robustness_probabilistic(
-        hidden_cvae, param_cvae, baseline_model, 
-        test_loader, config, normalizer, save_dir
-    )
-
-    # -------------------------------------------------------------
-    # 시각화 (기존)
-    # -------------------------------------------------------------
-    print("\nGenerating Visual Proofs...")
-    sample_idx = 0
-    time_points = np.linspace(0, 120, y_true_full.shape[1])
-    
-    plot_trajectory_coverage(
-        y_true=y_true_full[sample_idx], y_samples=y_samples_full[sample_idx], 
-        time_points=time_points, save_path=os.path.join(save_dir, "1_trajectory_coverage.png")
-    )
-    
-    plot_parameter_posterior(
-        theta_true_full[sample_idx], theta_samples_full[sample_idx], 
-        save_path=os.path.join(save_dir, "2_parameter_posterior.png")
-    )
-    
-    if baseline_model:
-        plot_symmetric_collapse_probabilistic(
-            theta_true_full, theta_samples_full, theta_base_full, 
-            save_path=os.path.join(save_dir, "3_symmetric_collapse.png")
+        # 필요시 주석 해제하여 Baseline도 바로 이어서 평가 가능
+        """
+        print("\n" + "="*50)
+        print("  Evaluating Single CVAE (Baseline Method)")
+        print("="*50)
+        config.RUN_BASELINE = True
+        run_prob_evaluation_phase(
+            run_config=config,
+            state_estimator=None,
+            param_estimator=baseline_cvae,
+            test_l=test_l,
+            normalizer=normalizer,
+            device=device
         )
-        
-        y0 = [val[0] if isinstance(val, list) else val for val in system.initial_conditions]
-        def ode_func(t, y, *params): return system.ode_func(t, y, list(params))
-        
-        plot_ogtt_trajectories_probabilistic(
-            ode_func, y0, theta_true_full[sample_idx], theta_samples_full[sample_idx], theta_base_full[sample_idx], 
-            save_path=os.path.join(save_dir, "4_ode_trajectories.png")
-        )
-    
-    target_history = all_theta_history[0][sample_idx, 0, :, :] 
-    plot_mcmc_trace_and_acf(
-        target_history, 
-        save_path=os.path.join(save_dir, "5_mcmc_diagnostics.png")
-    )
-    
-    plot_residual_scatter(
-        theta_true_full, theta_samples_full,
-        save_path=os.path.join(save_dir, "6_residual_scatter.png")
-    )
-    
-    print(f"Analysis complete. All plots saved to: {save_dir}")
+        """
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+
+if __name__ == "__main__":
+    main()

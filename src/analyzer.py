@@ -99,7 +99,7 @@ class BaseAnalyzer:
             plt.legend()
             plt.grid(True, which="both", ls="-", alpha=0.2)
             
-            plt.savefig(os.path.join(self.results_path, f"{metric}.png"), dpi=150)
+            plt.savefig(os.path.join(self.results_path, f"{metric}.pdf"), dpi=150)
             plt.close()
 
     # ==========================================
@@ -173,7 +173,7 @@ class BaseAnalyzer:
         _plot_for_model(axes[0], h_phi_data, r"$H_\phi$ (Hidden Net)")
         _plot_for_model(axes[1], p_psi_data, r"$P_\psi$ (Param Net)")
 
-        plt.savefig(os.path.join(self.results_path, 'spectral_norms_plot.png'), dpi=150)
+        plt.savefig(os.path.join(self.results_path, 'spectral_norms_plot.pdf'), dpi=150)
         plt.close(fig)
 
     # ==========================================
@@ -197,7 +197,7 @@ class BaseAnalyzer:
         for i, (p1, p2) in enumerate(combos):
             self._plot_single_portrait(axes.flatten()[i], x_sample, p_target, (p1, p2))
             
-        plt.savefig(os.path.join(self.results_path, 'phase_portraits.png'), dpi=150)
+        plt.savefig(os.path.join(self.results_path, 'phase_portraits.pdf'), dpi=150)
         plt.close(fig)
 
     def _plot_single_portrait(self, ax, x_observed, p_target, p_dims):
@@ -303,7 +303,7 @@ class BaseAnalyzer:
             ax.legend(loc='lower right'); ax.grid(True, alpha=0.3)
 
         plt.tight_layout()
-        plt.savefig(os.path.join(self.results_path, f'{prefix}_scatter_comparison.png'), dpi=300)
+        plt.savefig(os.path.join(self.results_path, f'{prefix}_scatter_comparison.pdf'), dpi=300)
         plt.close()
 
     def plot_trajectory_panel(self, ax, t, y_true, y_base, y_ours, title, ylabel=None, xlabel="Time"):
@@ -322,7 +322,7 @@ class BaseAnalyzer:
 # ==========================================
 
 class SIRAnalyzer(BaseAnalyzer):
-    def evaluate_simulation(self, p_true, p_ours, p_base):
+    def evaluate_simulation(self, p_true, p_ours, p_base, x_obs=None):
         valid_base = not np.all(p_base == 0)
         valid_ours = not np.all(p_ours == 0)
         
@@ -344,35 +344,83 @@ class SIRAnalyzer(BaseAnalyzer):
         p_titles = [r'Infection Rate ($\beta$)', r'Recovery Rate ($\gamma$)', r'Basic Reproduction ($\mathcal{R}_0$)']
         
         self.plot_scatter_comparison(t_vals, o_vals, b_vals, metrics_dict, p_keys, p_titles, prefix="sir")
-        self._plot_trajectory_comparison(p_true, p_ours, p_base, R0_true, valid_base, valid_ours)
+        
+        if getattr(self.config, 'USE_SPECTRAL_NORM', False):
+            self.analyze_spectral_norms()
+            self.plot_spectral_norms_by_layer()
+            
+        if x_obs is not None and valid_ours:
+            x_sample = torch.tensor(x_obs[0], dtype=torch.float32).unsqueeze(0).to(self.config.DEVICE)
+            x_sample_norm = self.normalizer.normalize_inputs(x_sample, 'observed')
+            self.plot_phase_portraits(x_sample_norm, p_true[0])
 
-    def _plot_trajectory_comparison(self, p_true, p_ours, p_base, R0_true, valid_base, valid_ours):
+        self._plot_trajectory_comparison(p_true, p_ours, p_base, R0_true, valid_base, valid_ours, x_obs)
+        
+    def _plot_trajectory_comparison(self, p_true, p_ours, p_base, R0_true, valid_base, valid_ours, x_obs=None):
         from scipy.integrate import solve_ivp
+        
+        indices_to_plot = []
+        titles = []
+        
+        # Find In-Distribution (Epidemic) case
         try:
-            idx_epidemic, idx_decay = np.where(R0_true > 1.2)[0][0], np.where(R0_true < 0.8)[0][0]
+            idx_ep = np.where(R0_true > 1.2)[0][0]
+            indices_to_plot.append(idx_ep)
+            titles.append(f"In-Dist Epidemic (R0={R0_true[idx_ep]:.2f})")
         except IndexError:
-            idx_epidemic, idx_decay = 0, len(R0_true)-1
+            pass
+            
+        # Find OOD (Decay) case
+        try:
+            idx_dec = np.where(R0_true < 0.8)[0][0]
+            indices_to_plot.append(idx_dec)
+            titles.append(f"OOD Decay (R0={R0_true[idx_dec]:.2f})")
+        except IndexError:
+            pass
+            
+        if not indices_to_plot:
+            indices_to_plot = [0]
+            titles = [f"Sample (R0={R0_true[0]:.2f})"]
 
-        fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+        # 패널 구성 (세로: S(t), I(t) / 가로: Epidemic, Decay)
+        fig, axes = plt.subplots(2, len(indices_to_plot), figsize=(6 * len(indices_to_plot), 10), squeeze=False)
         t_eval = np.linspace(0, 110, 200)
-        def sir_ode(t, y, beta, gamma): return [-beta * y[0] * y[1] / 50.0, beta * y[0] * y[1] / 50.0 - gamma * y[1], gamma * y[1]]
+        
+        def sir_ode(t, y, beta, gamma): 
+            return [-beta * y[0] * y[1] / 50.0, beta * y[0] * y[1] / 50.0 - gamma * y[1], gamma * y[1]]
 
-        for i, idx in enumerate([idx_epidemic, idx_decay]):
-            title_prefix = f"Epidemic (R0={R0_true[idx]:.2f})" if i == 0 else f"Decay (R0={R0_true[idx]:.2f})"
-            sol_t = solve_ivp(sir_ode, (0, 110), [49., 1., 0.], args=tuple(p_true[idx]), t_eval=t_eval)
+        for i, idx in enumerate(indices_to_plot):
+            title_prefix = titles[i]
+            
+            # [핵심 수정 2] 초기값을 관측 데이터에서 동적으로 계산하여 할당
+            if x_obs is not None:
+                S0 = float(x_obs[idx, 0])  # t=0 시점의 S 관측치
+            else:
+                S0 = 49.0 # Fallback 안전장치
+            I0 = 50.0 - S0
+            y0 = [S0, I0, 0.0]
+            
+            sol_t = solve_ivp(sir_ode, (0, 110), y0, args=tuple(p_true[idx]), t_eval=t_eval)
             
             y_o_s, y_o_i = np.zeros_like(sol_t.y[0]), np.zeros_like(sol_t.y[1])
             if valid_ours:
-                sol_o = solve_ivp(sir_ode, (0, 110), [49., 1., 0.], args=tuple(p_ours[idx]), t_eval=t_eval)
+                sol_o = solve_ivp(sir_ode, (0, 110), y0, args=tuple(p_ours[idx]), t_eval=t_eval)
                 y_o_s, y_o_i = sol_o.y[0], sol_o.y[1]
                 
             y_b_s, y_b_i = np.zeros_like(sol_t.y[0]), np.zeros_like(sol_t.y[1])
             if valid_base:
-                sol_b = solve_ivp(sir_ode, (0, 110), [49., 1., 0.], args=tuple(p_base[idx]), t_eval=t_eval)
+                sol_b = solve_ivp(sir_ode, (0, 110), y0, args=tuple(p_base[idx]), t_eval=t_eval)
                 y_b_s, y_b_i = sol_b.y[0], sol_b.y[1]
 
-            self.plot_trajectory_panel(axes[i, 0], sol_t.t, sol_t.y[0], y_b_s, y_o_s, f"S(t) | {title_prefix}", "Population")
-            self.plot_trajectory_panel(axes[i, 1], sol_t.t, sol_t.y[1], y_b_i, y_o_i, f"I(t) Hidden | {title_prefix}")
+            # 궤적 그리기
+            self.plot_trajectory_panel(axes[0, i], sol_t.t, sol_t.y[0], y_b_s, y_o_s, f"S(t) (Observed) | {title_prefix}", "Population")
+            self.plot_trajectory_panel(axes[1, i], sol_t.t, sol_t.y[1], y_b_i, y_o_i, f"I(t) (Hidden) | {title_prefix}")
+            
+            if x_obs is not None:
+                obs_t = self.system.t_points
+                obs_y = x_obs[idx] # [t0, t1, t2, t3]에서의 실제 S 관측값
+                axes[0, i].plot(obs_t, obs_y, 'ko', markersize=6, zorder=15, label='Sparse Obs Points')
+                axes[0, i].legend()
 
         plt.tight_layout()
         plt.savefig(os.path.join(self.results_path, 'sir_trajectory_comparison.png'), dpi=300)
@@ -414,7 +462,7 @@ class LotkaVolterraAnalyzer(BaseAnalyzer):
         if valid_base: axes[2].plot(y_b_x, y_b_y, 'indianred', linestyle='--', lw=2, label='Baseline')
         if valid_ours: axes[2].plot(y_o_x, y_o_y, 'steelblue', linestyle='-.', lw=2, label='Ours')
         axes[2].set_title("Phase Portrait"); axes[2].set_xlabel("Prey"); axes[2].set_ylabel("Predator"); axes[2].legend(); axes[2].grid(True, alpha=0.3)
-        plt.tight_layout(); plt.savefig(os.path.join(self.results_path, 'lv_dynamics_comparison.png'), dpi=300); plt.close()
+        plt.tight_layout(); plt.savefig(os.path.join(self.results_path, 'lv_dynamics_comparison.pdf'), dpi=300); plt.close()
 
 class OgttSimulAnalyzer(BaseAnalyzer):
     def evaluate_simulation(self, p_true, p_ours, p_base):
@@ -469,7 +517,7 @@ class OgttSimulAnalyzer(BaseAnalyzer):
         self.plot_trajectory_panel(axes[0], sol_t.t, sol_t.y[0], y_b_g, y_o_g, "Glucose (Observed)", "mg/dL", "Time (min)")
         self.plot_trajectory_panel(axes[1], sol_t.t, sol_t.y[1], y_b_i, y_o_i, "Insulin (Hidden Error)", "uU/mL", "Time (min)")
         plt.tight_layout()
-        plt.savefig(os.path.join(self.results_path, 'sim_trajectory_comparison.png'), dpi=300)
+        plt.savefig(os.path.join(self.results_path, 'sim_trajectory_comparison.pdf'), dpi=300)
         plt.close()
         
     def _plot_symmetric_collapse(self, p_true, p_ours, p_base, prefix="sim"):
@@ -504,7 +552,7 @@ class OgttSimulAnalyzer(BaseAnalyzer):
         ax3.plot([min_log, max_log], [min_log, max_log], 'k--', lw=2, label='Ideal (y=x)')
         ax3.set_title("3. $S_I$ Prediction (Sloppy Direction)", fontsize=14, fontweight='bold'); ax3.legend(); ax3.grid(True, alpha=0.2)
         
-        plt.tight_layout(); plt.savefig(os.path.join(self.results_path, f'{prefix}_symmetric_collapse.png'), dpi=300); plt.close()
+        plt.tight_layout(); plt.savefig(os.path.join(self.results_path, f'{prefix}_symmetric_collapse.pdf'), dpi=300); plt.close()
 
 # ==========================================
 # 3. Factory Function 

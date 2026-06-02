@@ -30,7 +30,7 @@ class ProbConfig:
     BATCH_SIZE: int = 256
     
     # --- 3. Training & Optimization ---
-    EPOCHS: int = 5000
+    EPOCHS: int = 10000
     LEARNING_RATE: float = 1e-3
     KL_MAX_BETA: float = 0.01
     KL_WARMUP_EPOCHS: int = 300     # CVAE 붕괴 방지를 위한 긴 웜업
@@ -38,7 +38,7 @@ class ProbConfig:
     EARLY_STOPPING_MIN_DELTA: float = 1e-5
     
     # --- 4. CVAE Architecture ---
-    HIDDEN_DIMS: List[int] = field(default_factory=lambda: [64, 64, 64, 64])
+    HIDDEN_DIMS: List[int] = field(default_factory=lambda: [128, 128, 128, 128])
     LATENT_DIM_HIDDEN: int = 4  # Network A의 Z 공간
     LATENT_DIM_PARAM: int = 2    # Network B의 Z 공간
     
