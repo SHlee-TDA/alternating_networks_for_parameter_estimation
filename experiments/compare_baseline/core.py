@@ -15,7 +15,7 @@ class BaseEstimator(ABC):
             t_eval: np.ndarray, 
             x_obs: np.ndarray, 
             theta_init: np.ndarray, 
-            x_hid_init: np.ndarray) -> Tuple[np.ndarray, np.ndarray, float]:
+            x_hid_init: np.ndarray) -> Tuple[np.ndarray, np.ndarray, float, list]:
         """
         주어진 관측 데이터와 초기 추정치를 바탕으로 매개변수를 최적화합니다.
         
@@ -30,6 +30,7 @@ class BaseEstimator(ABC):
                 - 최종 추정된 매개변수 (theta_hat)
                 - 최종 추정된 은닉 상태 초기값 (x_hid_hat_0)
                 - 알고리즘 실행 시간 (exec_time_seconds)
+                - 파라미터 수렴 궤적 히스토리 (list of np.ndarray)
         """
         pass
 

@@ -28,15 +28,15 @@ class Config:
     # 1. System & Environment
     # --------------------------------------------------------------------------
     SYSTEM_NAME: str = 'sir' # 'lotka_volterra', 'sir', 'nc_sir', 'ogtt_simul'
-    EXPERIMENT_NAME: str = 'ours_without_sn'
+    EXPERIMENT_NAME: str = 'run_002'
     SEED: int = 42
     DEVICE: str = "cuda" if torch.cuda.is_available() else "cpu"
-    RESULTS_DIR: str = 'results/valid_theorems'
+    RESULTS_DIR: str = 'experiments/compare_baseline/results'
     RUN_BASELINE: bool = False  # Whether to run the single-network baseline for comparison
     # --------------------------------------------------------------------------
     # 2. Data Generation and Data Loading
     # -------------------------------------------------------------------------- 
-    NUM_SAMPLES: int = 20000
+    NUM_SAMPLES: int = 100000
     AUGMENTATION_FACTOR: int = 0   # Resampling number for SDE simulation
     SDE_SCALE_FACTORS: Dict[str, float] = field(default_factory=lambda: {
         'bias_scale': 1.0,
@@ -52,7 +52,7 @@ class Config:
     # --------------------------------------------------------------------------
     # 3. Trainig Hyperparameters
     # --------------------------------------------------------------------------
-    EPOCHS: int = 50000
+    EPOCHS: int = 10000
     LEARNING_RATE: float = 1e-3
     WEIGHT_DECAY: float = 0.0
     USE_EARLY_STOPPING: bool = True
@@ -83,7 +83,7 @@ class Config:
         }
     })
     
-    USE_SPECTRAL_NORM: bool = False    # Whether to apply Spectral Normalization in models
+    USE_SPECTRAL_NORM: bool = True    # Whether to apply Spectral Normalization in models
     
     # --------------------------------------------------------------------------
     # 5. Experiment Scenarios

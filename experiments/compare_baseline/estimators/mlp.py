@@ -57,7 +57,7 @@ class DirectMLEstimator:
         )
         
         # 3. 모델 초기화
-        direct_hidden_dim = self.config.MODEL_CONFIG['f_theta']['hidden_dims'][0]
+        direct_hidden_dim = self.config.MODEL_CONFIG['hidden_net']['hidden_dims'][0]
         self.num_params = len(sys_obj.param_names)
         
         self.network = ConditionalDirectPredictor(
@@ -91,7 +91,7 @@ class DirectMLEstimator:
         criterion = nn.MSELoss()
         
         self.network.train()
-        epochs = 100000
+        epochs = 10000
         for epoch in range(epochs):
             for batch_x_norm, batch_p_true_norm in loader:
                 # 훈련 중: 참값(정규화됨)에 무작위 섭동을 가하여 가짜 초기값 생성
@@ -147,4 +147,6 @@ class DirectMLEstimator:
         theta_hat_t = self.normalizer.denormalize_params(p_pred_norm)
         theta_hat = theta_hat_t.squeeze(0).cpu().numpy()
         
-        return theta_hat, np.zeros_like(x_hid_init), exec_time
+        p_history = [theta_init.copy(), theta_hat.copy()]
+        
+        return theta_hat, np.zeros_like(x_hid_init), exec_time, p_history

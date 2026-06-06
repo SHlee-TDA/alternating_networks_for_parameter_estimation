@@ -29,8 +29,8 @@ class ProposedEstimator:
         os.makedirs(self.model_dir, exist_ok=True)
         
         # 가중치 파일명 (trainer.py가 저장하는 이름 기준)
-        self.f_weight_path = os.path.join(self.model_dir, 'f_theta.pth')
-        self.g_weight_path = os.path.join(self.model_dir, 'g_phi.pth')
+        self.f_weight_path = os.path.join(self.model_dir, 'Hnet.pth')
+        self.g_weight_path = os.path.join(self.model_dir, 'Pnet.pth')
         
         # 1. 데이터 로드 및 차원 동적 추론
         generator = DataGenerator(self.sys, self.config)
@@ -51,8 +51,8 @@ class ProposedEstimator:
         )
 
         # 3. 모델 초기화 (Config 구조에 맞게)
-        f_config = self.config.MODEL_CONFIG['f_theta']
-        g_config = self.config.MODEL_CONFIG['g_phi']
+        f_config = self.config.MODEL_CONFIG['hidden_net']
+        g_config = self.config.MODEL_CONFIG['param_net']
         
         self.f_theta = HiddenVarPredictor(
             self.config.FLAT_X_DIM, 
@@ -103,8 +103,8 @@ class ProposedEstimator:
         
         # 4. Trainer 초기화 (제공해주신 스펙에 정확히 맞춤)
         trainer = Trainer(
-            f_theta=self.f_theta,
-            g_phi=self.g_phi,
+            hidden_net=self.f_theta,
+            param_net=self.g_phi,
             train_loader=train_loader,
             val_loader=val_loader,
             config=self.config
@@ -160,7 +160,8 @@ class ProposedEstimator:
         
         # config에 1로 되어있던 실수를 방지하기 위해 최소 50번의 반복 보장
         max_iters = max(getattr(self.config, 'ITERATIONS', 50), 50) 
-        
+        p_history = []  # 수렴 궤적 저장용 리스트
+        p_history.append(self.normalizer.denormalize_params(p_curr).cpu().numpy())  # 초기값도 기록
         with torch.no_grad():
             for _ in range(max_iters):
                 # 1단계: 관측치와 현재 파라미터로 은닉 상태 추론
@@ -175,7 +176,7 @@ class ProposedEstimator:
                     break
                     
                 p_curr = p_next_norm
-                
+                p_history.append(self.normalizer.denormalize_params(p_curr).cpu().numpy())
         exec_time = time.time() - start_time
         
         # --- 4. 역정규화 (Denormalization) ---
@@ -183,4 +184,4 @@ class ProposedEstimator:
         theta_hat = theta_hat_t.squeeze(0).cpu().numpy()
         
         # 은닉 상태는 평가 대상이 아니므로 더미(Zero) 반환
-        return theta_hat, np.zeros_like(x_hid_init), exec_time
+        return theta_hat, np.zeros_like(x_hid_init), exec_time, p_history
