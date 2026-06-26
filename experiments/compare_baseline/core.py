@@ -42,24 +42,15 @@ def evaluate_success(error: float, threshold: float = 0.05) -> bool:
     """오차가 임계값 미만인지 확인하여 수렴 성공 여부를 반환합니다."""
     return error < threshold
 
-def perturb_initial_values(true_values, radius, rng=None):
-    """
-    주어진 참값에 반경(radius) 비례하는 섭동(perturbation)을 가합니다.
-    
-    Args:
-        true_values (np.ndarray): 참값 배열
-        radius (float): 섭동 반경 (상대적 크기)
-        rng (np.random.Generator, optional): 난수 생성기. 
-                                             None이면 전역 np.random 사용
-    """
+def perturb_initial_values(true_values, sigma, rng=None):
     if rng is None:
-        # rng가 제공되지 않으면 기존처럼 전역 상태 사용 (하위 호환성 유지)
-        noise = np.random.uniform(-radius, radius, size=true_values.shape)
-    else:
-        # rng가 제공되면 독립적인 지역 난수 생성기 사용
-        noise = rng.uniform(-radius, radius, size=true_values.shape)
+        rng = np.random.default_rng()
         
-    perturbed = true_values * (1 + noise)
+    noise_factor = rng.lognormal(mean=0.0, sigma=sigma, size=true_values.shape)
     
-    # 물리적 타당성을 위해 모든 값은 0보다 크도록 강제 클리핑
-    return np.clip(perturbed, a_min=1e-6, a_max=None)
+    # 🚨 [수정] 몬테카를로 이상치 방어
+    # 값이 아무리 튀어도 정답의 1/20배 ~ 20배 안에서만 놀도록 클리핑합니다.
+    noise_factor = np.clip(noise_factor, 0.05, 20.0) 
+    
+    perturbed = true_values * noise_factor
+    return perturbed

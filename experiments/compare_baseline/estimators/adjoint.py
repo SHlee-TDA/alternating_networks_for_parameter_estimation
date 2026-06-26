@@ -12,7 +12,7 @@ class AdjointLBFGSEstimator(BaseEstimator):
         self.p = len(self.sys.param_names)
 
     def _augmented_ode(self, t, y_aug, beta, gamma, N):
-        """SIR ODE (3차원) + 민감도 ODE (9차원) = 12차원 시스템 (완벽 정상)"""
+        """SIR ODE (3차원) + 민감도 ODE (9차원) = 12차원 시스템"""
         S, I, R = y_aug[0:3]
         
         dSdt = -beta * S * I / N
@@ -47,14 +47,9 @@ class AdjointLBFGSEstimator(BaseEstimator):
         I_0 = theta_opt[2]
         N = sum([val[0] for val in self.sys.initial_conditions])
         
-        # 🚨 [수정 1] S_0는 관측값 그대로! R_0를 나머지 인원으로 계산
         S_0 = float(x_obs_0)
         R_0 = max(0.0, N - S_0 - I_0)
         
-        # 🚨 [수정 2] I_0에 대한 초기 민감도 설정
-        # S(0)는 고정된 관측값이므로 dS(0)/dI_0 = 0.0
-        # I(0) = I_0 이므로 dI(0)/dI_0 = 1.0
-        # R(0) = N - S(0) - I_0 이므로 dR(0)/dI_0 = -1.0
         y_aug_0 = [S_0, I_0, R_0,  
                    0.0, 0.0, 0.0,  
                    0.0, 0.0, 0.0,  
@@ -68,12 +63,12 @@ class AdjointLBFGSEstimator(BaseEstimator):
                 y0=y_aug_0,
                 t_eval=t_eval,
                 args=(beta, gamma, N),
-                method='Radau'
+                method='Radau' # Stiff 대응 솔버 유지
             )
             
-        # 만약 발산 시, 기울기가 0이 되어 멈추는 것을 방지하기 위해 가짜 기울기 반환
+        # 🚨 [수정 1] 발산 시, 옵티마이저가 확실하게 '이쪽 방향은 아니다'라고 느끼도록 스케일이 큰 패널티 부여
         if not sol.success or np.any(np.isnan(sol.y)) or np.any(np.isinf(sol.y)):
-            return 1e6, np.ones_like(theta_opt)
+            return 1e6, np.full_like(theta_opt, 1e4)
             
         S_pred = sol.y[0]
         residuals = S_pred - x_obs.flatten()
@@ -83,7 +78,6 @@ class AdjointLBFGSEstimator(BaseEstimator):
         dS_dgamma = sol.y[6]
         dS_dI0    = sol.y[9]
         
-        # 연쇄 법칙(Chain Rule)을 통한 정확한 Gradient
         grad_beta  = np.sum(residuals * dS_dbeta)
         grad_gamma = np.sum(residuals * dS_dgamma)
         grad_I0    = np.sum(residuals * dS_dI0)
@@ -95,7 +89,15 @@ class AdjointLBFGSEstimator(BaseEstimator):
         x_obs_0 = x_obs[0] if x_obs.ndim == 1 else x_obs[0, 0]
         
         N = sum([val[0] for val in self.sys.initial_conditions])
-        bounds = [(0.0, np.inf), (0.0, np.inf), (0.0, N)]
+        
+        # 🚨 [수정 2] 무한대 방지 (10.0), 0 방지 (1e-5), 동적 I_0 바운드
+        max_I0 = max(0.001, N - x_obs_0)
+        bounds = [(1e-5, 10.0), (1e-5, 10.0), (1e-5, max_I0)]
+        
+        # 🚨 [수정 3] L-BFGS-B는 x0가 bounds 바깥에 있으면 ValueError를 냅니다. 철저히 클리핑!
+        lower_bounds = [b[0] for b in bounds]
+        upper_bounds = [b[1] for b in bounds]
+        theta_opt_init = np.clip(theta_opt_init, lower_bounds, upper_bounds)
         
         p_history = [theta_opt_init.copy()[:self.p]]
 
@@ -112,8 +114,9 @@ class AdjointLBFGSEstimator(BaseEstimator):
                 args=(t_eval, x_obs, x_obs_0),
                 method='L-BFGS-B',
                 bounds=bounds,
-                jac=True,  # 해석적 기울기 사용
+                jac=True,  # 우리가 직접 계산한 Gradient 사용
                 callback=callback,
+                # 🚨 [수정 4] maxfun을 명시하여 무한 평가 방지, ftol로 조기종료 확보
                 options={'maxiter': 50, 'maxfun': 200, 'ftol': 1e-6}
             )
             

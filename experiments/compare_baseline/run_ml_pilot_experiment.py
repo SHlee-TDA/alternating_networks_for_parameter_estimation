@@ -14,8 +14,7 @@ from systems.sir import Sir
 from systems.lotka_volterra import LotkaVolterra
 from experiments.compare_baseline.core import calculate_relative_error
 
-# 🚨 [중요] run_pilot_experiment.py 파일에 직전 턴에서 작성한 
-# 5% 노이즈 주입 및 all_trajectories 저장 로직이 적용되어 있어야 합니다!
+# 🚨 [수정됨] 직전에 수정하여 완성된 run_pilot_experiment.py의 함수들 임포트
 from experiments.compare_baseline.run_pilot_experiment import (
     run_monte_carlo_evaluation, save_results_to_json, append_to_markdown
 )
@@ -48,12 +47,12 @@ def check_in_distribution_performance(direct_model, proposed_model):
         x_obs_raw = obs_sim[i][:, :orig_obs_dim] 
         theta_true = params_sim[i]
         
-        # 🚨 [수정 1 & 3] 현실 패치: In-distribution 체크라도 데이터에는 5% 노이즈가 껴있어야 공정합니다.
+        # 5% 노이즈 주입
         noise_level = 0.05
         noise = noise_rng.normal(0, noise_level * np.abs(x_obs_raw), x_obs_raw.shape)
         x_obs_noisy = x_obs_raw + noise
         
-        # 🚨 [수정 2] 물리적 클리핑: 노이즈로 인해 인구수가 음수가 되거나 총 인구(N)를 넘지 않도록 방어
+        # 물리적 클리핑
         if proposed_model.sys.name.lower() == 'sir':
             N = sum([val[0] for val in proposed_model.sys.initial_conditions])
             x_obs_noisy = np.clip(x_obs_noisy, 0.0, N - 0.1)
@@ -76,7 +75,12 @@ def check_in_distribution_performance(direct_model, proposed_model):
 
 
 def run_integrated_experiment():
+    # 🚨 [수정 1] radius R 대신 Log-Normal의 sigma 스케일 적용
     test_radii = [0.1, 0.5, 1.0, 2.0]
+    
+    # 🚨 [수정 2] 난이도(Regime) 시나리오 도입
+    regimes = ["easy", "hard", "ill-posed"]
+    
     systems = [Sir()] # 논문용 최종 실험
     
     results_dir = os.path.join(project_root, 'results', 'numerical_comparison')
@@ -97,13 +101,14 @@ def run_integrated_experiment():
         models = {
             "NLLS (LM)": NLLSEstimator(sys_obj),
             "Adjoint (L-BFGS)": AdjointLBFGSEstimator(sys_obj),
-            #"MCMC (MH)": MCMCEstimator(sys_obj, n_iters=1000),
+            # "MCMC (MH)": MCMCEstimator(sys_obj, n_iters=1000), # 시간 관계상 주석 유지
             "PINN (Soft Physics)": PINNEstimator(sys_obj),
             "Direct Network (Naive ML)": DirectMLEstimator(sys_obj),
             "Proposed (Iterative)": ProposedEstimator(sys_obj)
         }
         
         # 2. 오프라인 학습 수행 (ML 모델들만 해당됨)
+        # ML 모델은 특정 Regime이 아니라 전체 파라미터 분포를 한 번에 학습합니다.
         print("\n[Phase 1] Offline Training for ML Models...")
         for name, model in models.items():
             if hasattr(model, 'train_offline'):
@@ -115,11 +120,25 @@ def run_integrated_experiment():
             models["Proposed (Iterative)"]
         )
                 
-        # 4. 공정한 몬테카를로 OOD 평가 (동일한 Seed 통제 하에 실행)
-        print("[Phase 2] Monte Carlo Evaluation (OOD Robustness)...")
-        for name, model in models.items():
-            run_monte_carlo_evaluation(model, sys_obj, test_radii, n_trials=200, save_paths=save_paths)
+        # 4. 공정한 몬테카를로 OOD 평가 (난이도별 순회)
+        print("\n[Phase 2] Monte Carlo Evaluation (Robustness Test Across Regimes)...")
+        
+        # 🚨 [수정 3] 각 난이도(Regime)별로 모든 모델들을 평가
+        for regime in regimes:
+            print(f"\n" + "+" * 50)
+            print(f"+++ Evaluating Regime: {regime.upper()} +++")
+            print("+" * 50)
             
+            for name, model in models.items():
+                run_monte_carlo_evaluation(
+                    estimator=model, 
+                    sys_obj=sys_obj, 
+                    test_radii=test_radii, 
+                    regime=regime, 
+                    n_trials=200, 
+                    save_paths=save_paths
+                )
+                
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
