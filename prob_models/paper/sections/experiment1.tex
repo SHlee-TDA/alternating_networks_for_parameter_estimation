@@ -1,0 +1,47 @@
+\subsection{Overcoming Overconfidence and Capturing Physical Non-Identifiability}
+\label{sec:non_identifiability}
+
+A fundamental challenge in inverse problems for physiological systems is the inherent non-identifiability of parameters; multiple parameter configurations can yield identical observational data. An ideal probabilistic model must not only provide accurate point estimates but also reliably quantify this epistemic uncertainty by mapping the true solution manifold.
+
+As shown in Figure \ref{fig:posterior_analysis}a, both the standard Single CVAE and the proposed Iterative CVAEs (IterCVAEs) appear to capture the global population distribution $p(\vtheta)$ reasonably well. This global coverage explains the competitive point-estimate metrics of the baseline model (Table \ref{tab:quantitative_results}), where the Single CVAE achieves nominally lower RMSE for both $S_I$ and $\sigma$. However, relying solely on standard regression metrics like RMSE in non-identifiable systems yields an ``illusion of accuracy.'' 
+
+\begin{figure}[t]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figures/figure3_B_global_2D.pdf}
+        \caption{Global Joint $p(\vtheta)$}
+        \label{fig:global_joint}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figures/figure3_C_local_2D.pdf}
+        \caption{Local Posterior $q(\vtheta \mid \mX_{\mathrm{obs}})$}
+        \label{fig:local_posterior}
+    \end{subfigure}
+    \caption{Visualizing the probabilistic capabilities of the models. (\textbf{a}) At the population level, both models adequately cover the global prior distribution. (\textbf{b}) At the individual sample level, the Single CVAE (blue) exhibits severe pathological mode collapse, predicting an extremely narrow distribution that misses the ground truth (red star). In contrast, IterCVAEs (green) accurately model the theoretical non-identifiability manifold ($S_I \times \sigma = C$, purple dashed line), providing well-calibrated posterior uncertainty.}
+    \label{fig:posterior_analysis}
+\end{figure}
+
+The critical failure of the baseline becomes evident when examining the local posterior $q(\vtheta \mid \mX_{\mathrm{obs}})$ for a specific observation. As illustrated in the inset of Figure \ref{fig:posterior_analysis}b, the Single CVAE suffers from pathological mode collapse. It exhibits extreme overconfidence, predicting a nearly point-like distribution (MPIW of 0.0102) that completely misses the true parameter. This phenomenon indicates that the baseline network merely memorizes a regression-to-the-mean mapping rather than understanding the underlying data generation mechanism. Consequently, this overconfidence results in a catastrophically poor Prediction Interval Coverage Probability (PICP) of 17.20\% and an exploding Negative Log-Likelihood (NLL) of 31990.99, rendering the model's probabilistic outputs practically useless for clinical or scientific inference.
+
+\begin{table}[b]
+    \centering
+    \caption{Quantitative evaluation of parameter estimation and uncertainty calibration.}
+    \label{tab:quantitative_results}
+    \resizebox{\textwidth}{!}{
+    \begin{tabular}{lcccccc}
+        \toprule
+        \multirow{2}{*}{\textbf{Model}} & \multicolumn{2}{c}{\textbf{Point Estimation}} & \multicolumn{4}{c}{\textbf{Probabilistic Calibration}} \\
+        \cmidrule(lr){2-3} \cmidrule(lr){4-7}
+        & \textbf{RMSE ($S_I \downarrow$ / $\sigma \downarrow$)} & \textbf{Pearson r ($S_I \uparrow$ / $\sigma \uparrow$)} & \textbf{PICP ($\uparrow$)} & \textbf{MPIW ($\downarrow$)} & \textbf{CRPS ($\downarrow$)} & \textbf{NLL ($\downarrow$)} \\
+        \midrule
+        Single CVAE & \textbf{0.1452} / \textbf{0.1480} & \textbf{0.8957} / \textbf{0.9371} & 17.20\% & \textbf{0.0102} & \textbf{0.0561} & 31990.99 \\
+        IterCVAEs (Ours) & 0.1642 / 0.1811 & 0.8879 / 0.9311 & \textbf{99.44\%} & 1.1466 & 0.0836 & \textbf{-0.8076} \\
+        \bottomrule
+    \end{tabular}
+    }
+\end{table}
+
+In stark contrast, the proposed IterCVAEs demonstrate a profound capacity to learn the physical laws governing the system. As shown in Figure \ref{fig:posterior_analysis}b, the generated posterior seamlessly stretches along the theoretical non-identifiability curve ($S_I \times \sigma = C$), successfully encompassing the ground truth within its predicted high-density region. By fully acknowledging the inherent uncertainty of the inverse problem, our approach achieves near-perfect calibration with a 99.44\% PICP and a highly stable negative NLL (-0.8076). These results demonstrate that while deterministic-like point estimation may yield marginally better RMSE, IterCVAEs provide a mathematically sound and physically valid probabilistic framework essential for reliable parameter inference.

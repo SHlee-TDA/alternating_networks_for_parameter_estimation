@@ -1,0 +1,89 @@
+\section{Problem Formulation}
+\label{sec:problem}
+
+\subsection{Dynamical System Modeling via ODEs}
+Dynamical system modeling provides a mathematical framework for analyzing time-varying phenomena
+across the physical, engineering, and biological sciences. Such systems are typically governed by
+a system of ordinary differential equations (ODEs),
+\begin{equation}
+\label{eqn:ode}
+    \dot{\vx}(t) = f\big(\vx(t); \vtheta\big), \qquad
+    \vx(t) = \begin{bmatrix} \vx_{\mathrm{obs}}(t)\\ \vx_{\mathrm{hid}}(t)\end{bmatrix} \in \mathbb{R}^{d},
+\end{equation}
+where $\vx(t)$ is the state vector at time $t$, $\vtheta \in \mathbb{R}^{p}$ denotes the
+time-invariant parameters governing the dynamics, and $f$ is a sufficiently smooth vector field
+ensuring existence and uniqueness of the solution trajectory.
+
+In classical system identification, one estimates the true parameters $\vtheta$ by observing the
+state trajectory $\vx(t)$ over an interval $[0,T]$. Once $\vtheta$ is identified, the physical
+properties of the system can be analyzed and simulated. In practice, however, full and continuous
+measurement of $\vx(t)$ is rarely available. We formalize this through two distinct bottlenecks.
+
+\paragraph{Partial Observability (Non-identifiability).}
+The full state is rarely observable in its entirety; it is partitioned as
+\begin{equation}
+    \vx(t) = \begin{bmatrix} \vx_{\mathrm{obs}}(t) \\ \vx_{\mathrm{hid}}(t) \end{bmatrix},
+    \quad \vx_{\mathrm{obs}}(t) \in \mathbb{R}^{d_{\mathrm{obs}}},
+    \quad \vx_{\mathrm{hid}}(t) \in \mathbb{R}^{d_{\mathrm{hid}}},
+    \quad d = d_{\mathrm{obs}} + d_{\mathrm{hid}},
+\end{equation}
+where $\vx_{\mathrm{obs}}$ collects the observable states and $\vx_{\mathrm{hid}}$ the unobserved
+(hidden) ones. For instance, in the Oral Glucose Tolerance Test (OGTT) a physiological model
+couples blood glucose and insulin ($\vx = [x_{\mathrm{glucose}}, x_{\mathrm{insulin}}]^\top$), yet
+clinical protocols often measure glucose only ($\vx_{\mathrm{obs}} = x_{\mathrm{glucose}}$). The
+absence of $\vx_{\mathrm{hid}}$ induces severe \textit{non-identifiability}: infinitely many
+configurations of $\vtheta$ can yield an identical observable trajectory, preventing deterministic
+optimizers from converging to the true parameter.
+
+\paragraph{Sparse Sampling (Temporal Aliasing).}
+Continuous monitoring is likewise impractical; states are collected only at discrete, sparse times
+$\mathcal{T} = \{t_0, t_1, \dots, t_N\}$ with $0 = t_0 < \dots < t_N = T$, yielding
+\begin{equation}
+    \mX_{\mathrm{obs}} = \big[\, \vx_{\mathrm{obs}}(t_0),\, \dots,\, \vx_{\mathrm{obs}}(t_N) \,\big]
+    \in \mathbb{R}^{d_{\mathrm{obs}} \times (N+1)}.
+\end{equation}
+Sparse sampling introduces temporal aliasing, making rapidly oscillating trajectories
+indistinguishable. Moreover, classical pipelines that rely on numerical differentiation
+($\dot{\vx}(t) \approx [\vx(t+\Delta t) - \vx(t)]/\Delta t$) incur devastating approximation errors,
+rendering gradient-based dynamics learning highly unstable.
+
+\subsection{Goal: Joint Posterior Estimation via Coupled Generative Models}
+To estimate $\vtheta$ under partial and sparse observation, we recast parameter estimation as
+probabilistic inference: our goal is to characterize the posterior
+$p(\vtheta \mid \mX_{\mathrm{obs}})$ given only the sparse, partial data $\mX_{\mathrm{obs}}$.
+
+Because $\mX_{\mathrm{hid}}$ is entirely absent, directly optimizing
+$p(\vtheta \mid \mX_{\mathrm{obs}})$ is ill-posed and numerically intractable. We therefore model
+the \textit{joint posterior} over both the parameters and the missing hidden trajectory,
+$p(\vtheta, \mX_{\mathrm{hid}} \mid \mX_{\mathrm{obs}})$, where
+\begin{equation}
+    \mX_{\mathrm{hid}} = \big[\, \vx_{\mathrm{hid}}(t_0),\, \dots,\, \vx_{\mathrm{hid}}(t_N) \,\big]
+    \in \mathbb{R}^{d_{\mathrm{hid}} \times (N+1)}.
+\end{equation}
+We decompose this joint estimation into two coupled conditional generative models, parameterized by
+$\phi$ and $\psi$:
+\begin{align}
+    \text{\textbf{Hidden Trajectory Generator:}} \quad & p_\phi(\mX_{\mathrm{hid}} \mid \mX_{\mathrm{obs}}, \vtheta), \\
+    \text{\textbf{Parameter Generator:}} \quad & p_\psi(\vtheta \mid \mX_{\mathrm{obs}}, \mX_{\mathrm{hid}}).
+\end{align}
+Given an initial estimate $\vtheta^{(0)}$, we approximate the intractable joint posterior by an
+alternating sampling scheme, for $k = 0, 1, 2, \dots$:
+\begin{align}
+    \mX_{\mathrm{hid}}^{(k+1)} & \sim p_\phi(\mX_{\mathrm{hid}} \mid \mX_{\mathrm{obs}}, \vtheta^{(k)}), \label{eq:update_x} \\
+    \vtheta^{(k+1)} & \sim p_\psi(\vtheta \mid \mX_{\mathrm{obs}}, \mX_{\mathrm{hid}}^{(k+1)}). \label{eq:update_theta}
+\end{align}
+This process refines the uncertainty in both the hidden-state and parameter spaces simultaneously,
+guiding the system toward feasible parameters rather than a single point estimate.
+
+\paragraph{Amortized Inference via Synthetic Simulation.}
+To avoid per-instance MCMC or online grid search, we adopt an \textit{amortized} framework. We
+assume access to a synthetic dataset
+$\mathcal{D} = \{ (\mX_{\mathrm{obs}}^{(m)}, \mX_{\mathrm{hid}}^{(m)}, \vtheta^{(m)}) \}_{m=1}^{M}$,
+generated by sampling parameters $\vtheta^{(m)}$ and initial conditions $\vx^{(m)}(0)$ from a
+physically plausible prior $p(\vtheta, \vx_0)$ and integrating the forward ODE,
+\begin{equation}
+    \vx^{(m)}(t) = \vx^{(m)}(0) + \int_{0}^{t} f\big(\vx^{(m)}(\tau); \vtheta^{(m)}\big)\, d\tau.
+\end{equation}
+Training $p_\phi$ and $p_\psi$ on $\mathcal{D}$ amortizes the inference cost into an offline phase;
+once trained, the networks approximate the joint posterior and enable instantaneous,
+distribution-aware recovery for any newly observed sparse sequence $\mX_{\mathrm{obs}}$.

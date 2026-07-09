@@ -1,0 +1,160 @@
+\section{Proposed Method: Alternating Denoising CVAEs (A-DCVAE)}
+\label{sec:method}
+
+To address structural non-identifiability in sparsely observed dynamical systems, we decompose the
+intractable joint posterior $p(\vtheta, \mX_{\mathrm{hid}} \mid \mX_{\mathrm{obs}})$ into two coupled
+conditional sub-tasks, modeled by two Conditional Variational Autoencoders \citep[CVAEs;][]{kingma2014auto, sohn2015learning}: the
+\textit{Hidden-State CVAE} $\gH_\phi$ and the \textit{Parameter CVAE} $\gP_\psi$. Inference
+alternates between them in the spirit of Gibbs sampling. We refer to the resulting framework as
+\textbf{Alternating Denoising CVAEs (A-DCVAE)}.
+
+\subsection{Architecture and Denoising Objective}
+\label{subsec:architecture}
+
+Each CVAE introduces a continuous latent variable, $\vz_H$ and $\vz_P$, with a standard isotropic
+Gaussian prior $\mathcal{N}(\vzero, \mI)$. The generative decoders $g_\phi$ and $g_\psi$ are
+deterministic maps that output the \textit{mean} of the target variable. During training, the
+amortized encoders $q_\phi$ and $q_\psi$ map ground-truth triplets
+$(\mX_{\mathrm{obs}}, \mX_{\mathrm{hid}}, \vtheta)$ to their latent spaces, and each decoder is
+trained to reconstruct its clean target.
+
+\paragraph{Dual noise injection.}
+To robustify the inverse mappings against regression-to-the-mean, we cast both CVAEs as
+\textit{conditional denoising autoencoders}. We inject independent Gaussian noise into the
+\textit{targets} ($\boldsymbol{\epsilon}_t \sim \mathcal{N}(\vzero, \sigma_t^2 \mI)$) and the
+\textit{conditions} ($\boldsymbol{\epsilon}_c \sim \mathcal{N}(\vzero, \sigma_c^2 \mI)$), and define
+the perturbed variables
+\begin{equation}
+    \tilde{\mX}_{\mathrm{hid}} = \mX_{\mathrm{hid}} + \boldsymbol{\epsilon}_t, \quad
+    \tilde{\vtheta} = \vtheta + \boldsymbol{\epsilon}_t, \quad
+    \check{\mX}_{\mathrm{hid}} = \mX_{\mathrm{hid}} + \boldsymbol{\epsilon}_c, \quad
+    \check{\vtheta} = \vtheta + \boldsymbol{\epsilon}_c .
+\end{equation}
+The encoder receives the \emph{target}-perturbed variable while the decoder is conditioned on the
+\emph{condition}-perturbed variable, and both are penalized to reconstruct the \emph{clean} target.
+This yields the $\beta$-annealed denoising ELBO objectives (minimized), which decouple across the
+two networks:
+\begin{align}
+\label{eqn:loss_H}
+\gL_H(\phi) &= \E_{\boldsymbol{\epsilon}_t, \boldsymbol{\epsilon}_c}
+    \E_{q_\phi(\vz_H \mid \mX_{\mathrm{obs}}, \tilde{\mX}_{\mathrm{hid}}, \check{\vtheta})}
+    \Big[ \big\| \mX_{\mathrm{hid}} - g_\phi(\mX_{\mathrm{obs}}, \check{\vtheta}, \vz_H) \big\|_F^2 \Big]
+    + \beta\, D_{\mathrm{KL}}\!\big( q_\phi \,\|\, p(\vz_H) \big), \\
+\label{eqn:loss_P}
+\gL_P(\psi) &= \E_{\boldsymbol{\epsilon}_t, \boldsymbol{\epsilon}_c}
+    \E_{q_\psi(\vz_P \mid \mX_{\mathrm{obs}}, \check{\mX}_{\mathrm{hid}}, \tilde{\vtheta})}
+    \Big[ \big\| \vtheta - g_\psi(\mX_{\mathrm{obs}}, \check{\mX}_{\mathrm{hid}}, \vz_P) \big\|_2^2 \Big]
+    + \beta\, D_{\mathrm{KL}}\!\big( q_\psi \,\|\, p(\vz_P) \big),
+\end{align}
+where $\beta$ is annealed from $0$ to $\beta_{\max}$ over a warmup phase to prevent posterior
+collapse. As we show in \Secref{subsec:theory}, the two noise channels play distinct and
+complementary roles: \emph{condition noise} controls stability, while \emph{target noise} controls
+directional correctness.
+
+\subsection{Test-Time Inference via Stochastic Pseudo-Gibbs Sampling}
+\label{subsec:inference}
+
+At test time, sampling from the joint posterior is intractable. \citet{heckerman2000dependency}
+showed that \textit{pseudo-Gibbs sampling} over independently learned---and possibly
+inconsistent---conditional distributions still defines an ergodic chain converging to a stationary
+joint distribution, but their analysis is confined to discrete domains. Naively applying pseudo-Gibbs
+to \emph{deterministic} neural decoders in a continuous, non-identifiable domain collapses the chain
+to a single, physically meaningless mean (\Secref{subsec:theory}, Issue~3).
+
+\paragraph{Stochastic transition operators via infinite Gaussian mixtures.}
+We instead construct stochastic transition kernels by injecting scaled Gaussian noise into the
+deterministic decoder outputs and marginalizing over the latent prior. At iteration $k$,
+\begin{align}
+p(\mX_{\mathrm{hid}}' \mid \mX_{\mathrm{obs}}, \vtheta)
+    &= \int \mathcal{N}\!\big(\mX_{\mathrm{hid}}' ;\, g_\phi(\mX_{\mathrm{obs}}, \vtheta, \vz_H),\, \sigma_H^2 \mI\big)\, \mathcal{N}(\vz_H ;\, \vzero, \mI)\, d\vz_H, \\
+p(\vtheta' \mid \mX_{\mathrm{obs}}, \mX_{\mathrm{hid}}')
+    &= \int \mathcal{N}\!\big(\vtheta' ;\, g_\psi(\mX_{\mathrm{obs}}, \mX_{\mathrm{hid}}', \vz_P),\, \sigma_P^2 \mI\big)\, \mathcal{N}(\vz_P ;\, \vzero, \mI)\, d\vz_P.
+\end{align}
+Drawing a fresh $\vz$ and adding Gaussian noise at every step realizes an \textit{infinite mixture of
+Gaussians}, endowing the continuous Markov chain with the capacity to represent the highly complex,
+multi-modal probability valleys of the unidentifiable ODE space. The complete transition operator
+from $(\mX_{\mathrm{hid}}, \vtheta)$ to $(\mX_{\mathrm{hid}}', \vtheta')$ is
+\begin{equation}
+\label{eqn:kernel}
+    \mathcal{T}\big((\mX_{\mathrm{hid}}, \vtheta) \to (\mX_{\mathrm{hid}}', \vtheta')\big)
+    = p(\mX_{\mathrm{hid}}' \mid \mX_{\mathrm{obs}}, \vtheta)\; p(\vtheta' \mid \mX_{\mathrm{obs}}, \mX_{\mathrm{hid}}').
+\end{equation}
+The procedure is summarized in \Algref{alg:pseudo_gibbs}.
+
+\begin{algorithm}[htbp]
+\caption{Stochastic Pseudo-Gibbs Inference}
+\label{alg:pseudo_gibbs}
+\begin{algorithmic}[1]
+\REQUIRE Sparse observation $\mX_{\mathrm{obs}}$; trained decoders $g_\phi, g_\psi$; noise scales $\sigma_H, \sigma_P$; steps $K$; burn-in $B$
+\STATE Initialize $\vtheta^{(0)}$ (replicated across parallel chains)
+\FOR{$k = 0$ \TO $K-1$}
+\STATE Sample $\vz_H \sim \mathcal{N}(\vzero, \mI)$ and $\boldsymbol{\epsilon}_H \sim \mathcal{N}(\vzero, \sigma_H^2 \mI)$
+\STATE $\mX_{\mathrm{hid}}^{(k+1)} \leftarrow g_\phi(\mX_{\mathrm{obs}}, \vtheta^{(k)}, \vz_H) + \boldsymbol{\epsilon}_H$
+\STATE Sample $\vz_P \sim \mathcal{N}(\vzero, \mI)$ and $\boldsymbol{\epsilon}_P \sim \mathcal{N}(\vzero, \sigma_P^2 \mI)$
+\STATE $\vtheta^{(k+1)} \leftarrow g_\psi(\mX_{\mathrm{obs}}, \mX_{\mathrm{hid}}^{(k+1)}, \vz_P) + \boldsymbol{\epsilon}_P$
+\STATE (Optional) apply physical boundary projections $\mathcal{B}_y, \mathcal{B}_p$
+\ENDFOR
+\RETURN samples $\{(\mX_{\mathrm{hid}}^{(k)}, \vtheta^{(k)})\}_{k=B}^{K}$ after discarding burn-in $B$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Theoretical Properties: Three Issues, Three Guarantees}
+\label{subsec:theory}
+
+Running pseudo-Gibbs with deep networks in a continuous, non-identifiable space faces three
+failure modes, each resolved by one component of A-DCVAE (proofs in \Secref{app:proofs}).
+
+\paragraph{Issue 1 (instability / error amplification).}
+Even when trained on exact data, the two CVAEs are only \textit{$\epsilon$-incompatible}: limited
+network capacity and variational error mean no single joint distribution induces both conditionals
+exactly. Because the manifold of physically valid trajectories $\mathcal{M}$ is a thin,
+measure-zero set, an unguarded transition can amplify a single small step error exponentially through
+the feedback loop, causing divergence.
+
+\begin{theorem}[Condition noise induces local Jacobian regularization]
+\label{thm:contraction}
+Injecting condition noise $\boldsymbol{\epsilon}_c$ and reconstructing the clean target is, as
+$\sigma_c \to 0$, asymptotically equivalent to a local Tikhonov penalty on the Frobenius norm of the
+decoder's condition-Jacobian:
+\begin{equation}
+    \E_{\boldsymbol{\epsilon}_c}\big[\, \| g(\, \cdot + \boldsymbol{\epsilon}_c) - Y \|^2 \,\big]
+    \;\approx\; \| g(\,\cdot\,) - Y \|^2 \;+\; \sigma_c^2\, \big\| \nabla g(\,\cdot\,) \big\|_F^2 .
+\end{equation}
+Suppressing $\|\nabla g\|_F$ smooths the conditional map and imposes strong dissipativity (a
+Lyapunov drift) on the transition operator, so the chain remains bounded and stable rather than
+diverging.
+\end{theorem}
+
+\paragraph{Issue 2 (wrong direction).}
+Stability alone does not guarantee correctness: a stable chain may still settle at a spurious mean.
+The chain must be attracted toward the true data manifold.
+
+\begin{theorem}[Target noise induces denoising score matching]
+\label{thm:score}
+Following the denoising--score-matching equivalence \citep{vincent2011connection}, the global optimum of the target-denoising objective satisfies Tweedie's identity,
+\begin{equation}
+    g^*(\tilde{Y}) \;\approx\; \tilde{Y} + \sigma_t^2\, \nabla_Y \log p\big(Y \mid \mX_{\mathrm{obs}}, \vtheta\big),
+\end{equation}
+so the decoder's residual equals the (smoothed) score of the conditional data manifold. The update
+therefore performs a Langevin drift toward high-density, physically consistent regions, forming an
+attractor field that pulls off-manifold samples back onto $\mathcal{M}$.
+\end{theorem}
+
+\paragraph{Issue 3 (mode collapse).}
+Passing only decoder means between the networks makes regression-to-the-mean inevitable in
+non-identifiable regimes. The stochastic, infinite-mixture kernel~\eqref{eqn:kernel} removes this
+failure.
+
+\begin{theorem}[Ergodicity and score-aligned convergence]
+\label{thm:ergodicity}
+Under the dissipativity of Theorem~\ref{thm:contraction} and compact boundary projections, the infinite
+Gaussian mixture kernel $\mathcal{T}$ is geometrically ergodic in the $2$-Wasserstein metric and
+admits a unique invariant distribution $\pi^*$. Because $\mathcal{T}$ has the capacity to represent
+multi-modal (e.g.\ crescent-shaped) supports, and the Langevin drift of Theorem~\ref{thm:score} provides
+a persistent attraction toward the data manifold, the chain bypasses mode collapse and $\pi^*$ aligns
+with the true joint posterior $p_{\mathrm{data}}(\vtheta, \mX_{\mathrm{hid}} \mid \mX_{\mathrm{obs}})$.
+\end{theorem}
+
+Together, Theorems~\ref{thm:contraction}--\ref{thm:ergodicity} replace the rigid \emph{global} spectral
+constraint of prior deterministic work with a softer, data-driven \emph{local} regularization that
+preserves expressiveness while guaranteeing a stable, correctly directed, collapse-free chain.
