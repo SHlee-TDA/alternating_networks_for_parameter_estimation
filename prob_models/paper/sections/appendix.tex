@@ -1,107 +1,48 @@
-\section{Proofs of Theoretical Properties}
+\section{Proof Sketches}
 \label{app:proofs}
 
-We provide the proofs for the three properties stated in \Secref{subsec:theory}. Throughout, we
-argue symmetrically over the two decoders of A-DCVAE---the Hidden-State CVAE decoder $g_\phi$ and
-the Parameter CVAE decoder $g_\psi$---and drop the sub/superscripts when a statement holds for both.
-We write the generic decoder as $g(\vu, \xi, \vz)$, where $\vu = \mX_{\mathrm{obs}}$ is the fixed
-context, $\xi$ is the conditioning variable subject to noise, and $\vz$ is the CVAE latent. We assume
-$g$ is $C^2$ in $\xi$ and that expectations over $\vz \sim \mathcal{N}(\vzero, \mI)$ are finite.
+The full statements, assumptions, and proofs of Theorems~\ref{thm:existence} and \ref{thm:steering}
+are developed in the companion manuscript \citep{adcvae-theory}. Here we sketch the three ideas.
+Throughout, $\xobs$ is fixed, $\Omega = \Omega_H \times \Omega_\Theta$ is the compact convex state
+space produced by the boundary projections $\mathcal{B}_y,\mathcal{B}_p$, and $\mathcal{T}$ is the
+alternating kernel of \eqref{eqn:kernel} with $\theta$-marginal one-sweep kernel $K$.
 
-\subsection{Proof of Theorem~\ref{thm:contraction} (Condition noise $\Rightarrow$ local Jacobian regularization)}
-\label{app:proof_thm1}
+\paragraph{Existence (Theorem~\ref{thm:existence}), via Doeblin minorization.}
+Each conditional draw $\mathcal{B}\big(g(\cdot,\vz) + \sigma\boldsymbol{\epsilon}\big)$ has, on the
+interior of the compact $\Omega$, a Lebesgue density bounded below by a positive constant: the
+additive Gaussian $\sigma\boldsymbol{\epsilon}$ (with $\sigma>0$) has full support, and $g$ is
+continuous on the compact latent/condition domain. Hence the composed kernel satisfies a Doeblin
+minorization $\mathcal{T}(x,\cdot) \ge \varepsilon\,\nu(\cdot)$ for all $x$, which yields a unique
+invariant law $\pi^\ast$ and geometric convergence in total variation, uniformly over the initial
+state \citep{meyn2009markov}. Both hypotheses (compactness, positive noise) hold by construction, so
+no contraction is assumed. A deterministic decoder ($\sigma=0$) gives a Dirac kernel with no such
+density lower bound, formalizing why the stochastic sampler is needed.
 
-Let the condition be perturbed by $\check{\xi} = \xi + \boldsymbol{\epsilon}_c$ with
-$\boldsymbol{\epsilon}_c \sim \mathcal{N}(\vzero, \sigma_c^2 \mI)$, while the decoder is trained to
-reconstruct the clean target $Y$. A second-order Taylor expansion of the decoder about the clean
-condition $\xi$ gives
-\begin{equation}
-    g(\vu, \xi + \boldsymbol{\epsilon}_c, \vz)
-    = g(\vu, \xi, \vz) + \nabla_{\xi} g\, \boldsymbol{\epsilon}_c
-      + \tfrac{1}{2}\, \boldsymbol{\epsilon}_c^\top \nabla_{\xi}^2 g\, \boldsymbol{\epsilon}_c
-      + \mathcal{O}(\|\boldsymbol{\epsilon}_c\|^3).
-\end{equation}
-Substituting into the reconstruction term of the ELBO and taking the expectation over
-$\boldsymbol{\epsilon}_c$, the linear term vanishes because $\E[\boldsymbol{\epsilon}_c] = \vzero$,
-and the leading quadratic contribution is
-\begin{equation}
-    \E_{\boldsymbol{\epsilon}_c}\!\left[ \boldsymbol{\epsilon}_c^\top (\nabla_{\xi} g)^\top (\nabla_{\xi} g)\, \boldsymbol{\epsilon}_c \right]
-    = \sigma_c^2\, \Tr\!\big( (\nabla_{\xi} g)^\top (\nabla_{\xi} g) \big)
-    = \sigma_c^2\, \big\| \nabla_{\xi} g \big\|_F^2 .
-\end{equation}
-Taking the expectation over the latent prior and using that, for a sufficiently expressive network,
-the mean residual $\E[Y - g]$ is small so the Hessian cross-term is higher order, the objective
-reduces asymptotically to
-\begin{equation}
-\label{eqn:tikhonov}
-    \gL^{\mathrm{noisy}} \;\approx\; \gL^{\mathrm{clean}}
-    \;+\; \sigma_c^2\, \E_{\vz}\!\left[ \big\| \nabla_{\xi} g(\vu, \xi, \vz) \big\|_F^2 \right]
-    \;+\; \mathcal{O}(\sigma_c^4).
-\end{equation}
-Equation~\eqref{eqn:tikhonov} is exactly a Tikhonov penalty on the expected condition-Jacobian. We
-emphasize that this \emph{suppresses} $\|\nabla_{\xi} g\|_F$ rather than certifying a global
-Lipschitz bound. Its dynamical consequence is dissipativity: for the composed transition, the
-expected one-step change of $\| \nabla g \|_F$ is negative outside a bounded region, so the map acts
-as a Lyapunov drift that keeps the chain within a bounded set instead of amplifying perturbations.
-Combined with the compact boundary projections $\mathcal{B}_y, \mathcal{B}_p$, this prevents the
-exponential error amplification of Issue~1. $\hfill\square$
+\paragraph{Rate, via a noise-cancelling coupling.}
+Injecting noise into a decoder's \emph{condition} and reconstructing the clean target is
+asymptotically a Tikhonov penalty on the condition-Jacobian $\sigma_c^2\,\E\|\nabla_{\mathrm{cond}}
+g\|_F^2$ \citep{bishop1995training}, which promotes a condition-Lipschitz constant $L$. Coupling two
+copies of a sweep by sharing the latent \emph{and} the injection noise, the shared noise cancels
+inside $\mathcal{B}(g(\cdot)+\sigma\boldsymbol{\epsilon}) - \mathcal{B}(g(\cdot')+\sigma
+\boldsymbol{\epsilon})$ (projections are $1$-Lipschitz), leaving $\le L\|\cdot-\cdot'\|$. Composing
+the two half-sweeps gives a $2$-Wasserstein contraction of $K$ with constant $\kappa = L_H L_P$; when
+$\kappa<1$ this yields a geometric mixing rate. The contraction is governed by the condition-Lipschitz
+constants, whereas the injection noise sets the \emph{width} of $\pi^\ast$---the two are separate
+knobs, which is why tightening mixing does not induce collapse.
 
-\subsection{Proof of Theorem~\ref{thm:score} (Target noise $\Rightarrow$ denoising score matching)}
-\label{app:proof_thm2}
-
-Let the target be perturbed by $\tilde{Y} = Y + \boldsymbol{\epsilon}_t$ with
-$\boldsymbol{\epsilon}_t \sim \mathcal{N}(\vzero, \sigma_t^2 \mI)$. By the calculus of variations, the
-reconstructor minimizing the expected squared error is the posterior mean,
-\begin{equation}
-    g^*(\tilde{Y}) = \E\big[ Y \mid \tilde{Y}, \vu, \vtheta \big]
-    = \int Y\, p\big(Y \mid \tilde{Y}, \vu, \vtheta\big)\, dY .
-\end{equation}
-By Bayes' rule, $p(Y \mid \tilde{Y}) \propto \mathcal{N}(\tilde{Y} \mid Y, \sigma_t^2 \mI)\,
-p_{\mathrm{data}}(Y \mid \vu, \vtheta)$. Using the Gaussian identity
-$\nabla_{\tilde{Y}} \mathcal{N}(\tilde{Y} \mid Y, \sigma_t^2 \mI)
-= -\tfrac{\tilde{Y}-Y}{\sigma_t^2}\, \mathcal{N}(\tilde{Y} \mid Y, \sigma_t^2 \mI)$ to isolate
-$Y\,\mathcal{N}$, substituting into the integral, and applying Leibniz's rule yields Tweedie's
-formula \citep{efron2011tweedie},
-\begin{equation}
-    g^*(\tilde{Y}) - \tilde{Y}
-    \;=\; \sigma_t^2\, \nabla_{\tilde{Y}} \log p_{\mathrm{data}}\big(\tilde{Y} \mid \vu, \vtheta\big).
-\end{equation}
-Hence the decoder's residual equals the score of the smoothed conditional density. Injecting noise
-at inference and applying $g^*$ therefore realizes one step of a Langevin drift toward high-density
-regions of $\mathcal{M}$, i.e.\ an attractor field that resolves Issue~2. $\hfill\square$
-
-\subsection{Proof of Theorem~\ref{thm:ergodicity} (Ergodicity and score-aligned convergence)}
-\label{app:proof_thm3}
-
-Consider the alternating kernel $\mathcal{T}$ of \eqref{eqn:kernel}, obtained by composing the two
-infinite Gaussian mixture kernels.
-
-\textbf{(i) Unique invariant measure.} Each sub-kernel integrates an isotropic Gaussian against the
-latent prior, so its transition density is strictly positive, $k(x, y) > 0$, on the compact domain
-$\Omega$ enforced by $\mathcal{B}_y, \mathcal{B}_p$. Strict positivity implies the chain is
-$\varphi$-irreducible, aperiodic, and Harris recurrent. By Theorem~\ref{thm:contraction}, the
-Tikhonov-induced dissipativity supplies a Lyapunov drift condition of Meyn--Tweedie type \citep{meyn2009markov}. Together
-these give geometric ergodicity: there exist $\rho \in (0,1)$ and $C < \infty$ such that
-$W_2\big(\mathcal{T}^k(\mu_0, \cdot),\, \pi^*\big) \le C\, \rho^k$ in the $2$-Wasserstein metric, for
-a unique invariant distribution $\pi^*$.
-
-\textbf{(ii) Score-aligned target and no collapse.} Substituting the optimal reconstructor of
-Theorem~\ref{thm:score} into the update shows that each step is an Euler--Maruyama discretization of
-the unadjusted Langevin dynamics \citep{welling2011bayesian}
-\begin{equation}
-    \mX_{\mathrm{hid}}^{(k+1)} \leftarrow \mX_{\mathrm{hid}}^{(k)}
-    + \alpha\, \nabla \log p_{\mathrm{data}}\big(\mX_{\mathrm{hid}}^{(k)}\big) + \sqrt{2\alpha}\, \boldsymbol{\epsilon},
-    \qquad \alpha \propto \sigma_t^2 ,
-\end{equation}
-whose stationary law (via the Fokker--Planck equation) is the score-defining density. Because a fresh
-latent $\vz$ is drawn at every step, $\mathcal{T}$ is an infinite mixture with the capacity to place
-mass along an entire multi-modal (e.g.\ crescent-shaped) support rather than at a single mean.
-Consequently $\pi^*$ aligns with the true non-identifiable manifold and the chain bypasses the
-mode collapse of deterministic solvers. $\hfill\square$
-
-\paragraph{Remark (scope of the guarantees).}
-Theorem~\ref{thm:contraction} yields a Jacobian penalty and dissipativity, not a certified global
-contraction; the invariant law $\pi^*$ is the stationary distribution of the learned stochastic
-operator and approximates $p_{\mathrm{data}}$ up to the score-matching and $\epsilon$-incompatibility
-errors of the trained decoders. These are the intended, and empirically supported, senses of the
-three guarantees.
+\paragraph{Steering (Theorem~\ref{thm:steering}), via fixed-point perturbation.}
+Let $K^\dagger$ be the sweep built from the true posterior conditionals; since these are conditionals
+of one joint, $K^\dagger$ is exact Gibbs and its $\theta$-marginal invariant is the true posterior
+$p(\vtheta\mid\xobs)$. For a $\kappa$-contraction $K$ with invariant $\nu^\ast$ and any $K^\dagger$
+with invariant $\nu^\dagger$, the Banach perturbation inequality gives
+\[
+    W_2(\nu^\ast,\nu^\dagger)\ \le\ \frac{1}{1-\kappa}\,\sup_\theta W_2\big(K(\theta,\cdot),K^\dagger(\theta,\cdot)\big),
+\]
+and interpolating one conditional at a time bounds the operator discrepancy by
+$L_P\varepsilon_H + \varepsilon_P$, giving \eqref{eqn:steering}. The gap is the conditional
+approximation error amplified by the mixing constant; it vanishes when the conditionals are exact.
+The self-consistency certificate $\varepsilon_{\mathrm{inc}} = W_2(\Pi^\rightarrow,\pi^\ast)$, the
+$W_2$ gap between the forward-paired joint $\Pi^\rightarrow(d\vtheta,d\mX_{\mathrm{hid}}) =
+\nu^\ast(d\vtheta)\,Q_H(d\mX_{\mathrm{hid}}\mid\vtheta)$ and the stationary joint, is zero iff the
+learned conditionals are compatible; it is dominated by $\varepsilon_H,\varepsilon_P$ and, unlike
+them, is computable from the trained model alone.

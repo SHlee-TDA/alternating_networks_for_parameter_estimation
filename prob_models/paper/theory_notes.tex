@@ -1,0 +1,976 @@
+\documentclass[11pt]{article}
+
+% =====================================================================
+%  THEORY NOTES (backstage) for A-DCVAE  -- Revision 2
+%  Self-contained mathematical note. NOT the paper. Kept fully rigorous;
+%  the paper will abbreviate/summarize as needed. Reused as the formal
+%  foundation for subsequent theorems.
+%  Compile standalone:  pdflatex theory_notes.tex
+%
+%  Rev.2 incorporates a rigor review: (i) measurability of the kernel is
+%  now proved; (ii) the coupling is formalized via an explicit joint
+%  kernel + Ionescu--Tulcea; (iii) the deterministic-collapse remark is
+%  corrected (Doeblin is sufficient, not necessary); (iv) the standard
+%  facts used (TV-completeness, Leb(dK)=0, kernel TV-nonexpansiveness,
+%  projection properties) are stated as cited/proved lemmas; plus assorted
+%  fixes (epsilon<=1 via A=Omega, typos).
+% =====================================================================
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{bm}
+\usepackage{hyperref}
+
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\newtheorem{assumption}{Assumption}
+\newtheorem{notation}{Notation}[section]
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{fact}[theorem]{Fact}
+
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}[section]
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Prob}{\mathbb{P}}
+\newcommand{\cF}{\mathcal{F}}
+\newcommand{\cB}{\mathcal{B}}
+\newcommand{\cP}{\mathcal{P}}
+\newcommand{\Om}{\Omega}
+\newcommand{\Leb}{\mathrm{Leb}}
+\newcommand{\TV}{\mathrm{TV}}
+\newcommand{\Normal}{\mathcal{N}}
+\newcommand{\xobs}{\bm{x}_{\mathrm{obs}}}
+\newcommand{\xhid}{\bm{x}_{\mathrm{hid}}}
+\newcommand{\bth}{\bm{\theta}}
+\newcommand{\push}{{}_{\#}}
+\DeclareMathOperator{\intr}{int}
+\newcommand{\norm}[1]{\lVert #1 \rVert}
+\newcommand{\abs}[1]{\lvert #1 \rvert}
+
+\title{\textbf{Theory Notes for A-DCVAE}\\[2pt]
+\large Foundations, and Theorem~A: Uniform Ergodicity of the Continuous Pseudo-Gibbs Chain}
+\author{Backstage reference note (internal), Rev.\ 2}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Internal, fully rigorous note. We fix all notation, give self-contained definitions of every
+measure-theoretic and Markov-chain object used, record the standard analytic facts we invoke (each
+proved or precisely cited), state and prove the one substantive external tool (Doeblin's
+minorization theorem, via an explicit coupling kernel and Ionescu--Tulcea), construct the A-DCVAE
+inference kernel and verify it \emph{is} a Markov kernel, then prove \emph{Theorem~A}: under a
+compact state space (from the boundary projection) and strictly positive Gaussian transition noise,
+the continuous pseudo-Gibbs chain is uniformly ergodic. All numbered results are citable by later
+notes (rate bounds; steering/consistency of the invariant law).
+\end{abstract}
+
+\tableofcontents
+
+% ====================================================================
+\section{Notation and standing conventions}
+\label{sec:notation}
+
+We work throughout on Borel subsets of Euclidean space. The abstract results below need no
+topological assumption; the only place topology enters is the trivial observation, in the proof of
+Theorem~\ref{thm:A}, that the diagonal of $\Om\subseteq\R^d$ is closed and hence lies in
+$\cF\otimes\cF$.
+
+\begin{notation}[Spaces and measures]\leavevmode
+\begin{itemize}
+  \item $\R^d$ carries the Euclidean norm $\norm{\cdot}$ and Borel $\sigma$-algebra $\cB(\R^d)$.
+        For $S\subseteq\R^d$, $\intr S$ is its interior, $\partial S$ its boundary.
+  \item $\Om$ is a fixed \emph{state space}, a Borel subset of some $\R^d$; $\cF=\cB(\Om)$.
+  \item $\Leb$ is Lebesgue measure. $\cP(\Om)$ is the set of probability measures on $(\Om,\cF)$;
+        $\delta_x$ is the Dirac mass at $x$.
+  \item For measurable $f:\Om\to\Om'$ and $\mu\in\cP(\Om)$, the pushforward $f\push\mu\in\cP(\Om')$
+        is $(f\push\mu)(A)=\mu(f^{-1}(A))$.
+  \item $\Normal(\,\cdot\,;\bm m,\Sigma)$ is the Gaussian density on $\R^k$ with mean $\bm m$,
+        covariance $\Sigma\succ0$; $\Normal(\bm m,\Sigma)$ the corresponding law; $I_k$ the identity.
+\end{itemize}
+\end{notation}
+
+\begin{notation}[Model objects]\leavevmode
+The sparse observation $\xobs$ is \emph{fixed} throughout (frozen at inference) and suppressed.
+\begin{itemize}
+  \item $\xhid\in\R^{d_H}$ hidden-state trajectory; $\bth\in\R^{d_\Theta}$ parameter; joint state
+        $\bm z=(\xhid,\bth)$.
+  \item Decoders $g_\phi:\R^{d_\Theta}\times\R^{m_H}\to\R^{d_H}$ and
+        $g_\psi:\R^{d_H}\times\R^{m_P}\to\R^{d_\Theta}$ (with $\xobs$ fixed).
+  \item Latent priors $\bm z_H\sim\Normal(\bm0,I_{m_H})$, $\bm z_P\sim\Normal(\bm0,I_{m_P})$;
+        injection scales $\sigma_H,\sigma_P>0$.
+  \item Projections $\mathcal B_H:\R^{d_H}\to\Om_H$, $\mathcal B_\Theta:\R^{d_\Theta}\to\Om_\Theta$
+        (Def.~\ref{def:proj}).
+\end{itemize}
+\end{notation}
+
+% ====================================================================
+\section{Basic definitions}
+\label{sec:defs}
+
+\begin{definition}[Markov transition kernel]
+\label{def:kernel}
+A \emph{Markov kernel} on $(\Om,\cF)$ is $T:\Om\times\cF\to[0,1]$ such that (i) $T(x,\cdot)\in\cP(\Om)$
+for each $x$, and (ii) $x\mapsto T(x,A)$ is measurable for each $A\in\cF$. It acts by
+$(\mu T)(A)=\int T(x,A)\,\mu(dx)$ and $(Tf)(x)=\int f(y)\,T(x,dy)$, with the $n$-step kernel given by
+Chapman--Kolmogorov $T^{n+1}(x,A)=\int T^n(y,A)\,T(x,dy)$, and, by an immediate induction, the
+semigroup identity $T^{n+m}(x,A)=\int T^n(y,A)\,T^m(x,dy)$ for all $n,m\ge0$ (with $T^0=\mathrm{id}$).
+\end{definition}
+
+\begin{definition}[Invariant measure]
+\label{def:invariant}
+$\pi\in\cP(\Om)$ is \emph{invariant} for $T$ if $\pi T=\pi$.
+\end{definition}
+
+\begin{definition}[Total variation distance]
+\label{def:tv}
+For $\mu,\nu\in\cP(\Om)$, $\ \norm{\mu-\nu}_\TV:=\sup_{A\in\cF}\abs{\mu(A)-\nu(A)}\in[0,1]$.
+Write $\lambda=\mu-\nu$ with Jordan decomposition $\lambda=\lambda^+-\lambda^-$ and Hahn positive
+set $P$ (so $\lambda^+=\lambda(\cdot\cap P)$, $\lambda^-=-\lambda(\cdot\cap P^c)$). Then
+$\norm{\mu-\nu}_\TV=\lambda^+(\Om)$: the supremum is attained at $A=P$ giving
+$\lambda(P)=\lambda^+(\Om)$, and no $A$ exceeds it since $\lambda(A)\le\lambda^+(A)\le\lambda^+(\Om)$.
+As $\lambda(\Om)=0$ forces $\lambda^+(\Om)=\lambda^-(\Om)$, also
+$\norm{\mu-\nu}_\TV=\tfrac12\big(\lambda^++\lambda^-\big)(\Om)=\tfrac12\abs{\mu-\nu}(\Om)$. (Some
+authors use twice this value.)
+\end{definition}
+
+\begin{definition}[Coupling]
+\label{def:coupling}
+A \emph{coupling} of $\mu,\nu$ is a pair $(X,Y)$ of $\Om$-valued random variables on one probability
+space with $\mathrm{law}(X)=\mu$, $\mathrm{law}(Y)=\nu$.
+\end{definition}
+
+\begin{definition}[Minorization / Doeblin condition]
+\label{def:minor}
+$T$ satisfies the \emph{minorization condition} if there exist $\varepsilon\in(0,1]$ and
+$\nu\in\cP(\Om)$ with $T(x,A)\ge\varepsilon\,\nu(A)$ for all $x\in\Om,\,A\in\cF$.
+\end{definition}
+
+\begin{definition}[Uniform ergodicity]
+\label{def:unifergodic}
+$T$ is \emph{uniformly ergodic} if there exist $\pi\in\cP(\Om)$, $C<\infty$, $\rho\in(0,1)$ with
+$\sup_{x\in\Om}\norm{T^n(x,\cdot)-\pi}_\TV\le C\rho^n$ for all $n$. The supremum over $x$ (rate
+independent of the start) distinguishes \emph{uniform} from merely geometric ergodicity.
+\end{definition}
+
+\begin{definition}[Euclidean projection onto a convex body]
+\label{def:proj}
+For nonempty compact convex $K\subset\R^d$, $\mathcal B_K(y):=\arg\min_{u\in K}\norm{y-u}$.
+By Fact~\ref{fact:proj} this is single-valued, $1$-Lipschitz, fixes $K$ pointwise, and maps
+$\R^d\setminus K$ into $\partial K$.
+\end{definition}
+
+% ====================================================================
+\section{Standard facts used}
+\label{sec:facts}
+
+We isolate the classical facts the proofs rely on, each proved or precisely cited, so the note is
+self-contained.
+
+\begin{fact}[Projection onto a convex body]
+\label{fact:proj}
+For nonempty closed convex $K\subset\R^d$: $\mathcal B_K$ is well defined and single-valued;
+$\norm{\mathcal B_K(y)-\mathcal B_K(y')}\le\norm{y-y'}$; $\mathcal B_K(y)=y\iff y\in K$; and
+$y\notin K\Rightarrow\mathcal B_K(y)\in\partial K$. Consequently, for any $A\subseteq\intr K$ one has
+$\mathcal B_K^{-1}(A)=A$.
+\end{fact}
+\begin{proof}
+Existence/uniqueness and nonexpansiveness are standard (strict convexity of $\norm{\cdot}^2$ on the
+convex $K$; see e.g.\ \cite[Ch.~III]{HiriartLemarechal}). If $y\in K$ the minimizer is $y$. If
+$y\notin K$, let $u^\ast=\mathcal B_K(y)$ and suppose $u^\ast\in\intr K$; then for the segment
+$u_t:=u^\ast+t(y-u^\ast)$ we have (i) $u_t\in K$ for all small $t>0$ (openness of $\intr K$ around
+$u^\ast$; convexity is not even needed), and (ii)
+$\norm{y-u_t}=(1-t)\norm{y-u^\ast}<\norm{y-u^\ast}$, since $y\neq u^\ast$ (because $y\notin K\ni u^\ast$).
+This contradicts minimality, so $u^\ast\in\partial K$. For the last claim:
+if $y\in A\subseteq\intr K\subseteq K$ then $\mathcal B_K(y)=y\in A$; if $y\notin K$ then
+$\mathcal B_K(y)\in\partial K$, disjoint from $\intr K\supseteq A$, so $y\notin\mathcal B_K^{-1}(A)$;
+if $y\in K\setminus A$ then $\mathcal B_K(y)=y\notin A$. Hence $\mathcal B_K^{-1}(A)=A$.
+\end{proof}
+
+\begin{fact}[Null boundary of a convex body]
+\label{fact:nullbdry}
+If $K\subset\R^d$ is compact convex with $\intr K\neq\emptyset$, then $\Leb(\partial K)=0$; in
+particular $K$ is Lebesgue--Jordan measurable and $\Leb(\intr K)=\Leb(K)\in(0,\infty)$.
+\end{fact}
+\begin{proof}
+After a translation assume $\bm 0\in\intr K$, so $B(\bm0,r)\subseteq K$ for some $r>0$. For
+$\epsilon\in(0,1)$ and $x\in(1-\epsilon)K$, $\ x+\epsilon B(\bm0,r)\subseteq(1-\epsilon)K+\epsilon K\subseteq K$
+by convexity, so $x\in\intr K$; hence $(1-\epsilon)K\subseteq\intr K$ and thus
+$\partial K\cap(1-\epsilon)K=\emptyset$, i.e.\ $\partial K\subseteq K\setminus(1-\epsilon)K$.
+Therefore $\Leb(\partial K)\le\Leb(K)-\Leb((1-\epsilon)K)=\big(1-(1-\epsilon)^d\big)\Leb(K)\to0$ as
+$\epsilon\to0$, so $\Leb(\partial K)=0$. Finiteness and positivity of $\Leb(K)$ hold since $K$ is
+compact with nonempty interior.
+\end{proof}
+
+\begin{fact}[Interior of a product]
+\label{fact:prodint}
+For $A\subseteq\R^m$, $B\subseteq\R^n$, $\ \intr(A\times B)=\intr A\times\intr B$.
+Hence $\Leb(\partial\Om)=0$ and $\intr\Om=\intr\Om_H\times\intr\Om_\Theta$ for
+$\Om=\Om_H\times\Om_\Theta$, using Fact~\ref{fact:nullbdry}.
+\end{fact}
+\begin{proof}
+$(\supseteq)$: $\intr A\times\intr B$ is open (product of opens) and contained in $A\times B$, hence
+in $\intr(A\times B)$. $(\subseteq)$: if $(a,b)\in\intr(A\times B)$, a basic open box
+$U\times V\subseteq A\times B$ contains $(a,b)$ with $U,V$ open; then $a\in U\subseteq A$ and
+$b\in V\subseteq B$, so $a\in\intr A$, $b\in\intr B$. The measure statement then follows from
+Fact~\ref{fact:nullbdry} and
+$\partial(A\times B)\subseteq(\partial A\times \bar B)\cup(\bar A\times\partial B)$.
+\end{proof}
+
+\begin{lemma}[Coupling inequality]
+\label{lem:coupling}
+For any coupling $(X,Y)$ of $\mu,\nu$, $\ \norm{\mu-\nu}_\TV\le\Prob(X\neq Y)$.
+\end{lemma}
+\begin{proof}
+For $A\in\cF$, $\mu(A)-\nu(A)=\Prob(X\in A)-\Prob(Y\in A)\le\Prob(X\in A,Y\notin A)\le\Prob(X\neq Y)$;
+symmetrise and take $\sup_A$.
+\end{proof}
+
+\begin{lemma}[The measure action is a TV-contraction]
+\label{lem:nonexp}
+For any Markov kernel $T$ and $\mu,\nu\in\cP(\Om)$, $\ \norm{\mu T-\nu T}_\TV\le\norm{\mu-\nu}_\TV$.
+In particular $\mu\mapsto\mu T$ is $\norm{\cdot}_\TV$-continuous.
+\end{lemma}
+\begin{proof}
+Let $\lambda=\mu-\nu$ with Jordan decomposition $\lambda=\lambda^+-\lambda^-$,
+$\lambda^\pm(\Om)=\norm{\mu-\nu}_\TV$. For any $A$, since $0\le T(\cdot,A)\le1$,
+$(\mu T-\nu T)(A)=\int T(x,A)\,\lambda(dx)\le\int T(x,A)\,\lambda^+(dx)\le\lambda^+(\Om)=\norm{\mu-\nu}_\TV$,
+and symmetrically $\ge-\norm{\mu-\nu}_\TV$. Take $\sup_A$.
+\end{proof}
+
+\begin{lemma}[Averaging bound]
+\label{lem:avg}
+Let $P$ be a Markov kernel and $\eta\in\cP(\Om)$ a fixed measure with
+$\norm{P(y,\cdot)-\eta}_\TV\le\beta$ for all $y\in\Om$. Then, for every $\rho\in\cP(\Om)$,
+$\ \norm{\rho P-\eta}_\TV\le\beta$, where $\rho P:=\int P(y,\cdot)\,\rho(dy)$.
+\end{lemma}
+\begin{proof}
+For each $A\in\cF$, using that $y\mapsto P(y,A)$ is measurable (kernel property) and
+$\eta(A)=\int\eta(A)\,\rho(dy)$,
+\[
+  \abs{(\rho P)(A)-\eta(A)}=\biggl|\int\big(P(y,A)-\eta(A)\big)\rho(dy)\biggr|
+  \le\int\abs{P(y,A)-\eta(A)}\,\rho(dy)\le\int\beta\,\rho(dy)=\beta .
+\]
+Take $\sup_A$. (Only pointwise bounds and kernel measurability are used; no measurability of
+$y\mapsto\norm{\cdot}_\TV$ is needed.)
+\end{proof}
+
+\begin{fact}[Section integration against a kernel is measurable]
+\label{fact:compose}
+Let $Q$ be a Markov kernel from $(\mathsf S,\mathcal S)$ to $(\mathsf S',\mathcal S')$ and
+$h:\mathsf S\times\mathsf S'\to\R$ bounded and $\mathcal S\otimes\mathcal S'$-measurable. Then
+$s\mapsto\int h(s,t)\,Q(dt\mid s)$ is $\mathcal S$-measurable. In particular, for
+$A\in\mathcal S\otimes\mathcal S'$, $\ s\mapsto Q\big(\{t:(s,t)\in A\}\mid s\big)$ is measurable; and
+$(x,y)\mapsto\big(R(x,\cdot)\otimes R(y,\cdot)\big)(C)$ is jointly measurable for any Markov kernel
+$R$ and $C\in\cF\otimes\cF$.
+\end{fact}
+\begin{proof}
+Functional monotone class. Let $\mathcal H=\{h\text{ bdd meas.}:s\mapsto\int h(s,t)Q(dt\mid s)\text{ is
+measurable}\}$. It is a vector space containing the constant $\mathbf 1=\mathbf 1_{\mathsf S\times\mathsf S'}$
+(as $Q(\cdot\mid s)$ is a probability measure) and every rectangle indicator $\mathbf 1_{A\times B}$
+(since $s\mapsto\mathbf 1_A(s)\,Q(B\mid s)$ is measurable by the kernel property), and is closed under
+bounded monotone limits (monotone convergence). Rectangles form a $\pi$-system generating
+$\mathcal S\otimes\mathcal S'$, so by the functional monotone class theorem $\mathcal H$ contains all
+bounded $\mathcal S\otimes\mathcal S'$-measurable functions. Taking $h=\mathbf 1_A$ gives the first
+special case. For the product-kernel case we apply the result twice, each time regarding a kernel as
+one that ignores an extra coordinate: first, viewing $R(y,\cdot)$ as the kernel
+$\tilde Q\big((u,y),\cdot\big):=R(y,\cdot)$ from $\mathsf S\times\mathsf S$, the map
+$g(u,y):=R(y,C_u)=\int\mathbf 1_C(u,t)\,\tilde Q((u,y),dt)$ is jointly measurable (where
+$C_u=\{t:(u,t)\in C\}$); second, viewing $R(x,\cdot)$ as $\hat Q\big((x,y),\cdot\big):=R(x,\cdot)$,
+the map $(x,y)\mapsto\int g(u,y)\,\hat Q((x,y),du)=\big(R(x,\cdot)\otimes R(y,\cdot)\big)(C)$ is
+measurable. (Cf.\ \cite[Ch.~1]{Kallenberg}.)
+\end{proof}
+
+\begin{corollary}[Powers are kernels]
+\label{cor:Tn}
+For every $n\ge0$, $T^n$ is a Markov kernel; in particular $y\mapsto T^n(y,A)$ is measurable for
+each $A\in\cF$.
+\end{corollary}
+\begin{proof}
+Induction on $n$ ($T^0=\mathrm{id}$, $T^1=T$). If $T^{n-1}$ is a kernel then $h(x,y):=T^{n-1}(y,A)$
+is bounded measurable, so $x\mapsto T^n(x,A)=\int T^{n-1}(y,A)\,T(x,dy)$ is measurable by
+Fact~\ref{fact:compose}, and $T^n(x,\cdot)$ is a probability measure.
+\end{proof}
+
+\begin{fact}[TV-completeness of $\cP(\Om)$]
+\label{fact:complete}
+$(\cP(\Om),\norm{\cdot}_\TV)$ is a complete metric space: a $\norm{\cdot}_\TV$-Cauchy sequence
+$(\mu_n)$ converges in $\TV$ to some $\mu\in\cP(\Om)$.
+\end{fact}
+\begin{proof}
+Let $(\mu_n)$ be $\TV$-Cauchy and dominate by $m:=\sum_{n\ge1}2^{-n}\mu_n$, which is a probability
+measure (countable additivity of the series of measures by Tonelli, and $m(\Om)=\sum2^{-n}=1$). Then
+$\mu_n\ll m$, so by Radon--Nikodym $f_n:=d\mu_n/dm\ge0$ with $\int f_n\,dm=1$. Since
+$\mu_n-\mu_k=(f_n-f_k)\,m$, the signed measure has total variation
+$\abs{\mu_n-\mu_k}(\Om)=\int\abs{f_n-f_k}\,dm$, so by Def.~\ref{def:tv}
+$\norm{\mu_n-\mu_k}_\TV=\tfrac12\int\abs{f_n-f_k}\,dm=\tfrac12\norm{f_n-f_k}_{L^1(m)}$, and $(f_n)$ is
+$L^1(m)$-Cauchy. By completeness of $L^1(m)$ (Riesz--Fischer, see e.g.\ \cite{Folland}), $f_n\to f$
+in $L^1(m)$ for some $f\ge0$ a.e.\ with $\int f\,dm=\lim_n\int f_n\,dm=1$. Put $\mu:=f\,m\in\cP(\Om)$;
+then $\norm{\mu_n-\mu}_\TV=\tfrac12\norm{f_n-f}_{L^1(m)}\to0$.
+\end{proof}
+
+\begin{fact}[Ionescu--Tulcea]
+\label{fact:it}
+Given \emph{any} measurable space $(\mathsf S,\mathcal S)$, an initial law, and a Markov kernel
+$\bar T$ on $\mathsf S$, there exists a probability measure on $(\mathsf S^{\N},\mathcal S^{\otimes\N})$
+under which the coordinate process is a Markov chain with transition $\bar T$
+\cite[Ch.~6]{Kallenberg}. Unlike Kolmogorov's extension theorem, no topological (standard Borel)
+assumption is needed.
+\end{fact}
+
+% ====================================================================
+\section{Analytic tool: Doeblin's theorem}
+\label{sec:tool}
+
+\begin{theorem}[Doeblin; see {\cite[Ch.~16]{MeynTweedie}}]
+\label{thm:doeblin}
+Let $T$ be a Markov kernel on a measurable space $(\Om,\cF)$ whose diagonal
+$\{(x,x):x\in\Om\}\in\cF\otimes\cF$, and suppose $T$ satisfies the minorization condition
+(Def.~\ref{def:minor}) with $(\varepsilon,\nu)$. Then $T$ has a unique invariant
+$\pi\in\cP(\Om)$, and $\ \sup_{x\in\Om}\norm{T^n(x,\cdot)-\pi}_\TV\le(1-\varepsilon)^n$ for all
+$n\ge0$; consequently $\norm{\mu_0T^n-\pi}_\TV\le(1-\varepsilon)^n$ for every $\mu_0\in\cP(\Om)$.
+\end{theorem}
+
+\begin{proof}
+The case $n=0$ holds trivially under the convention $(1-\varepsilon)^0=1$, since $\norm{\cdot}_\TV\le1$
+always (Def.~\ref{def:tv}); we treat $n\ge1$ throughout.
+
+\emph{Degenerate case $\varepsilon=1$.} Then $T(x,A)\ge\nu(A)$ for all $A$, and since $T(x,\cdot),\nu$
+are both probability measures this forces $T(x,\cdot)=\nu$ for every $x$; hence
+$T^n(x,\cdot)=\nu=:\pi$ for all $n\ge1$, which is invariant, unique, and satisfies the bound
+$(1-1)^n=0$. Assume henceforth $\varepsilon\in(0,1)$.
+
+\emph{Splitting.} $R(x,A):=\dfrac{T(x,A)-\varepsilon\nu(A)}{1-\varepsilon}$ is, for each $x$, a
+probability measure (nonnegative by minorization, total mass $1$) and is measurable in $x$; thus $R$
+is a Markov kernel and
+\begin{equation}\label{eq:split}
+  T(x,\cdot)=\varepsilon\,\nu(\cdot)+(1-\varepsilon)\,R(x,\cdot).
+\end{equation}
+
+\emph{Coupling kernel.} Define $\bar T$ on the product space $(\Om\times\Om,\cF\otimes\cF)$ by
+\[
+  \bar T\big((x,y),\cdot\big)=
+  \begin{cases}
+    \varepsilon\,(\Delta\push\nu)+(1-\varepsilon)\,\big(R(x,\cdot)\otimes R(y,\cdot)\big), & x\neq y,\\[2pt]
+    \Delta\push T(x,\cdot), & x=y,
+  \end{cases}
+\]
+where $\Delta(z)=(z,z)$. The diagonal $D:=\{x=y\}$ lies in $\cF\otimes\cF$ by the standing hypothesis
+on $(\Om,\cF)$, so the two-branch definition is legitimate. The off-diagonal branch
+$(x,y)\mapsto R(x,\cdot)\otimes R(y,\cdot)$ is jointly measurable by Fact~\ref{fact:compose}; the
+diagonal branch $x\mapsto\Delta\push T(x,\cdot)$ is measurable because, for $C\in\cF\otimes\cF$,
+$(\Delta\push T(x,\cdot))(C)=T(x,\Delta^{-1}(C))$ with $\Delta^{-1}(C)\in\cF$ ($\Delta$ measurable),
+and $x\mapsto T(x,\Delta^{-1}(C))$ is measurable (kernel property). Hence $\bar T$ is a Markov kernel
+on $(\Om\times\Om,\cF\otimes\cF)$. By Ionescu--Tulcea (Fact~\ref{fact:it}, valid on any measurable
+space) there is, for each start $(x,y)$, a Markov chain $(X_n,Y_n)_{n\ge0}$ with transition $\bar T$
+and $(X_0,Y_0)=(x,y)$; let $(\mathcal F_n)$ be its natural filtration. (It is precisely here that the
+measurable-diagonal hypothesis is used: it makes the event $\{X_{n+1}=Y_{n+1}\}\in\cF\otimes\cF$, so
+the conditional probability below is well defined.)
+
+\emph{Marginals and coalescence.} By \eqref{eq:split}, projecting $\bar T$ to the first coordinate
+yields, in both branches, exactly $T(x,\cdot)$; likewise the second coordinate yields $T(y,\cdot)$.
+By induction $\mathrm{law}(X_n)=T^n(x,\cdot)$ and $\mathrm{law}(Y_n)=T^n(y,\cdot)$. Whenever
+$X_n=Y_n$ the $x=y$ branch keeps the coordinates equal forever. Let $\tau=\inf\{n:X_n=Y_n\}$. On the
+event $\{X_n\neq Y_n\}$ the $\varepsilon$-branch sends both coordinates to a common $Z\sim\nu$, so
+$\Prob(X_{n+1}=Y_{n+1}\mid\mathcal F_n)\ge\varepsilon$; hence
+\[
+  \Prob(\tau>n+1)=\E\big[\mathbf 1_{\{\tau>n\}}\,\Prob(X_{n+1}\neq Y_{n+1}\mid\mathcal F_n)\big]
+  \le(1-\varepsilon)\,\Prob(\tau>n),
+\]
+and by induction $\Prob(\tau>n)\le(1-\varepsilon)^n$. Since $X_n=Y_n$ on $\{\tau\le n\}$, the
+coupling inequality (Lemma~\ref{lem:coupling}) gives
+\begin{equation}\label{eq:contract}
+  \norm{T^n(x,\cdot)-T^n(y,\cdot)}_\TV\le\Prob(X_n\neq Y_n)\le\Prob(\tau>n)\le(1-\varepsilon)^n .
+\end{equation}
+
+Note \eqref{eq:contract} says exactly $\norm{T^n(y,\cdot)-\eta}_\TV\le(1-\varepsilon)^n$ for the fixed
+$\eta=T^n(x,\cdot)$ and all $y$; this is the hypothesis of the averaging bound
+(Lemma~\ref{lem:avg}) with $P=T^n$.
+
+\emph{Existence.} Fix $x$. Apply Lemma~\ref{lem:avg} with $\eta=T^n(x,\cdot)$, $P=T^n$,
+$\rho=T^m(x,\cdot)$: since $\rho P=T^m(x,\cdot)T^n=T^{n+m}(x,\cdot)$ by the semigroup identity
+(Def.~\ref{def:kernel}), this yields $\norm{T^{n+m}(x,\cdot)-T^n(x,\cdot)}_\TV\le(1-\varepsilon)^n$
+for all $m$. So $(T^n(x,\cdot))_n$ is $\TV$-Cauchy; by Fact~\ref{fact:complete} it converges to some
+$\pi\in\cP(\Om)$. Applying the $\TV$-continuous map $\mu\mapsto\mu T$ (Lemma~\ref{lem:nonexp}) to
+$T^{n}(x,\cdot)\to\pi$ gives $T^{n+1}(x,\cdot)\to\pi T$; but the left side also $\to\pi$, so
+$\pi T=\pi$.
+
+\emph{Uniqueness and the bounds.} Let $\pi'$ be invariant. Apply Lemma~\ref{lem:avg} with
+$\eta=T^n(x,\cdot)$, $P=T^n$, $\rho=\pi'$: since $\rho P=\pi'T^n=\pi'$ by invariance, we get
+$\norm{\pi'-T^n(x,\cdot)}_\TV\le(1-\varepsilon)^n$; letting $n\to\infty$ forces $\pi'=\pi$, and the
+inequality (for every $x$) is precisely the $\sup_x$ bound $\sup_x\norm{T^n(x,\cdot)-\pi}_\TV\le(1-\varepsilon)^n$.
+Finally, that $\sup_x$ bound reads $\norm{T^n(y,\cdot)-\pi}_\TV\le(1-\varepsilon)^n$ for all $y$; a last
+application of Lemma~\ref{lem:avg} with $\eta=\pi$, $P=T^n$, $\rho=\mu_0$ gives
+$\norm{\mu_0T^n-\pi}_\TV\le(1-\varepsilon)^n$.
+\end{proof}
+
+% ====================================================================
+\section{The A-DCVAE inference kernel}
+\label{sec:kernel}
+
+\begin{definition}[Conditional stochastic maps]
+\label{def:condmaps}
+Define the post-projection conditional laws
+\[
+  Q_H(\cdot\mid\bth):=(\mathcal B_H)\push\ \mathrm{law}\big(g_\phi(\bth,\bm z_H)+\sigma_H\bm\xi_H\big),
+  \quad \bm\xi_H\sim\Normal(\bm0,I_{d_H}),
+\]
+\[
+  Q_P(\cdot\mid\xhid'):=(\mathcal B_\Theta)\push\ \mathrm{law}\big(g_\psi(\xhid',\bm z_P)+\sigma_P\bm\xi_P\big),
+  \quad \bm\xi_P\sim\Normal(\bm0,I_{d_\Theta}),
+\]
+with $\bm z_H,\bm\xi_H,\bm z_P,\bm\xi_P$ mutually independent. The pre-projection law of the hidden
+step has Lebesgue density on $\R^{d_H}$
+\begin{equation}\label{eq:qH-density}
+  q_H(\bm u\mid\bth)=\int_{\R^{m_H}}\Normal\big(\bm u;\,g_\phi(\bth,\bm z_H),\,\sigma_H^2 I_{d_H}\big)\,
+  \Normal(\bm z_H;\bm0,I_{m_H})\,d\bm z_H,
+\end{equation}
+an infinite Gaussian mixture; $q_P(\cdot\mid\xhid')$ is analogous.
+\end{definition}
+
+\begin{definition}[The inference kernel $T$]
+\label{def:T}
+On $\Om:=\Om_H\times\Om_\Theta$ with state $\bm z=(\xhid,\bth)$, one sweep draws
+$\xhid'\sim Q_H(\cdot\mid\bth)$ then $\bth'\sim Q_P(\cdot\mid\xhid')$, giving
+\[
+  T\big((\xhid,\bth),\,A\big)=\int_{\Om_H} Q_P\big(A_{\bm u'}\mid\bm u'\big)\,Q_H(d\bm u'\mid\bth),
+  \qquad A_{\bm u'}:=\{\bm t':(\bm u',\bm t')\in A\}.
+\]
+The transition depends on the current state only through $\bth$.
+\end{definition}
+
+\begin{lemma}[$T$ is a Markov kernel]
+\label{lem:measurable}
+Under Assumptions~\ref{ass:compact}--\ref{ass:cont}, $Q_H,Q_P$ are Markov kernels (between the
+respective spaces) and $T$ of Def.~\ref{def:T} is a Markov kernel on $(\Om,\cF)$.
+\end{lemma}
+\begin{proof}
+\emph{Joint measurability of the density.} In \eqref{eq:qH-density} the integrand is continuous in
+$(\bm u,\bth,\bm z_H)$ (Gaussian density and $g_\phi$ continuous) and dominated by the integrable
+$(2\pi\sigma_H^2)^{-d_H/2}\Normal(\bm z_H;\bm0,I_{m_H})$; by dominated convergence
+$(\bm u,\bth)\mapsto q_H(\bm u\mid\bth)$ is continuous, hence jointly Borel measurable. The same
+formula gives the pre-projection density on all of $\R^{d_H}$.
+
+\emph{$Q_H$ is a kernel.} For each $\bth$, $Q_H(\cdot\mid\bth)$ is a probability measure (pushforward
+of one under the continuous $\mathcal B_H$). For measurability in $\bth$, write via the pushforward
+representation
+\[
+  Q_H(A\mid\bth)=\int_{\R^{d_H}}\mathbf 1_A\big(\mathcal B_H(\bm y)\big)\,q_H(\bm y\mid\bth)\,d\bm y ,
+\]
+whose integrand is jointly measurable in $(\bm y,\bth)$ ($\mathcal B_H$ continuous, $A$ Borel, $q_H$
+jointly measurable); by Tonelli $\bth\mapsto Q_H(A\mid\bth)$ is measurable. Thus $Q_H$ is a Markov
+kernel from $\Om_\Theta$ to $\Om_H$; symmetrically $Q_P$ is a kernel from $\Om_H$ to $\Om_\Theta$.
+
+\emph{$T$ is a kernel.} For fixed $\bth$, $A\mapsto T((\xhid,\bth),A)$ is a probability measure
+(composition of the kernels $Q_H,Q_P$). For measurability of $\bm z\mapsto T(\bm z,A)$, note
+$\bm u'\mapsto Q_P(A_{\bm u'}\mid\bm u')=Q_P(\{\bm t':(\bm u',\bm t')\in A\}\mid\bm u')$ is measurable
+by Fact~\ref{fact:compose}; integrating this against the kernel $Q_H(\cdot\mid\bth)$ (again
+Fact~\ref{fact:compose}) preserves measurability in $\bth$, hence in $\bm z$.
+\end{proof}
+
+% ====================================================================
+\section{Standing assumptions}
+\label{sec:assump}
+
+\begin{assumption}[Compact convex state space via projection]
+\label{ass:compact}
+$\Om_H\subset\R^{d_H}$, $\Om_\Theta\subset\R^{d_\Theta}$ are nonempty, compact, convex with
+nonempty interior, and $\mathcal B_H,\mathcal B_\Theta$ are the Euclidean projections onto them.
+Thus $\Om=\Om_H\times\Om_\Theta$ is compact, standard Borel, with $\Leb(\Om)\in(0,\infty)$ and
+$\Leb(\partial\Om)=0$ (Facts~\ref{fact:nullbdry}--\ref{fact:prodint}).
+\end{assumption}
+
+\begin{assumption}[Continuity and nondegenerate noise]
+\label{ass:cont}
+For the fixed $\xobs$, $g_\phi$ and $g_\psi$ are continuous on their domains and
+$\sigma_H,\sigma_P>0$.
+\end{assumption}
+
+\noindent Both hold \emph{by construction}: projections give Assumption~\ref{ass:compact};
+continuous-activation networks with positive sampling noise give Assumption~\ref{ass:cont}. This is
+the sense in which ergodicity is \emph{proved} from what the algorithm controls.
+
+% ====================================================================
+\section{Minorization lemma}
+\label{sec:lemma}
+
+\begin{lemma}[Uniform minorization of $T$]
+\label{lem:minor}
+Under Assumptions~\ref{ass:compact}--\ref{ass:cont}, $T$ satisfies the minorization condition with
+$\nu(\cdot)=\Leb(\cdot\cap\intr\Om)/\Leb(\Om)$ and some $\varepsilon\in(0,1]$.
+\end{lemma}
+\begin{proof}
+\emph{Step 1 (uniform density lower bound).} Fix $R>0$ with $p_R:=\Prob(\norm{\bm z_H}\le R)>0$. As
+$\Om_\Theta\times\{\norm{\bm z_H}\le R\}$ is compact and $g_\phi$ continuous,
+$M_H:=\sup\{\norm{g_\phi(\bth,\bm z_H)}:\bth\in\Om_\Theta,\norm{\bm z_H}\le R\}<\infty$; let
+$M_H':=\sup_{\bm u\in\Om_H}\norm{\bm u}<\infty$. For $\bm u\in\Om_H,\bth\in\Om_\Theta,\norm{\bm z_H}\le R$,
+\[
+  \Normal(\bm u;g_\phi(\bth,\bm z_H),\sigma_H^2 I_{d_H})
+  \ge(2\pi\sigma_H^2)^{-d_H/2}\exp\!\Big(-\tfrac{(M_H+M_H')^2}{2\sigma_H^2}\Big)=:c_H>0 .
+\]
+Restricting \eqref{eq:qH-density} to $\{\norm{\bm z_H}\le R\}$,
+\begin{equation}\label{eq:deltaH}
+  q_H(\bm u\mid\bth)\ge c_H\,p_R=:\delta_H>0\quad\text{uniformly over }\bm u\in\Om_H,\ \bth\in\Om_\Theta,
+\end{equation}
+and analogously $q_P(\bm t\mid\bm u')\ge\delta_P>0$ uniformly.
+
+\emph{Step 2 (projection preserves the interior bound).} By Fact~\ref{fact:proj}, for
+$A\subseteq\intr\Om_H$ we have $\mathcal B_H^{-1}(A)=A$, so
+$Q_H(A\mid\bth)=\int_{\mathcal B_H^{-1}(A)}q_H(\bm y\mid\bth)\,d\bm y=\int_A q_H(\bm y\mid\bth)\,d\bm y\ge\delta_H\,\Leb(A)$
+by \eqref{eq:deltaH}; likewise $Q_P(B\mid\bm u')\ge\delta_P\,\Leb(B)$ for $B\subseteq\intr\Om_\Theta$.
+Equivalently, $Q_H(\cdot\mid\bth)-\delta_H\,\Leb(\cdot\cap\intr\Om_H)$ and
+$Q_P(\cdot\mid\bm u')-\delta_P\,\Leb(\cdot\cap\intr\Om_\Theta)$ are nonnegative measures, so the
+bounds pass to integrals of nonnegative functions.
+
+\emph{Step 3 (composition).} For any $A\in\cF$ and state $(\xhid,\bth)$, using
+$\intr\Om=\intr\Om_H\times\intr\Om_\Theta$ (Fact~\ref{fact:prodint}), the nonnegative-measure
+domination from Step 2, and Tonelli,
+\[
+  T\big((\xhid,\bth),A\big)=\int_{\Om_H}Q_P(A_{\bm u'}\mid\bm u')\,Q_H(d\bm u'\mid\bth)
+  \ge\int_{\intr\Om_H}\!\!\delta_P\,\Leb\big(A_{\bm u'}\cap\intr\Om_\Theta\big)\,\delta_H\,d\bm u'
+  =\delta_H\delta_P\,\Leb(A\cap\intr\Om).
+\]
+Set $\varepsilon:=\delta_H\delta_P\,\Leb(\Om)$ and $\nu(\cdot)=\Leb(\cdot\cap\intr\Om)/\Leb(\Om)$, so
+$T((\xhid,\bth),A)\ge\varepsilon\,\nu(A)$ for all states and $A$. Taking $A=\Om$ gives
+$1=T((\xhid,\bth),\Om)\ge\varepsilon\,\nu(\Om)=\varepsilon$ (as $\nu(\Om)=1$ by
+$\Leb(\partial\Om)=0$), so $\varepsilon\in(0,1]$.
+\end{proof}
+
+% ====================================================================
+\section{Theorem A: uniform ergodicity of the continuous Pseudo-Gibbs chain}
+\label{sec:thmA}
+
+\begin{theorem}[Uniform ergodicity / global convergence]
+\label{thm:A}
+Under Assumptions~\ref{ass:compact}--\ref{ass:cont}, the inference kernel $T$ (Def.~\ref{def:T}) has
+a unique invariant $\pi^\ast\in\cP(\Om)$, and for every initial $\mu_0\in\cP(\Om)$,
+\[
+  \norm{\mu_0\,T^n-\pi^\ast}_\TV\le(1-\varepsilon)^n,\qquad n\in\N,
+\]
+with $\varepsilon=\delta_H\delta_P\Leb(\Om)\in(0,1]$ from Lemma~\ref{lem:minor}. The rate is uniform
+over all initializations; equivalently $\mu\mapsto\mu T$ on $\cP(\Om)$ has a globally attracting
+fixed point $\pi^\ast$.
+\end{theorem}
+\begin{proof}
+By Lemma~\ref{lem:measurable} $T$ is a Markov kernel on $(\Om,\cF)$. Since $\Om\subseteq\R^d$ is a
+separable metric space, its diagonal $\{(x,x):x\in\Om\}$ is closed, hence Borel, and therefore lies
+in $\cF\otimes\cF$; thus the standing hypothesis of Theorem~\ref{thm:doeblin} holds. By
+Lemma~\ref{lem:minor}, $T$ satisfies that theorem's minorization condition with $(\varepsilon,\nu)$.
+The conclusion is Theorem~\ref{thm:doeblin}'s.
+\end{proof}
+
+% ====================================================================
+\section{Remarks}
+\label{sec:remarks}
+
+\begin{remark}[Continuous extension of Heckerman's pseudo-Gibbs]
+\label{rem:heckerman}
+For \emph{finite} state spaces a strictly positive transition matrix gives a unique stationary law
+and geometric convergence at once by Perron--Frobenius; this is the regime of dependency networks.
+Theorem~\ref{thm:A} is the continuous counterpart, where positivity alone is insufficient and the
+minorization of Lemma~\ref{lem:minor} supplies the missing ingredient.
+\end{remark}
+
+\begin{remark}[Role of the noise; what deterministic collapse does and does not mean]
+\label{rem:noise}
+Doeblin's condition is \emph{sufficient}, not necessary, and the minorizing measure $\nu$ need not
+be absolutely continuous: e.g.\ a constant decoder gives $T(x,\cdot)=\delta_c$, which satisfies
+minorization with $\nu=\delta_c,\varepsilon=1$ and is (trivially) uniformly ergodic. Thus removing
+the noise ($\sigma_H=\sigma_P=0$) does not by itself falsify Theorem~\ref{thm:A}; what it does is
+break Assumption~\ref{ass:cont} and the proof route of Lemma~\ref{lem:minor} (each conditional law
+becomes a Dirac mass, with no Lebesgue-density lower bound). Moreover, for a deterministic
+contraction one has $\delta_{x_n}\to\delta_{x^\ast}$ \emph{weakly} but in general \emph{not} in
+total variation, so TV-uniform ergodicity generally fails in the deterministic case. The injected
+Gaussian noise is precisely what makes our Lemma~\ref{lem:minor} (and hence the TV guarantee)
+available.
+\end{remark}
+
+\begin{remark}[What is, and is not, controlled]
+\label{rem:scope}
+Theorem~\ref{thm:A} concerns convergence of the \emph{distribution} $\mu_0T^n$, not of any sample
+path. The constant $\varepsilon=\delta_H\delta_P\Leb(\Om)$ is typically minuscule: from
+\eqref{eq:deltaH}, $\delta_H=(2\pi\sigma_H^2)^{-d_H/2}p_R\,\exp(-(M_H+M_H')^2/2\sigma_H^2)$, whose
+prefactor $(2\pi\sigma_H^2)^{-d_H/2}$ and exponent are both strongly dimension- and
+$\sigma$-dependent (the curse of dimensionality enters here). Hence $(1-\varepsilon)^n$ certifies
+convergence but is a loose rate; dimension-robust rates require the complementary Wasserstein
+contraction under condition-noise Jacobian control (companion rate note). We therefore avoid writing
+$\delta_H\gtrsim\exp(\cdots)$ without flagging the hidden prefactor.
+\end{remark}
+
+\begin{remark}[Forward pointers]
+\label{rem:forward}
+Theorem~\ref{thm:A} settles existence and reachability of $\pi^\ast$. Separate notes treat (i) the
+\emph{rate} via $2$-Wasserstein contraction from Jacobian control, and (ii) \emph{steering /
+consistency}: how far $\pi^\ast$ lies from the target joint posterior when $Q_H,Q_P$ are mutually
+incompatible, and how target-denoising aligns $\pi^\ast$ with the data manifold. The objects fixed
+here---the composition-measurability Fact~\ref{fact:compose} and the powers Corollary~\ref{cor:Tn},
+the averaging bound (Lemma~\ref{lem:avg}), the density bounds \eqref{eq:deltaH}, the measurability
+Lemma~\ref{lem:measurable}, and Lemmas~\ref{lem:coupling}--\ref{lem:nonexp}---are reused there;
+Fact~\ref{fact:compose} in particular recurs in any kernel manipulation.
+\end{remark}
+
+% ====================================================================
+\section{Wasserstein preliminaries}
+\label{sec:wass}
+
+The existence result (Theorem~\ref{thm:A}) lives in total variation. For the \emph{rate} and, later,
+the stability/steering bound, TV is the wrong metric: an \emph{injective} deterministic map preserves
+total variation (it maps two distinct Diracs to two distinct Diracs, still at TV-distance $1$), so it
+cannot TV-contract, and more generally TV is blind to how close distinct points are. (Non-injective
+maps such as a constant \emph{can} TV-contract, cf.\ Remark~\ref{rem:noise}; the point is only that TV
+does not see the geometry that governs mixing.) We therefore switch to the quadratic Wasserstein
+distance, which Lipschitz maps \emph{do} contract.
+
+\begin{definition}[Quadratic Wasserstein distance]
+\label{def:w2}
+For $\mu,\nu\in\cP(\Om)$ on compact $\Om\subseteq\R^d$,
+\[
+  W_2(\mu,\nu):=\Big(\inf_{\gamma\in\Gamma(\mu,\nu)}\int_{\Om\times\Om}\norm{x-y}^2\,\gamma(dx,dy)\Big)^{1/2},
+\]
+where $\Gamma(\mu,\nu)$ is the set of couplings (Def.~\ref{def:coupling}).
+\end{definition}
+
+\begin{fact}[Basic properties on a compact domain]
+\label{fact:w2basic}
+On compact $\Om$, $W_2$ is a finite metric; $(\cP(\Om),W_2)$ is a complete (indeed compact) metric
+space and $W_2$ metrizes weak convergence \cite[Ch.~6]{Villani}. For \emph{any} coupling $(X,Y)$ of
+$\mu,\nu$, $\ W_2(\mu,\nu)\le(\E\norm{X-Y}^2)^{1/2}$ (the infimum is over couplings).
+\end{fact}
+
+\begin{fact}[Lipschitz maps contract $W_2$; marginalization is non-expansive]
+\label{fact:w2lip}
+If $f$ is $L$-Lipschitz then $W_2(f\push\mu,f\push\nu)\le L\,W_2(\mu,\nu)$ (push an optimal coupling
+through $f\times f$). In particular the coordinate projection
+$\mathrm{proj}_\Theta:\Om_H\times\Om_\Theta\to\Om_\Theta$ is $1$-Lipschitz, so
+$W_2\big(\mathrm{proj}_\Theta\push\mu,\ \mathrm{proj}_\Theta\push\nu\big)\le W_2(\mu,\nu)$; this yields
+the $\theta$-marginal form of any joint $W_2$ bound for free.
+\end{fact}
+
+\begin{fact}[Banach fixed point in $(\cP(\Om),W_2)$]
+\label{fact:banachw2}
+If a Markov kernel's measure action $\mu\mapsto\mu K$ satisfies $W_2(\mu K,\nu K)\le\kappa\,W_2(\mu,\nu)$
+with $\kappa\in[0,1)$, then $K$ has a unique invariant $\nu^\ast$ and
+$W_2(\mu_0K^n,\nu^\ast)\le\kappa^n W_2(\mu_0,\nu^\ast)\to0$ (Banach fixed point on the complete space
+of Fact~\ref{fact:w2basic}).
+\end{fact}
+
+\begin{fact}[Measurable selection of optimal couplings; averaged $W_2$ of kernels]
+\label{fact:msel}
+Let $K,K'$ be Markov kernels from $(\mathsf S,\mathcal S)$ to the compact $\Om$. On the Polish space
+$\Om$ there is a measurable map $s\mapsto\gamma_s\in\cP(\Om\times\Om)$ with $\gamma_s$ an optimal
+coupling of $K(s,\cdot),K'(s,\cdot)$ \cite[Cor.~5.22]{Villani}; equivalently
+$s\mapsto W_2(K(s,\cdot),K'(s,\cdot))$ is measurable. Consequently, for any $\rho\in\cP(\mathsf S)$,
+gluing $\{\gamma_s\}$ against $\rho$ yields a coupling of $\rho K,\rho K'$ and hence
+\[
+  W_2(\rho K,\rho K')^2\ \le\ \int W_2\big(K(s,\cdot),K'(s,\cdot)\big)^2\,\rho(ds)
+  \ \le\ \sup_s W_2\big(K(s,\cdot),K'(s,\cdot)\big)^2 .
+\]
+\end{fact}
+
+\section{Conditional Lipschitzness and the sweep contraction}
+\label{sec:contraction}
+
+We now quantify the mixing \emph{rate} of the same kernel $T$. Recall (Def.~\ref{def:condmaps}) the
+conditional laws
+$Q_H(\cdot\mid\theta)=(\mathcal B_H)\push\,\mathrm{law}(g_\phi(\theta,z_H)+\sigma_H\xi_H)$ and
+$Q_P(\cdot\mid u)=(\mathcal B_\Theta)\push\,\mathrm{law}(g_\psi(u,z_P)+\sigma_P\xi_P)$, where $z_H,z_P$
+are the CVAE latents and $\sigma_H,\sigma_P>0$ the injection-noise scales.
+
+\begin{assumption}[Conditional Lipschitz decoders --- (A-contraction)]
+\label{ass:lip}
+There exist $L_H,L_P<\infty$ with, uniformly in the latent code $z$,
+\[
+  \sup_{z}\ \mathrm{Lip}_{\theta\in\Om_\Theta}\big(g_\phi(\cdot,z)\big)\le L_H,\qquad
+  \sup_{z}\ \mathrm{Lip}_{u\in\Om_H}\big(g_\psi(\cdot,z)\big)\le L_P ,
+\]
+i.e.\ each decoder mean is Lipschitz in its \emph{conditioning} variable, over the compact domains
+$\Om_\Theta,\Om_H$ (these contain the supports used below, cf.\ Assumption~\ref{ass:suptrue}). This is exactly the
+quantity that condition-noise injection (N1) regularizes, by the noise-equals-Tikhonov identity
+\cite{Bishop}: training penalizes $\E\|\nabla_{\text{cond}}g\|_F^2$, promoting small $L_H,L_P$. We
+posit this as an assumption (the penalty encourages but does not certify a bound) and
+support it empirically (autocorrelation decay). \emph{Crucially, $L_H,L_P$ constrain the dependence on
+the condition only --- not on the latent $z$ (N3) nor on the injection noise $\sigma\xi$ (N4).}
+\end{assumption}
+
+\begin{lemma}[Conditional $W_2$-Lipschitzness; the injection noise cancels]
+\label{lem:condlip}
+Under Assumptions~\ref{ass:compact} and \ref{ass:lip}, for all $\theta,\theta',u,u'$,
+\[
+  W_2\big(Q_H(\cdot\mid\theta),Q_H(\cdot\mid\theta')\big)\le L_H\norm{\theta-\theta'},\qquad
+  W_2\big(Q_P(\cdot\mid u),Q_P(\cdot\mid u')\big)\le L_P\norm{u-u'}.
+\]
+\end{lemma}
+\begin{proof}
+Couple $Q_H(\cdot\mid\theta)$ and $Q_H(\cdot\mid\theta')$ by drawing the \emph{same} latent $z_H$ and
+the \emph{same} injection noise $\xi_H$: set $U=\mathcal B_H(g_\phi(\theta,z_H)+\sigma_H\xi_H)$ and
+$U'=\mathcal B_H(g_\phi(\theta',z_H)+\sigma_H\xi_H)$, which have the correct marginals, so $(U,U')$ is a
+coupling. Since $\mathcal B_H$ is $1$-Lipschitz (Fact~\ref{fact:proj}) and the shared term
+$\sigma_H\xi_H$ cancels inside the difference,
+\[
+  \norm{U-U'}\le\big\|(g_\phi(\theta,z_H)+\sigma_H\xi_H)-(g_\phi(\theta',z_H)+\sigma_H\xi_H)\big\|
+  =\norm{g_\phi(\theta,z_H)-g_\phi(\theta',z_H)}\le L_H\norm{\theta-\theta'}
+\]
+pathwise (Assumption~\ref{ass:lip}). By Fact~\ref{fact:w2basic},
+$W_2\le(\E\norm{U-U'}^2)^{1/2}\le L_H\norm{\theta-\theta'}$. The $Q_P$ bound is identical. The
+cancellation of $\sigma_H\xi_H$ is the formal content of ``N4 sets the \emph{spread} of $Q_H$ but not
+its \emph{sensitivity to the condition}.''
+\end{proof}
+
+\begin{lemma}[Sweep contraction]
+\label{lem:sweep}
+Let $K$ be the $\theta$-marginal one-sweep kernel,
+$K(\theta,\cdot)=\int_{\Om_H}Q_P(\cdot\mid u)\,Q_H(du\mid\theta)$ (draw $u\sim Q_H(\cdot\mid\theta)$,
+then $\theta'\sim Q_P(\cdot\mid u)$). Under Assumptions~\ref{ass:compact},\ref{ass:cont},\ref{ass:lip},
+\[
+  W_2\big(K(\theta,\cdot),K(\theta',\cdot)\big)\le\kappa\,\norm{\theta-\theta'},\qquad \kappa:=L_HL_P .
+\]
+If moreover $\kappa<1$, then $K$ has a unique invariant $\nu^\ast\in\cP(\Om_\Theta)$ with
+$W_2(\mu_0K^n,\nu^\ast)\le\kappa^n W_2(\mu_0,\nu^\ast)$, and $\nu^\ast$ is the $\theta$-marginal of the
+joint invariant law $\pi^\ast$ of Theorem~\ref{thm:A}.
+\end{lemma}
+\begin{proof}
+Couple $K(\theta,\cdot),K(\theta',\cdot)$ by sharing all four noises $(z_H,\xi_H,z_P,\xi_P)$. With
+$U,U'$ as in Lemma~\ref{lem:condlip} and
+$\Theta'=\mathcal B_\Theta(g_\psi(U,z_P)+\sigma_P\xi_P)$,
+$\tilde\Theta'=\mathcal B_\Theta(g_\psi(U',z_P)+\sigma_P\xi_P)$, the same cancellation
+($\mathcal B_\Theta$ $1$-Lipschitz, shared $\sigma_P\xi_P$) gives, pathwise,
+\[
+  \norm{\Theta'-\tilde\Theta'}\le\norm{g_\psi(U,z_P)-g_\psi(U',z_P)}\le L_P\norm{U-U'}\le L_PL_H\norm{\theta-\theta'}.
+\]
+Hence $W_2(K(\theta,\cdot),K(\theta',\cdot))\le(\E\norm{\Theta'-\tilde\Theta'}^2)^{1/2}\le\kappa\norm{\theta-\theta'}$.
+($K$ is a Markov kernel on $\Om_\Theta$ by Fact~\ref{fact:compose}, exactly as for $T$, so
+Fact~\ref{fact:banachw2} applies.) For the measure action, note the shared-noise coupling above is an
+\emph{explicit measurable} map $(\theta,\theta')\mapsto\Gamma_{\theta,\theta'}$ (no selection needed);
+gluing it against an optimal coupling $\gamma$ of the two fixed measures $\mu,\mu'$ and integrating the
+pointwise bound gives $W_2(\mu K,\mu'K)^2\le\int\kappa^2\norm{\theta-\theta'}^2\gamma(d\theta,d\theta')=\kappa^2W_2(\mu,\mu')^2$.
+When $\kappa<1$, Fact~\ref{fact:banachw2} yields $\nu^\ast$ and the rate. Finally, if
+$(u,\theta)\sim\pi^\ast$ then the swept $\theta'\sim K(\theta,\cdot)$ has the same law as the
+$\theta$-marginal of $\pi^\ast$ (invariance of $\pi^\ast$ under $T$), so that marginal is
+$K$-invariant and hence equals the unique $\nu^\ast$.
+\end{proof}
+
+\begin{remark}[Roles of the four noises; the collapse ``paradox'' dissolves]
+\label{rem:noises}
+The contraction constant $\kappa=L_HL_P$ is governed \emph{solely} by the condition-Lipschitz
+constants (N1 via \cite{Bishop}); the injection noise $\sigma_H,\sigma_P$ (N4) and the latent (N3)
+\emph{cancel} in the couplings above and do not enter $\kappa$. Conversely N4 is exactly what keeps
+each $Q$ non-degenerate (full support, Lemma~\ref{lem:minor}) and sets the width of $\pi^\ast$; a
+deterministic map ($\sigma\to0$) would $W_2$-contract to a \emph{point mass} --- the very mode
+collapse we must avoid. Thus tightening the contraction (raise N1, lower $\kappa$) and preventing
+collapse (keep N4$>0$) act on \emph{disjoint} parts of the analysis: there is no conflict, and the
+apparent ``more contraction $\Rightarrow$ more collapse'' tension was an artifact of conflating N1
+with N4.
+\end{remark}
+
+\begin{remark}[Honest logical dependency; existence vs.\ rate]
+\label{rem:depend}
+Under $\kappa<1$, Fact~\ref{fact:banachw2} already yields existence/uniqueness of $\nu^\ast$; so the
+contraction, \emph{if it holds}, subsumes existence. The distinct value of Theorem~\ref{thm:A} is that
+it proves existence/uniqueness of $\pi^\ast$ \emph{without} assuming any contraction --- from
+$\sigma>0$ and compactness alone, quantities the algorithm guarantees. In the split we adopt,
+Theorem~\ref{thm:A} (TV, minorization) supplies existence unconditionally, while
+Lemma~\ref{lem:sweep} ($W_2$, condition-Lipschitz) supplies the \emph{rate} and, next, the stability
+constant $1/(1-\kappa)$ for the steering bound (Theorem~B). We work on the $\theta$-marginal chain
+$K$ because $p(\theta\mid\xobs)$ is the reported target; a joint contraction holds as well under a
+suitably weighted product metric, with constant still governed by $L_H,L_P$, and is omitted.
+\end{remark}
+
+% ====================================================================
+\section{Fixed-point perturbation}
+\label{sec:perturb}
+
+The rate constant $\kappa$ of Lemma~\ref{lem:sweep} now buys a \emph{stability} statement: two
+contractive sweeps that are close as operators have close invariant laws.
+
+\begin{lemma}[Fixed-point perturbation in $W_2$]
+\label{lem:perturb}
+Let $K$ be a Markov kernel on $\Om_\Theta$ whose measure action is a $\kappa$-contraction
+($\kappa\in[0,1)$) with invariant $\nu^\ast$, and let $K'$ be any Markov kernel with an invariant
+$\nu'$. Then
+\[
+  W_2(\nu^\ast,\nu')\ \le\ \frac{1}{1-\kappa}\,\sup_{\theta}\,W_2\big(K(\theta,\cdot),K'(\theta,\cdot)\big).
+\]
+\end{lemma}
+\begin{proof}
+Using $\nu^\ast=\nu^\ast K$ and $\nu'=\nu'K'$,
+\[
+  W_2(\nu^\ast,\nu')=W_2(\nu^\ast K,\nu'K')\le W_2(\nu^\ast K,\nu'K)+W_2(\nu'K,\nu'K').
+\]
+The first term is $\le\kappa\,W_2(\nu^\ast,\nu')$ ($\kappa$-contraction of $K$). For the second,
+$W_2(\nu'K,\nu'K')\le\sup_\theta W_2(K(\theta,\cdot),K'(\theta,\cdot))$ by the averaged-kernel bound of
+Fact~\ref{fact:msel} (a \emph{measurable} family of optimal couplings glued against $\nu'$).
+Rearranging gives the claim. Only $K$ need contract; $K'$ need only possess an invariant law.
+\end{proof}
+
+\section{Theorem B: steering / consistency of the invariant law}
+\label{sec:thmB}
+
+\begin{assumption}[The domain contains the true support]
+\label{ass:suptrue}
+$\operatorname{supp}\Pi^\dagger\subseteq\Om=\Om_H\times\Om_\Theta$, where $\Pi^\dagger:=p(\xhid,\bth\mid\xobs)$
+is the true joint posterior. (Physically, the projection box is chosen to contain the plausible
+parameter/state range.) Fix, once and for all, regular versions of the true conditionals
+$p^\dagger_H(\cdot\mid\theta),p^\dagger_P(\cdot\mid u)$ defined for every $\theta\in\Om_\Theta,u\in\Om_H$.
+\end{assumption}
+
+\paragraph{The target.} With conditionals $p^\dagger_H,p^\dagger_P$ as in Assumption~\ref{ass:suptrue},
+let $K^\dagger(\theta,\cdot)=\int p^\dagger_P(\cdot\mid u)\,p^\dagger_H(du\mid\theta)$ be the true sweep,
+a Markov kernel on $\Om_\Theta$ (Assumption~\ref{ass:suptrue} keeps every step inside $\Om$). Because
+$p^\dagger_H,p^\dagger_P$ are conditionals of one joint (hence compatible), Gibbs sampling is exact:
+$\Pi^\dagger$ is $K^\dagger$-invariant and its $\theta$-marginal $\nu^\dagger:=p(\bth\mid\xobs)$ is
+$K^\dagger$-invariant. This $\nu^\dagger$ is the estimand.
+
+\paragraph{Approximation defects.} Define
+\[
+  \varepsilon_H:=\sup_\theta W_2\big(Q_H(\cdot\mid\theta),\,p^\dagger_H(\cdot\mid\theta)\big),\qquad
+  \varepsilon_P:=\sup_u W_2\big(Q_P(\cdot\mid u),\,p^\dagger_P(\cdot\mid u)\big),
+\]
+the worst-case $W_2$ gaps between each \emph{learned} conditional and the corresponding \emph{true}
+conditional, both suprema taken over the compact domains and with respect to the fixed versions of
+Assumption~\ref{ass:suptrue}. (These absorb finite-sample/finite-capacity error, the injection-noise
+smoothing, and the boundary projection; see Remark~\ref{rem:edist}.)
+
+\begin{lemma}[Operator discrepancy]
+\label{lem:opdisc}
+Under Assumptions~\ref{ass:compact}--\ref{ass:lip},
+$\ \sup_\theta W_2\big(K(\theta,\cdot),K^\dagger(\theta,\cdot)\big)\le L_P\,\varepsilon_H+\varepsilon_P.$
+\end{lemma}
+\begin{proof}
+Interpolate through $K'(\theta,\cdot)=\int Q_P(\cdot\mid u)\,p^\dagger_H(du\mid\theta)$ (true $H$-step,
+learned $P$-step):
+\[
+  W_2\big(K(\theta,\cdot),K^\dagger(\theta,\cdot)\big)\le W_2\big(K(\theta,\cdot),K'(\theta,\cdot)\big)+W_2\big(K'(\theta,\cdot),K^\dagger(\theta,\cdot)\big).
+\]
+\emph{First term (swap $H$).} At the fixed $\theta$, take one optimal coupling $(U,U^\dagger)$ of
+$Q_H(\cdot\mid\theta),p^\dagger_H(\cdot\mid\theta)$ with $\E\norm{U-U^\dagger}^2=W_2(Q_H,p^\dagger_H)^2$;
+then draw $\theta',\theta'^\dagger$ from $Q_P(\cdot\mid U),Q_P(\cdot\mid U^\dagger)$ by shared noise
+$(z_P,\xi_P)$ \emph{independent of} $(U,U^\dagger)$ (Lemma~\ref{lem:condlip}), so
+$\norm{\theta'-\theta'^\dagger}\le L_P\norm{U-U^\dagger}$. As this is a single fixed coupling, no
+selection is needed; $W_2(K,K')\le L_P\,W_2(Q_H(\cdot\mid\theta),p^\dagger_H(\cdot\mid\theta))\le L_P\varepsilon_H$.
+\emph{Second term (swap $P$).} Both use $p^\dagger_H(\cdot\mid\theta)$ for the $u$-step; couple with the
+\emph{same} $u$, then couple $Q_P(\cdot\mid u),p^\dagger_P(\cdot\mid u)$ by a \emph{measurable} family of
+optimal couplings $u\mapsto\gamma_u$ (Fact~\ref{fact:msel}) and glue against $p^\dagger_H(\cdot\mid\theta)$,
+giving $W_2(K',K^\dagger)\le\big(\int W_2(Q_P(\cdot\mid u),p^\dagger_P(\cdot\mid u))^2\,p^\dagger_H(du\mid\theta)\big)^{1/2}\le\varepsilon_P$.
+Sum and take $\sup_\theta$.
+\end{proof}
+
+\begin{theorem}[Steering bound]
+\label{thm:B}
+Under Assumptions~\ref{ass:compact}--\ref{ass:lip} with $\kappa=L_HL_P<1$, the invariant
+$\theta$-law $\nu^\ast$ of the learned sweep satisfies
+\[
+  W_2\big(\nu^\ast,\ p(\bth\mid\xobs)\big)\ \le\ \frac{L_P\,\varepsilon_H+\varepsilon_P}{1-\kappa}.
+\]
+In particular, if $\varepsilon_H=\varepsilon_P=0$ then $\nu^\ast=p(\bth\mid\xobs)$ exactly
+(\textbf{Corollary B1}, the well-specified/compatible case).
+\end{theorem}
+\begin{proof}
+$K$ is a $\kappa$-contraction with invariant $\nu^\ast$ (Lemma~\ref{lem:sweep}) and $K^\dagger$ has
+invariant $\nu^\dagger=p(\bth\mid\xobs)$. Apply Lemma~\ref{lem:perturb} and bound the operator
+discrepancy by Lemma~\ref{lem:opdisc}.
+\end{proof}
+
+\paragraph{The computable self-consistency defect.} Theorem~\ref{thm:B} bounds the distance to the
+\emph{true} posterior, but $\varepsilon_H,\varepsilon_P$ require the unknown truth. We therefore also
+define an intrinsic, \emph{model-only} defect that certifies whether the learned pair even admits a
+coherent joint. Let $\mu^\ast(du):=\int Q_H(du\mid\theta)\,\nu^\ast(d\theta)$ be the $u$-marginal the
+forward sweep induces, and form the two joints on $\Om_\Theta\times\Om_H$
+\[
+  \Pi^{\rightarrow}(d\theta,du):=\nu^\ast(d\theta)\,Q_H(du\mid\theta),\qquad
+  \Pi^{\leftarrow}(d\theta,du):=Q_P(d\theta\mid u)\,\mu^\ast(du),\qquad
+  \varepsilon_{\mathrm{inc}}:=W_2\big(\Pi^{\rightarrow},\Pi^{\leftarrow}\big).
+\]
+Both have the same $u$-marginal $\mu^\ast$; they differ only in the $\theta\mid u$ law (the forward
+posterior of $\theta$ under $\Pi^\rightarrow$ vs.\ the learned $Q_P$), so $\varepsilon_{\mathrm{inc}}$
+is the ``forward-vs-backward sweep inconsistency'' and is estimable from samples of the trained model
+alone.
+
+\begin{proposition}[$\varepsilon_{\mathrm{inc}}$ certifies compatibility]
+\label{prop:inc}
+Assume $\kappa<1$. Then $\varepsilon_{\mathrm{inc}}=0$ iff $Q_H,Q_P$ are compatible (equal, a.e., the
+conditionals of a common joint); in that case the witnessing joint is
+$\Pi=\Pi^\rightarrow=\Pi^\leftarrow$, and $\nu^\ast$ is exactly its $\theta$-marginal --- i.e.\ the
+sampler draws from a genuine joint's marginal.
+\end{proposition}
+\begin{proof}
+$(\Leftarrow)$ Suppose a joint $\Pi'$ has $u\mid\theta$-conditional $Q_H$ and $\theta\mid u$-conditional
+$Q_P$ (a.e.). Running one forward sweep from $\Pi'$ reproduces $\Pi'$, so its $\theta$-marginal
+$\Pi'_\theta$ is $K$-invariant, hence $\Pi'_\theta=\nu^\ast$ (unique, $\kappa<1$). Thus
+$\Pi'=\nu^\ast\otimes Q_H=\Pi^\rightarrow$; its $u$-marginal is $\mu^\ast$ and its
+$\theta\mid u$-conditional is $Q_P$, so also $\Pi'=Q_P\otimes\mu^\ast=\Pi^\leftarrow$, giving
+$\varepsilon_{\mathrm{inc}}=0$. $(\Rightarrow)$ If $\varepsilon_{\mathrm{inc}}=0$ then
+$\Pi^\rightarrow=\Pi^\leftarrow=:\Pi$; by construction $\Pi$ has $u\mid\theta$-conditional $Q_H$ (from
+$\Pi^\rightarrow$) and $\theta\mid u$-conditional $Q_P$ (from $\Pi^\leftarrow$), so $Q_H,Q_P$ are
+compatible with witness $\Pi$, whose $\theta$-marginal is $\nu^\ast$.
+\end{proof}
+
+\begin{remark}[$\Pi^\leftarrow$ is the stationary joint]
+\label{rem:pileftpi}
+The backward-assembled joint is exactly the joint invariant law: at stationarity the swept state
+$(u',\theta')$ has $u'\sim\mu^\ast$ and $\theta'\sim Q_P(\cdot\mid u')$, i.e.\ $\pi^\ast=\Pi^\leftarrow$
+(up to the coordinate identification $\Om_H\times\Om_\Theta\cong\Om_\Theta\times\Om_H$). Hence
+$\varepsilon_{\mathrm{inc}}=W_2(\Pi^\rightarrow,\pi^\ast)$: the self-consistency defect measures how far
+the forward pairing $(\theta,u\!\sim\!Q_H(\cdot\mid\theta))$ sits from the sampler's own stationary
+joint --- a quantity one estimates directly from a single run.
+\end{remark}
+
+\begin{remark}[Why the defects are not summed --- no double counting]
+\label{rem:nodouble}
+It is tempting to add $\varepsilon_{\mathrm{inc}}$ to the bound of Theorem~\ref{thm:B}; this would
+double count. Since the true conditionals are compatible, the true joints built forward and backward
+coincide ($\Pi^\rightarrow_\dagger=\Pi^\leftarrow_\dagger=\Pi^\dagger$), so by a triangle inequality
+$\varepsilon_{\mathrm{inc}}\le W_2(\Pi^\rightarrow,\Pi^\dagger)+W_2(\Pi^\dagger,\Pi^\leftarrow)$; each
+term can in turn be controlled by $W_2(\nu^\ast,\nu^\dagger)$ (Theorem~\ref{thm:B}) together with
+$\varepsilon_H,\varepsilon_P$ and Lemma~\ref{lem:condlip}. One expects, accordingly, a bound
+$\varepsilon_{\mathrm{inc}}\le C\,(\varepsilon_H+\varepsilon_P)$ with $C$ depending on $\kappa,L_H,L_P$
+(and the regularity of the true conditionals); we defer the precise constant to a later note. The
+qualitative point stands regardless: $\varepsilon_{\mathrm{inc}}$ is \emph{dominated by} the
+approximation defects, not independent of them --- $\varepsilon_H,\varepsilon_P$ govern the distance to
+truth (Theorem~\ref{thm:B}), while $\varepsilon_{\mathrm{inc}}$ is its computable \emph{shadow}, the
+quantity one can actually monitor (e.g.\ across noise scales; cf.\ the ablation program).
+\end{remark}
+
+\begin{remark}[Where the distortion defect lives; the $\sigma$ decomposition]
+\label{rem:edist}
+Here $p^\dagger_H,p^\dagger_P$ are the \emph{clean} true conditionals, so $\varepsilon_H,\varepsilon_P$
+silently include the injection-noise smoothing (N4) and the boundary projection --- i.e.\ a distortion
+defect $\varepsilon_{\mathrm{dist}}=O(\sigma_H+\sigma_P)+\big(\E\norm{\bm Y-\mathcal B(\bm Y)}^2\big)^{1/2}$
+is folded in, where the last term is the RMS projection displacement (a length, not the boundary
+\emph{mass} $\pi^\ast(\partial\Om)$; the two are distinct). To display it separately, reference instead
+the $\sigma$-smoothed, projected true conditionals
+$p^{\dagger,\sigma}_H,p^{\dagger,\sigma}_P$: then $\varepsilon_H,\varepsilon_P$ reduce to pure
+learning error (vanishing with data/capacity), and one adds the single term
+$W_2(\nu^{\dagger,\sigma},\nu^\dagger)=O(\sigma)$ for the smoothing bias. Because Theorem~\ref{thm:A}
+and non-collapse require $\sigma_H,\sigma_P>0$ (N4), this term has an irreducible floor; in the
+non-identifiable regime it is small relative to the width of the true posterior ridge, so the ridge
+is faithfully covered.
+\end{remark}
+
+% ====================================================================
+\begin{thebibliography}{9}
+\bibitem{Bishop} C.~M.~Bishop. Training with noise is equivalent to Tikhonov regularization.
+  \emph{Neural Computation}, 7(1):108--116, 1995.
+\bibitem{Folland} G.~B.~Folland. \emph{Real Analysis: Modern Techniques and Their Applications},
+  2nd ed. Wiley, 1999. (Radon--Nikodym, Ch.~3; $L^p$ completeness, Ch.~6.)
+\bibitem{HiriartLemarechal} J.-B.~Hiriart-Urruty and C.~Lemar\'echal.
+  \emph{Fundamentals of Convex Analysis}. Springer, 2001. (Projection onto a convex set, Ch.~III.)
+\bibitem{Kallenberg} O.~Kallenberg. \emph{Foundations of Modern Probability}, 2nd ed. Springer, 2002.
+  (Kernels and section integration, Ch.~1; Ionescu--Tulcea, Ch.~6. Chapter numbers to be verified
+  against the edition in use.)
+\bibitem{MeynTweedie} S.~Meyn and R.~L.~Tweedie.
+  \emph{Markov Chains and Stochastic Stability}, 2nd ed. Cambridge Univ.\ Press, 2009.
+  (Doeblin/uniform ergodicity, Ch.~16.)
+\bibitem{Villani} C.~Villani. \emph{Optimal Transport: Old and New}. Springer, 2009.
+  ($W_2$ metric and its properties, Ch.~6; gluing lemma, Ch.~1.)
+\end{thebibliography}
+
+\end{document}

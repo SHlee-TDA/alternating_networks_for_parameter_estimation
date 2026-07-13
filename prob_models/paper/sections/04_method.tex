@@ -98,63 +98,69 @@ The procedure is summarized in \Algref{alg:pseudo_gibbs}.
 \end{algorithmic}
 \end{algorithm}
 
-\subsection{Theoretical Properties: Three Issues, Three Guarantees}
+\subsection{Theoretical Guarantees}
 \label{subsec:theory}
 
-Running pseudo-Gibbs with deep networks in a continuous, non-identifiable space faces three
-failure modes, each resolved by one component of A-DCVAE (proofs in \Secref{app:proofs}).
+Two questions must be answered for any sampler built from independently learned conditionals: does
+the chain \emph{converge} to a unique law, and is that law the \emph{right} one? We answer both,
+replacing the rigid \emph{global} spectral contraction of prior deterministic work with softer,
+noise-driven \emph{local} guarantees. We state the results in abbreviated form; the full development
+(assumptions, constants, and proofs) is the subject of a companion manuscript
+\citep{adcvae-theory}, and we summarize the proof ideas in \Secref{app:proofs}. Throughout, $\xobs$
+is fixed, the boundary projections make the joint state space $\Omega$ compact, and $\pi^\ast$
+denotes the invariant law of the stochastic kernel $\mathcal{T}$ of \eqref{eqn:kernel}, whose
+$\vtheta$-marginal we write $\nu^\ast$.
 
-\paragraph{Issue 1 (instability / error amplification).}
-Even when trained on exact data, the two CVAEs are only \textit{$\epsilon$-incompatible}: limited
-network capacity and variational error mean no single joint distribution induces both conditionals
-exactly. Because the manifold of physically valid trajectories $\mathcal{M}$ is a thin,
-measure-zero set, an unguarded transition can amplify a single small step error exponentially through
-the feedback loop, causing divergence.
+\paragraph{Existence (why the chain converges at all).}
+A deterministic pseudo-Gibbs recursion in a continuous, non-identifiable space can amplify a single
+step's error and diverge, or collapse onto the thin manifold of valid trajectories. The injected
+Gaussian noise removes this: it gives the transition kernel a strictly positive density on the
+compact $\Omega$, which is exactly a Doeblin minorization.
 
-\begin{theorem}[Condition noise induces local Jacobian regularization]
-\label{thm:contraction}
-Injecting condition noise $\boldsymbol{\epsilon}_c$ and reconstructing the clean target is, as
-$\sigma_c \to 0$, asymptotically equivalent to a local Tikhonov penalty on the Frobenius norm of the
-decoder's condition-Jacobian:
+\begin{theorem}[Existence and uniform ergodicity; \citealp{adcvae-theory}]
+\label{thm:existence}
+Under compact boundary projection and strictly positive injection noise, $\mathcal{T}$ is uniformly
+ergodic: it admits a unique invariant law $\pi^\ast$, and from \emph{every} initialization the
+distribution converges to $\pi^\ast$ geometrically in total variation. The hypotheses hold by
+construction, so existence requires \emph{no} contraction assumption.
+\end{theorem}
+
+\noindent This is the continuous-state counterpart of the discrete pseudo-Gibbs convergence of
+\citet{heckerman2000dependency}; the noise is the ingredient that makes it go through (a
+deterministic decoder gives a degenerate kernel and can collapse to a point).
+
+\paragraph{Rate.}
+Condition-noise injection regularizes the decoders' \emph{condition}-Jacobians (training with noise
+is Tikhonov regularization, \citealp{bishop1995training}). Under the resulting Lipschitz control, a
+synchronous coupling---in which the shared injection noise \emph{cancels}---shows the parameter sweep
+contracts in the $2$-Wasserstein metric with constant $\kappa = L_H L_P$, giving a geometric mixing
+rate when $\kappa<1$. Crucially the contraction is set by the condition-Lipschitz constants, while
+the injection noise sets the \emph{width} of $\pi^\ast$: raising the former to tighten mixing does
+not shrink the latter, so ``more contraction'' does not mean ``more collapse.''
+
+\paragraph{Consistency / steering (why the chain targets the truth).}
+Convergence to $\pi^\ast$ is not correctness: because the two conditionals are learned independently,
+they are only approximately compatible. A fixed-point perturbation argument bounds the gap.
+
+\begin{theorem}[Steering bound; \citealp{adcvae-theory}]
+\label{thm:steering}
+Let $\varepsilon_H, \varepsilon_P$ be the worst-case $W_2$ gaps between the learned conditionals and
+the true posterior conditionals. If $\kappa<1$, then
 \begin{equation}
-    \E_{\boldsymbol{\epsilon}_c}\big[\, \| g(\, \cdot + \boldsymbol{\epsilon}_c) - Y \|^2 \,\big]
-    \;\approx\; \| g(\,\cdot\,) - Y \|^2 \;+\; \sigma_c^2\, \big\| \nabla g(\,\cdot\,) \big\|_F^2 .
+\label{eqn:steering}
+    W_2\big(\nu^\ast,\ p(\vtheta \mid \xobs)\big)\ \le\ \frac{L_P\,\varepsilon_H + \varepsilon_P}{1-\kappa}.
 \end{equation}
-Suppressing $\|\nabla g\|_F$ smooths the conditional map and imposes strong dissipativity (a
-Lyapunov drift) on the transition operator, so the chain remains bounded and stable rather than
-diverging.
+In particular the invariant law equals the true parameter posterior exactly when the conditionals
+are exact ($\varepsilon_H = \varepsilon_P = 0$).
 \end{theorem}
 
-\paragraph{Issue 2 (wrong direction).}
-Stability alone does not guarantee correctness: a stable chain may still settle at a spurious mean.
-The chain must be attracted toward the true data manifold.
-
-\begin{theorem}[Target noise induces denoising score matching]
-\label{thm:score}
-Following the denoising--score-matching equivalence \citep{vincent2011connection}, the global optimum of the target-denoising objective satisfies Tweedie's identity,
-\begin{equation}
-    g^*(\tilde{Y}) \;\approx\; \tilde{Y} + \sigma_t^2\, \nabla_Y \log p\big(Y \mid \mX_{\mathrm{obs}}, \vtheta\big),
-\end{equation}
-so the decoder's residual equals the (smoothed) score of the conditional data manifold. The update
-therefore performs a Langevin drift toward high-density, physically consistent regions, forming an
-attractor field that pulls off-manifold samples back onto $\mathcal{M}$.
-\end{theorem}
-
-\paragraph{Issue 3 (mode collapse).}
-Passing only decoder means between the networks makes regression-to-the-mean inevitable in
-non-identifiable regimes. The stochastic, infinite-mixture kernel~\eqref{eqn:kernel} removes this
-failure.
-
-\begin{theorem}[Ergodicity and score-aligned convergence]
-\label{thm:ergodicity}
-Under the dissipativity of Theorem~\ref{thm:contraction} and compact boundary projections, the infinite
-Gaussian mixture kernel $\mathcal{T}$ is geometrically ergodic in the $2$-Wasserstein metric and
-admits a unique invariant distribution $\pi^*$. Because $\mathcal{T}$ has the capacity to represent
-multi-modal (e.g.\ crescent-shaped) supports, and the Langevin drift of Theorem~\ref{thm:score} provides
-a persistent attraction toward the data manifold, the chain bypasses mode collapse and $\pi^*$ aligns
-with the true joint posterior $p_{\mathrm{data}}(\vtheta, \mX_{\mathrm{hid}} \mid \mX_{\mathrm{obs}})$.
-\end{theorem}
-
-Together, Theorems~\ref{thm:contraction}--\ref{thm:ergodicity} replace the rigid \emph{global} spectral
-constraint of prior deterministic work with a softer, data-driven \emph{local} regularization that
-preserves expressiveness while guaranteeing a stable, correctly directed, collapse-free chain.
+\noindent The gap is therefore \emph{controlled}, not zero: the learned conditionals' error is
+amplified by the mixing constant $1/(1-\kappa)$. Because the conditionals are trained as denoisers on
+a common simulator, they approximate compatible conditionals, so the error vanishes in the
+well-specified limit; denoising is the mechanism that shrinks $\varepsilon_H,\varepsilon_P$, not a
+device that repairs incompatibility. Finally, since $\varepsilon_H,\varepsilon_P$ require the unknown
+truth, the companion work introduces a \emph{computable} self-consistency certificate
+$\varepsilon_{\mathrm{inc}}$---the forward-vs-backward sweep discrepancy---estimable from the trained
+model alone and used as a diagnostic in our ablations. Together, Theorems~\ref{thm:existence} and
+\ref{thm:steering} guarantee a stable, correctly targeted, collapse-free sampler while preserving the
+expressiveness that global spectral constraints destroy.

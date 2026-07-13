@@ -188,9 +188,12 @@ PICP 17.2%, NLL 31990.99로 파탄. Iter CVAEs는 RMSE 근소 열세지만 PICP 
 서사: RMSE만 보는 것은 비식별계에서 "정확성의 착시". ⚠️ MPIW가 0.0102→1.1466로 크게 넓어짐 —
 "과대 불확실성(under-confidence)" 반론 가능. §8 참조.
 
-**핵심 비식별 주장(검증 필요)**: 국소 사후가 하이퍼볼라 `S_I·σ=C`를 따른다는 것. `figure3.py`는
-`C=S_I,true·σ,true`로 곡선을 그린다(경험적 어노테이션). 이 관계가 OGTT 방정식에서 실제로 유도/
-성립하는지는 **아직 근거 미확립**(자산이 아니라 주장). E5류 실험으로 뒷받침 필요.
+**핵심 비식별 주장(✅ 증명 확보, 2026-07-09)**: 국소 사후가 하이퍼볼라 `S_I·σ=C`(=`mDI` 등온선)를
+따른다는 것은 **collaborator(Ha Joon, Howard) supplement §II 비차원화 증명**으로 확립됨: 혈당 `G(t)`는
+`mDI=S_I·σ`에만 의존, 인슐린 `I(t)`는 `S_I` 배수 → 혈당만 관측 시 `S_I,σ` 구조적 비식별. `figure3.py`의
+`C=S_I,true·σ,true` fiber는 증명과 **정확히 일치**(수정 불필요). 이 사실은 (1) decoupling 동기를
+물리적으로 grounding하고(은닉 인슐린이 곧 비식별을 푸는 정보), (2) `p(S_I,σ|G)∝L(S_I·σ)·prior`로
+**해석적 참조 posterior**를 값싸게 제공한다(B3). 상세: [DISCUSSION.md](DISCUSSION.md) B2/B3.
 
 ## 7. 범위 주의 — 이 논문 ≠ `docs/experiment-plan.md`
 
