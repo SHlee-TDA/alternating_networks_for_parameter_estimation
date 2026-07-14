@@ -110,14 +110,24 @@
 **목표**: 본 논문(ICLR/AISTATS/TMLR) 서사·related work·정직성 보강.
 
 **Todo**
-- [ ] **B1: intro 서사** — "공유 연산자 T, 무엇에 수렴하는지 고친다": 존재(Thm A)·정확성(Thm B)를
+- [x] **B1: intro 서사** — "공유 연산자 T, 무엇에 수렴하는지 고친다": 존재(Thm A)·정확성(Thm B)를
   전작(spectral norm + teacher forcing)과 평행하게. 결정론 방법은 baseline+브릿지(companion 인용,
   load-bearing 아님). regression-to-mean은 '끝'이 아니라 '시작(inciting incident)'으로.
-- [ ] **B8: related work** — SBI/NPE(Papamakarios, Cranmer), split Gibbs/score-MCMC(plug-and-play,
+  **(2026-07-14 완료)** abstract·intro ¶2–¶5·contributions 재작성, mixture identity \eqref{eq:mixture},
+  background "our prior work"→"deterministic decoupled baseline"(고정점=E[θ|x_obs] inline, load-bearing X).
+- [x] **B8: related work** — SBI/NPE(Papamakarios, Cranmer), split Gibbs/score-MCMC(plug-and-play,
   DPS, Vono), dependency networks(Heckerman), flow matching. 차별점 명시.
-- [ ] **W4: 정직성 보강** — Table 1의 PICP↔MPIW 트레이드오프("과대 불확실성" 반론) 서사;
+  **(2026-07-14 완료)** main.tex `\subsection{Related Work}` 4문단 + bib 12개 신규(⚠️서지 검증 필요).
+- [x] **W4: 정직성 보강** — Table 1의 PICP↔MPIW 트레이드오프("과대 불확실성" 반론) 서사;
   B10(Sim2Real 주장: 실험 없으면 완화); B11(실패모드/한계).
-- [ ] **Fig1 teaser 설계** — single net blob vs Dual CVAE crescent.
+  **(2026-07-14 완료)** experiment1.tex "Coverage vs sharpness" 문단(방향성 검증=따라-fiber, 참조
+  posterior는 Track E placeholder); conclusion에 Limitations 문단(B10 Sim2Real 완화, B11 실패모드).
+- [x] **Fig1 teaser 설계** — single net blob vs Dual CVAE crescent.
+  **(2026-07-14 완료)** 캡션 재작성(blob→conditional-mean 붕괴점 vs crescent fiber) + LaTeX 설계
+  스펙 주석(2패널, 공유 S_I–σ 평면, 별=참값, fiber 곡선). \fbox placeholder 유지(실제 PDF는 추후).
+- [x] **정적검사 부수 수정** — 미정의 매크로 `\xobs`(theory/appendix 4곳 사용, 정의 없음=컴파일
+  오류)를 main.tex preamble에 `\newcommand{\xobs}{\mX_{\mathrm{obs}}}`로 정의. cite키·ref/label·
+  env짝 전부 통과.
 
 **주의사항**
 - 스코프(A''): **일반 비식별 역문제 방법, OGTT는 한 예시**. `mDI`는 인용과 함께 부수적으로만
@@ -197,3 +207,9 @@ networks. (W4) Table1 PICP↔MPIW 트레이드오프 서사·한계 정직성. F
 
 ### 로그
 - 2026-07-13 — 최초 작성. 3트랙(E/T/W) 분리, todo·주의·kickoff 프롬프트 정리.
+- 2026-07-14 — **Track W 1차 완료(B1/B8/W4/Fig1 서술).** intro를 "공유 연산자 T, 수렴 대상을
+  고친다" 서사로 재작성(regression-to-mean=발단, decoupling=mixture identity로 유도, 결정론=baseline
+  +극한, 존재/정확성=전작 수축+정렬의 확률론 평행). related work 신규(SBI·score-SDE·split-Gibbs/DPS·
+  compatible conditionals). W4 정직성(PICP↔MPIW 방향성·Limitations/Sim2Real 완화). Fig1 캡션+설계스펙.
+  bib 12개 추가(⚠️서지 검증). 미정의 `\xobs` 수정. 정적검사 통과(LaTeX 컴파일은 사용자 로컬).
+  **미착수/의존**: experiment 수치·참조 posterior·ε_inc ablation·강baseline(B4)·Fig2/4/5는 Track E 대기.
