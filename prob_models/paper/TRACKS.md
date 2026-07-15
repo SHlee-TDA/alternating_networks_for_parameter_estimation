@@ -47,20 +47,44 @@
 **목표**: 본 논문의 빈 figure(Fig 1/2/4/5)와 정량 근거를 채우고, 이론(A-contraction·Thm B)을
 경험적으로 실증. E-b/c는 companion 논문(T2-3)에서 재사용.
 
+> **진행 (2026-07-13, 실험 세션):** 구현 스크립트는 `prob_models/paper/experiments/`에
+> (`_context.py` 비대화형 로더, `_metrics.py` sliced-W2/coverage, `b3_reference_posterior.py`,
+> `b7_ablation.py`+`b7_replot.py`, `b4_baselines.py`, `phase4_figures.py`). 산출물: metric JSON은
+> `results/paper2_experiments/{b3,b7,b4,fig}/`, figure PDF는 `prob_models/paper/figures/`.
+> 데이터/체크포인트는 메인 트리 심링크 재사용(50k sims + 기존 iter/single/det 체크포인트).
+
 **Todo**
-- [ ] **E0 (선결): C1 버그 수정** — `trainer.py`가 `COND_NOISE_STD_{Y,P}`를 읽는데 `config.py`엔
-  `CONDITION_NOISE_STD_{Y,P}`만 있음 → 조건노이즈가 0.05 고정. 키 통일. (조건노이즈 ablation의 선결)
-- [ ] **E1 (B3): OGTT 해석적 참조 posterior** — `p(S_I,σ|G) ∝ L(S_I·σ)·prior`. `(S_I,σ)` 격자 ×
-  `systems/ogtt_simul.py`로 forward-sim한 G × 가우시안 우도 × prior → 2-D 참조분포. 우리 π*와
-  2-Wasserstein / along-fiber / coverage 비교.
-- [ ] **E2 (B4): 강baseline** — NPE/conditional flow 단일망 `p(θ|x_obs)` + 결정론 iterative
-  (`master_train.py`가 det+prob 동시 학습). "decoupling이 순효과"임을 보이기.
-- [ ] **E3 (B7): 3-보장 격리 ablation** — (a) condition noise on/off → 안정성/κ(autocorrelation),
-  (b) target noise on/off → 평균붕괴 여부, (c) 추계 vs 결정론 핑퐁 → 모드 커버리지. **`ε_inc`
-  모니터**(단일 run에서 `W_2(Π→,π*)`).
-- [ ] **E4: figure 생성** — Fig2(MCMC diag: `analysis.py::plot_mcmc_trace_and_acf`), Fig4(predictive
-  check: bimodal 봉우리 forward-sim), Fig5(noise sensitivity: `evaluate_robustness_probabilistic`).
-  PDF로. Fig3는 존재(`figure3.py`).
+- [x] **E0 (선결): C1 버그 수정** — 완료(2026-07-13). `trainer.py`를 config 정본 키
+  `CONDITION_NOISE_STD_{Y,P}`로 통일. 겸사겸사 C4(추론 N4)도 배선: `main.py`가 `INFER_NOISE_{Y,P}`를
+  모델 속성으로 주입 → 추론 주입노이즈가 config대로 작동(추계↔결정론 ablation 선결). smoke로 파이프라인 검증.
+- [x] **E1 (B3): OGTT 해석적 참조 posterior** — 완료. `(S_I,σ)` 격자 × BDF forward-sim × 가우시안
+  우도(mDI=S_I·σ) × lognorm prior → 2-D 참조분포. **8관측 평균: MAP mDI 상대오차 2.4%±2.0%,
+  across-fiber CV 10.0%±1.4%** (B2 비식별 증명의 수치 실증). π* 비교: sliced-W2 0.20±0.14,
+  ref-HPD95 coverage 18.8%±2.6%, W1(logmDI) 0.489±0.011 — π*가 fiber 방향은 따르나 과대분산
+  (mDI CV 80% vs 10%)+일관된 offset(정직한 근사갭). `figure_b3_reference_posterior.pdf`.
+- [~] **E2 (B4): 강baseline** — 10k-scale 완료 + **50k 캐노니컬 스케일 재현 진행중**(2026-07-14).
+  self-contained conditional RealNVP NPE 단일망 + 결정론 MSE regressor(collapse: along-fiber std 0).
+  **결정론 iterative는 iter_det 체크포인트 대신 깨끗이 수렴하는 MSE regressor 사용** — G0 병리 전시
+  회피(§주의).
+  - 10k-scale 결과: decoupling이 단일망 NPE를 명확히 이기지 못함(sliced-W2 무승부, coverage는 NPE 우위).
+  - **50k 캐노니컬(v1) 결과: 순위가 뒤집힘**(A-DCVAE가 sliced-W2·mDI 방향 모두 우위) — 단
+    ⚠️ **confound 발견**: NPE-flow/det-reg가 patience=40(하드코딩)으로 학습, A-DCVAE만 patience=200
+    (config 기본값)을 받음. 2026-07-14 `b4_baselines.py`에 `--patience` 인자 추가해 세 방법 모두
+    통일, **v2(patience=200 전체 통일) 캐노니컬 재실행 중**(백그라운드, PID 기록은 세션 로그 참조).
+    **v2 완료 전까지 "decoupling이 이긴다/못이긴다" 어느 쪽도 논문에 확정 서술 금지.**
+  - `figure_b4_baselines.pdf` (v1 반영, v2 완료 시 갱신 예정). **(정규화기 불일치 버그는 별도로 이미
+    수정됨: 모든 방법을 동일 컨텍스트에서 학습).**
+- [x] **E3 (B7): 3-보장 격리 ablation** — 완료(5 seed × 3 variant, **10k + 50k 캐노니컬 스케일 모두
+  실행, 15/15 run 정상 종료**, ~17.2h). 이론과 정합, 캐노니컬 스케일에서도 재현:
+  (a) N1 condition off → **κ 0.41→0.71↑**(50k, Thm1 수축 저하 신호가 10k보다 더 뚜렷함, div=0: 발산
+  아닌 rate 효과), (c) 추계 vs 결정론 핑퐁 → **along-fiber std 0.72 vs 0.000**(full/no_target, Thm3
+  붕괴 우회, 견고). **50k에서 새로 드러난 점**: no_condition의 결정론 핑퐁도 붕괴가 불완전(det std
+  0.49→1.72) — κ가 1에 가까울수록 결정론 사상 자체도 고정점에 덜 수렴함을 보여줌(N1/κ와 N4/비붕괴가
+  별개 역할이라는 논증 강화). ε_inc≈0.03(자기일관, 양쪽 스케일 동일). ⚠️ (b) N2 target off은 여전히
+  **격리 효과 미미**(mDI err ≈ full) — 정직히 보고(B12: Thm2는 배경원리). `figure_b7_ablation.pdf`.
+- [x] **E4: figure 생성** — 완료. Fig2(MCMC trace+ACF, lag-1 autocorr 0.012 빠른 mixing),
+  Fig4(predictive: fiber 샘플 6개가 같은 G 재구성 / hidden I 발산 320→45, 비식별 실증),
+  Fig5(noise sensitivity: dual std 0.33→0.64 상승 vs single flat 0.003). `phase4_figures.py`.
 
 **주의사항**
 - 환경: `conda activate vision_task`. 학습은 `config.py` 설정 후 `python prob_models/main.py`

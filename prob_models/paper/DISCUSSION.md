@@ -131,13 +131,41 @@
 - 남는 일: toy 시스템(비-OGTT) 하나에서도 같은 검증을 반복해 일반성 확보(옵션). grid 우도 계산
   스크립트 작성.
 
-### B4. 강한 baseline (decoupling이 진짜 이득인가)  `[ ]`
-- 문제: 현재 비교는 Single **CVAE** vs Dual **CVAE** — 둘 다 CVAE라 "collapse는 CVAE 탓 아니냐"
-  공격에 취약. decoupling의 순효과가 분리 안 됨.
-- 할 일: **NPE/conditional flow(및 가능하면 conditional diffusion) 단일망 posterior** baseline 추가.
-  이게 crescent를 잘 잡으면 decoupling 동기가 무너진다 → 반드시 확인.
-- 핵심 질문: `p(θ|x_obs)`를 직접 잘 추정하는 것 대비, `p(x_hid|x_obs,θ)`·`p(θ|x_obs,x_hid)`로
-  쪼개고 교대 샘플링하는 것이 **무엇을 사는가**(물리 주입? 외삽? 표현?)를 명시.
+### B4. 강한 baseline (decoupling이 진짜 이득인가)  `[~]`  (2026-07-14 — 10k 결론 뒤집힘, 캐노니컬 재검증 중)
+- ✅ 구현: `prob_models/paper/experiments/b4_baselines.py`. 세 방법 모두 **동일 컨텍스트**
+  (data/split/normalizer 동일)에서 학습, B3 참조 posterior 대비 비교(5 seed × 5 ref = 25 run/method).
+  - **A-DCVAE(dual, ours)**, **NPE-flow**(self-contained conditional RealNVP 단일망 `p(θ|x_obs)`,
+    외부설치 없음), **det-reg**(결정론 MSE regressor — 개념적 collapse, along-fiber std 0).
+  - 결정론 iterative는 iter_det 체크포인트 대신 깨끗이 수렴하는 MSE regressor 사용 → **G0
+    non-attracting 병리 전시 회피**(A''/B1 caveat 준수).
+- **10k-scale 결과 (mean±std):**
+  | | ref-HPD cov↑ | along-fiber std↑ | sliced-W2↓ | mDI err↓ |
+  |---|---|---|---|---|
+  | A-DCVAE | 0.20 | 0.88 | 0.156 | 0.022 |
+  | NPE-flow | **0.81** | 1.23 | **0.148** | 0.044 |
+  | det-reg | 1.0* | **0.0** | 0.29 | 0.033 |
+  → 당시 결론: decoupling이 단일망 NPE를 명확히 못 이김(sliced-W2 무승부, coverage는 NPE 우위).
+- **50k 캐노니컬 스케일 재현 (v1, 2026-07-14):**
+  | | ref-HPD cov↑ | along-fiber std↑ | sliced-W2↓ | mDI err↓ |
+  |---|---|---|---|---|
+  | A-DCVAE | 0.20 | 0.71 | **0.170** | **0.016** |
+  | NPE-flow | 0.61 | 1.995(과대분산) | 0.481(3배 악화) | 0.012 |
+  | det-reg | 1.0* | 0.0 | 0.284 | 0.040 |
+  → **순위가 뒤집힘**(A-DCVAE가 sliced-W2·방향 모두 우위)처럼 보였으나 —
+- ⚠️ **핵심 confound 발견 (v1 결과 신뢰 보류)**: `train_npe_flow`/`train_det_regressor`가
+  **patience=40 하드코딩**, A-DCVAE(via `B7.train_variant`)는 config 기본값 **patience=200**을 받음
+  → 5배 학습예산 불균형. 이 confound는 10k·50k 양쪽에 동일하게 있었지만, 50k에서 "같은 epoch-patience가
+  상대적으로 더 이른 종료"로 작용해 NPE/det-reg가 불리해졌을 가능성. **2026-07-14 수정**:
+  `b4_baselines.py`에 `--patience` 인자 추가, 세 방법 모두 통일 적용. **v2(patience=200 통일) 캐노니컬
+  재실행 진행중** — 완료 후 이 항목·`figure_b4_baselines.pdf`·`RESULTS.md` 갱신 예정.
+- **당분간 결론 보류**: v2 완료 전까지 "decoupling이 이긴다/못 이긴다" 어느 쪽도 논문에 확정 서술 금지.
+  확실한 것: (i) A-DCVAE는 구조(non-zero along-fiber, 방향 정확도)를 복원, (ii) det-reg는 무정보 점으로
+  붕괴. NPE 대비 우열은 v2로 판가름.
+- 살 수 있는 것(v2 결과와 무관하게 유효): (i) **은닉 상태 궤적 I(t) 부산물**(NPE엔 없는 물리 해석성,
+  Fig4), (ii) **3보장 설명**(B7), (iii) **ε_inc 자기일관 인증서**. decoupling이 진짜 이기는
+  regime(외삽/강한 비식별/Sim2Real)은 **미실증(B10)** — 향후 과제.
+- ⚠️ 별개 버그노트(이미 해결): 최초 50k 시도는 10k eval normalizer를 50k-학습 canonical 체크포인트에
+  적용해 A-DCVAE를 부당하게 불리하게 함(mDI err 0.153). 전 방법을 동일 컨텍스트에서 학습하도록 수정.
 
 ### B5. 백본 불가지성 (why VAE 방어)  `[~]`  (2026-07-09 방향 확정)
 - **핵심 판단: 3정리는 VAE에 대한 정리가 아니다.** 세 정리의 load-bearing 대상은
@@ -218,13 +246,29 @@
   (2) `ε_inc` 정의 확정 (inf-over-Π vs forward/backward sweep 불일치). ← **다음 결정**
   (3) 2단 오차전파(perturbation) 부등식 조립 = Theorem B 본체.
 
-### B7. 3정리를 격리하는 ablation (이론의 실증)  `[ ]`
-- 조건 노이즈 on/off → 발산율/안정성 (Thm1).
-- 타깃 노이즈 on/off → 평균붕괴 여부 (Thm2).
-- 추계적 vs 결정론 핑퐁 → 모드 커버리지 (Thm3).
-- 이게 **이론↔실험을 잇는 최고가치 실험**. 현재는 정리만 있고 격리 검증이 없음.
-- ⚠️ 선결: `trainer.py`의 조건노이즈 키 버그(C1, `COND_NOISE_STD_*`≠config) 수정해야 조건노이즈
-  sweep이 no-op이 아님. (본 실험 시점에 처리하기로 함)
+### B7. 3정리를 격리하는 ablation (이론의 실증)  `[x]`  (2026-07-14 RESOLVED — 10k + 50k 캐노니컬 모두 실행 완료)
+- ✅ 구현·실행: `prob_models/paper/experiments/b7_ablation.py`(5 seed × 3 variant, 데이터/split
+  고정·학습randomness만 변동). `figure_b7_ablation.pdf`, `results/paper2_experiments/b7/b7_metrics.json`.
+  **10k-scale(exploratory)에 이어 50k/10000-epoch-cap/patience=200 캐노니컬 스케일**(사용자의 기존
+  `iter_cvae` 체크포인트와 동일 설정)로 재현 — 15/15 run 정상 종료(~17.2h, 무인 백그라운드 실행).
+- **결과 (mean±std over 5 seeds, 10k → 50k canonical):**
+  - (a) **N1 condition on/off → Thm1 안정성 ✅**: κ full **0.39→0.41** → no_cond **0.62→0.71**(κ=1
+    한계로 접근하는 폭이 캐노니컬에서 더 뚜렷함). divergence_rate=0 양쪽 스케일 모두(경계사영으로 발산
+    아님) → 효과는 **rate κ**이지 blow-up 아님(B12 정정과 정합).
+  - (c) **N4 추계 vs 결정론 핑퐁 → Thm3 붕괴우회 ✅ (가장 견고, 스케일 불문 재현)**: full/no_target에서
+    결정론 핑퐁은 along-fiber std를 **0.000**으로 붕괴, 추계는 **~0.7-0.9** 유지.
+    **캐노니컬에서 새로 드러난 뉘앙스**: no_condition의 결정론 핑퐁은 붕괴가 불완전(det std
+    **0.49→1.72**) — κ가 1에 가까울수록(약한 수축) 결정론 사상 자체도 고정점 수렴이 느려짐을 보여줌.
+    N1/κ(수축 rate)와 N4/injection noise(비붕괴 폭)가 **서로 다른 역할**이라는 §E 논증을 강화하는
+    증거로 활용 가능.
+  - (b) **N2 target on/off → Thm2 방향 ❓(격리효과 미미, 양쪽 스케일 재현)**: no_target의 mDI
+    err(10k:0.04→50k:0.02)·spread가 full과 유사 → **타깃노이즈의 고립된 이득 관측 안 됨**. 정직히
+    보고(B12: Thm2=배경원리라는 자체 진단과 정합, load-bearing 아님).
+  - **ε_inc = W₂(sweep(π*), π*) ≈ 0.03** 전 variant·양쪽 스케일 → π*가 near self-consistent.
+- ⚠️ 선결 C1 버그: 2026-07-13 수정 완료(`CONDITION_NOISE_STD_*`로 통일 + C4 추론노이즈 배선).
+- 실행 노트: 캐노니컬 스케일 재현 중 `setsid`+heredoc 조합으로 백그라운드 실행 시 원인불명 조기종료
+  발견(epoch 20) — 이 세션에서 이미 검증된 `nohup python -m <module> ... &`(파일 기반 스크립트,
+  setsid/heredoc 없이) 방식으로 전환해 해결. 향후 장시간 백그라운드 실행 시 이 패턴 사용 권장.
 
 ### B8. 현대 이웃 문헌 포지셔닝 (SBI + score-based MCMC)  `[x]`  (2026-07-14 Related Work 작성)
 > **2026-07-14 반영**: `main.tex` `\subsection{Related Work}` 4문단 — (1) SBI/NPE(cranmer, papamakarios2016fast,

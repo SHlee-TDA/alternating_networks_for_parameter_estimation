@@ -78,8 +78,11 @@ class ProbTrainer:
                     pbar.set_postfix(loss=loss_base.item(), beta=beta)
                 else:
                     # 1. Condition Noise (Theorem 1: Local Contraction 유도)
-                    cond_std_y = getattr(self.config, 'COND_NOISE_STD_Y', 0.05)
-                    cond_std_p = getattr(self.config, 'COND_NOISE_STD_P', 0.05)
+                    # C1 fix (2026-07-13): read the canonical config keys CONDITION_NOISE_STD_*
+                    # (DISCUSSION.md §E N1). The old COND_NOISE_STD_* keys never existed in
+                    # config, so condition noise was silently pinned to 0.05 regardless of setting.
+                    cond_std_y = getattr(self.config, 'CONDITION_NOISE_STD_Y', 0.05)
+                    cond_std_p = getattr(self.config, 'CONDITION_NOISE_STD_P', 0.05)
                     
                     y_cond_noisy = y_batch + torch.randn_like(y_batch) * cond_std_y
                     p_cond_noisy = p_batch + torch.randn_like(p_batch) * cond_std_p

@@ -126,7 +126,12 @@ def run_experiment_pipeline(global_config):
             ).to(device)
             
             # [안전장치] infer.py에서 속성을 조회할 수 있도록 할당
-            param_estimator.theta_dim = theta_dim 
+            param_estimator.theta_dim = theta_dim
+            # C4 fix (2026-07-13): wire config INFER_NOISE_* onto the models so inference
+            # (N4 injection noise) actually reflects the configured value instead of the
+            # hard-coded 0.05 fallback in infer.pseudo_gibbs_sampling.
+            state_estimator.infer_noise_y = getattr(run_config, 'INFER_NOISE_Y', 0.05)
+            param_estimator.infer_noise_p = getattr(run_config, 'INFER_NOISE_P', 0.05)
             print("  -> Initialized: [Dual CVAE] Proposed Iterative Framework")
         
         # Phase 2: Training
