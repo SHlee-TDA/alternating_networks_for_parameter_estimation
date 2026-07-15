@@ -72,7 +72,12 @@
 
 ## B. 반드시 메워야 할 연구 공백 (Discussion Items)
 
-### B1. 서사 독립성 — 결정론 선행연구 탈종속  `[~]`  (2026-07-09 방향 확정)
+### B1. 서사 독립성 — 결정론 선행연구 탈종속  `[x]`  (2026-07-14 intro 작성 완료; 실험증거는 Track E 대기)
+> **2026-07-14 반영**: `main.tex` abstract·intro·background·contributions 재작성. "our prior work"
+> 제거→"deterministic decoupled baseline". "공유 연산자 T, 수렴 대상을 고친다" + mixture identity
+> `p(θ|x_obs)=∫p(θ|x_obs,x_hid)p(x_hid|x_obs)`로 decoupling 유도. 고정점=E[θ|x_obs]는 inline 1줄
+> (companion 인용 없이 자명). spectral norm/Banach/teacher-forcing 증명·G0 non-attracting은 미도입(계획대로).
+> ⏳ 남음: 결정론 baseline **직접 실행** 증거(B1 할일 (a))는 Track E.
 - 문제: intro/abstract가 "our prior work"에 기댐(미출판=검증불가). 그러나 regression-to-mean
   단독 유도는 "왜 **두 네트워크를 iteration**하는가"에 답하지 못함 — 그건 결정론 스토리의 '끝'.
 - **해소 프레이밍 (채택): "공유 연산자 T, 무엇에 수렴하는지를 고친다".**
@@ -265,7 +270,13 @@
   발견(epoch 20) — 이 세션에서 이미 검증된 `nohup python -m <module> ... &`(파일 기반 스크립트,
   setsid/heredoc 없이) 방식으로 전환해 해결. 향후 장시간 백그라운드 실행 시 이 패턴 사용 권장.
 
-### B8. 현대 이웃 문헌 포지셔닝 (SBI + score-based MCMC)  `[ ]`
+### B8. 현대 이웃 문헌 포지셔닝 (SBI + score-based MCMC)  `[x]`  (2026-07-14 Related Work 작성)
+> **2026-07-14 반영**: `main.tex` `\subsection{Related Work}` 4문단 — (1) SBI/NPE(cranmer, papamakarios2016fast,
+> greenberg2019automatic, lueckmann2021benchmarking, papamakarios2021normalizing), (2) score-SDE/diffusion
+> (song2019/2021, ho2020, lipman2023flow), (3) score posterior sampling+split-Gibbs(chung2023, kadkhodaie2021,
+> vono2019, coeurdoux2024) = **가장 가까운 현대 이웃**, (4) compatible conditionals/dependency networks
+> (heckerman2000, arnold2001). 차별점: decoupling+은닉상태 물리구조+비식별 전용+계산가능 ε_inc 인증서.
+> ⚠️ bib 12개 신규 = 지식 기반 작성, **서지정보(저자/venue/권/페이지) 컴파일 전 검증 필요**.
 - 문제: 고전 인용(Bishop95/Vincent11/Heckerman00)은 문제 아님. **진짜 리스크는 "현대 이웃"을
   안 걸치는 것** — 잘 아는 리뷰어는 우리가 최신 도구를 몰라서 조각조각 쓴다고 공격한다.
 - 반드시 걸쳐야 할 현대 이웃:
@@ -337,8 +348,12 @@
 - ✅ **Task 2 계획서**: `THEORY_PAPER_PLAN.md` (JMLR 1순위, 3-공백, 구조, 분업).
 - ✅ **Task 1(이론 이식)**: `04_method.tex` §3.4 축약 A/B + `appendix.tex` 증명스케치, companion
   (`adcvae-theory`) 인용. bib에 adcvae-theory·bishop1995training 추가.
-- ⏳ **미완**: 본 논문 실험 결과/figure(Fig1/2/4/5, B7 ablation의 ε_inc)는 실험 트랙(B3/B4/B7) 후.
-  B1 서사(공유 T 브릿지)는 method에 부분 반영, intro 완성은 추후.
+- ✅ **Track W 1차(2026-07-14)**: intro/abstract/background/contributions 재작성(B1), Related Work
+  신규(B8), W4 정직성(PICP↔MPIW 방향성 + Limitations/Sim2Real 완화 + B11 실패모드), Fig1 캡션·설계스펙.
+  정적검사 통과(미정의 `\xobs` 수정 포함).
+- ⏳ **미완(Track E 의존)**: Fig1(실제 PDF)/Fig2/4/5, B7 ablation의 ε_inc 수치, 참조 posterior 대비
+  along/across-fiber 정량비교, 강baseline(B4: NPE/flow + 결정론 iterative) — experiment1.tex에 Track E
+  placeholder 주석으로 표시함.
 
 ## C. 다음 액션 후보 (우선순위)
 1. **B1+B4+B8 (프레이밍 재설계)** — 논문 정체성을 바꾸는 최상위 결정. 여기부터 논의.

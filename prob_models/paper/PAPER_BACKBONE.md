@@ -223,8 +223,13 @@ PICP 17.2%, NLL 31990.99로 파탄. Iter CVAEs는 RMSE 근소 열세지만 PICP 
   잔재 grep 무결 확인. (dlbook 매크로: `\vzero,\mI,\Tr,\E,\gL,\gH,\gP` 사용.)
 - (W3) ✅ **해결(2026-07-09)**: 비활성 중복 초안 `sections/{method,train,theorems,infer,
   01_introduction}.tex` 삭제. `main.tex`의 주석 처리된 `\input` 라인도 함께 제거.
-- (W4) ✅ **부분 해결(2026-07-09)**: Thm 1 진술을 `L<1` 직접 주장 → "Jacobian 억제/소산성"으로
-  약화(정본). PICP/MPIW 트레이드오프 반론(§6)은 writing에서 서사 보강 필요(미해결).
+- (W4) ✅ **해결(2026-07-14)**: Thm 1 `L<1`→"Jacobian 억제/소산성" 약화(2026-07-09) + PICP/MPIW
+  트레이드오프 반론을 `experiment1.tex` "Coverage vs sharpness" 문단으로 서사 보강(방향성 검증=
+  따라-fiber vs 가로-fiber, 참조 posterior 대비는 Track E placeholder). Limitations 문단(conclusion)에
+  Sim2Real 완화(B10)·실패모드(B11) 추가.
+- (W5) ⚠️ **신규(2026-07-14)**: intro/abstract/background/contributions "공유 연산자 T" 서사로
+  재작성(B1), Related Work 신규(B8). bib 12개 추가는 **서지 검증 필요**. 미정의 매크로 `\xobs`
+  (theory/appendix 4곳)를 preamble에 정의(컴파일 오류 수정).
 
 **저장소/작업 위치**
 - (R1) 논문 소스는 이 **worktree에 없고** 메인 작업 트리
