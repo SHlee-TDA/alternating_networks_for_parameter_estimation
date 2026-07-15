@@ -220,3 +220,7 @@ data/
 
 # Claude Code session worktrees (nested git checkouts; not part of this repo's history)
 .claude/worktrees/
+
+# Paper figures — keep these tracked for the paper draft despite the blanket *.pdf
+# ignore above (they are few and small; results/experiments PDFs stay ignored).
+!prob_models/paper/figures/*.pdf
