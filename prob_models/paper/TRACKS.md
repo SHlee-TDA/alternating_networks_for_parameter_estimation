@@ -112,8 +112,9 @@
 **목표**: `theory_notes.tex`를 독립 JMLR 논문으로. 계획: `THEORY_PAPER_PLAN.md`.
 
 **Todo (THEORY_PAPER_PLAN.md §9)**
-- [ ] **T2-1: `ε_inc ≤ C(ε_H+ε_P)` 상수 실제 증명** (현재 `Remark:nodouble`에서 deferred). 참
-  조건부 정칙성 하에서 `C=C(κ,L_H,L_P)` 명시 → `theory_notes.tex`에 정리로 추가.
+- [x] **T2-1: `ε_inc ≤ C(ε_H+ε_P)` 상수 실제 증명** (was deferred in `Remark:nodouble`). 참 조건부
+  W₂-Lipschitz(Ass:truereg) 하에서 `C=C(κ,L_P,L_H†,L_P†)` 명시 → `theory_notes.tex`에 Thm:incbound으로
+  추가(+Lem:assembly, Rem:incconst). 정적 검사 통과. [2026-07-14]
 - [ ] **T2-2: approximate-MCMC 포지셔닝 절** — Mitrophanov(2005), Rudolf–Schweizer(2018),
   Johndrow–Mattingly, Medina-Aguayo et al. 대비. 차별점: 학습 dual conditional + `ε_inc` + 노이즈
   taxonomy. bib 확충. **(안 걸치면 치명적.)**
@@ -280,3 +281,22 @@ figure 재생성이 필요하면 experiments/regen_figure3.py·fig1_teaser.py·p
   Iter→A-DCVAE 통일, tail idx 319(S_I=1.454,σ=0.124)로 원본과 동일 샘플 재현. 정적검사 통과(cite·
   ref/label·env·이름잔재 0). **미완**: bib 12개 서지검증(draft 완성 후), 로컬 LaTeX 컴파일(서버에
   TeX 미설치 → tectonic 권장).
+- 2026-07-14 — [Track T] T2-1 완료(`theory_notes.tex`: Thm:incbound + Lem:assembly + Ass:truereg +
+  Rem:incconst). JMLR 스켈레톤 `paper/jmlr/main.tex` 신설(§5 구조 9절, 정리 stub은 theory_notes로
+  [PORT] 포인터). T2-2 착수: §7 Positioning 초안 작성(approx-MCMC vs 우리 대상·ε_inc 인증서 차별화,
+  ε_inc 보장/불보장 표 Table:einc) + bib 11종(Mitrophanov05, Rudolf–Schweizer18, Johndrow15,
+  Medina16, Negrea21, Heckerman00, Arnold99, Diaconis99, Hairer11, Papamakarios16, Cranmer20).
+  정적 검사 통과(env·cite/bibitem·ref/label). 다음: 정리 본문 PORT(T2-4) + T2-3 수치예시.
+- 2026-07-14(2) — [Track T] T2-4 대부분 + T2-2 완료. `jmlr/main.tex`에 정리 본문·증명 이식(Thm A/rate/
+  B/Prop inc/**Thm incbound**+Lem assembly full proof; 표준 예비지식은 인용 축약), 표기 bold θ,u 통일,
+  **노테이션 표 Table:notation**(ε 5종 ε/ε_H/ε_P/ε_inc/ε_dist 구분) 추가, §7 Positioning+bib 17종.
+  natbib+\intr 추가. 정적 검사 통과. 남음: T2-3(§8 수치 E-a/b/c), intro/discussion 산문, T2-5 제목.
+- 2026-07-14(3) — [Track T] T2-3 설계 완료(`T2-3_NUMERICS_DESIGN.md`: E-a 선형가우시안 compatible→
+  rate ρ²/exactness, E-b 비호환 dial δ→Thm B·incbound bound closed-form, E-c ab=c ridge→non-collapse·
+  ε_inc≈0; 전부 Bures/grid closed-form, Track E B7/B3 공유). `main.tex` §8 산문 반영 + intro·discussion
+  전면 작성. 정적 검사 통과(bibitem 전부 인용됨). 남음: T2-3 구현(Track E 공유), T2-5 제목.
+- 2026-07-14(4) — [Track T] 사용자 결정: **T2-3 구현은 Track E 완료 후**로 연기. 사용자가 ~2026-08
+  지역 응용수학 학회 발표(제목/초록 초안 작성) 예정 — Thm A+rate로 scope. 초록 리뷰에서 **과대주장 1건
+  교정**: "noise = necessary condition for Doeblin minorization" → sufficient(+by-construction).
+  (Rem:noise: 상수 디코더 δ_c도 minorization 만족 → necessary 아님. noise는 *절대연속* minorization에만
+  necessary.) "breaking ergodicity" → 점질량 붕괴/ TV-uniform ergodicity 실패로 정밀화 권고.
