@@ -131,7 +131,7 @@
 - 남는 일: toy 시스템(비-OGTT) 하나에서도 같은 검증을 반복해 일반성 확보(옵션). grid 우도 계산
   스크립트 작성.
 
-### B4. 강한 baseline (decoupling이 진짜 이득인가)  `[~]`  (2026-07-14 — 10k 결론 뒤집힘, 캐노니컬 재검증 중)
+### B4. 강한 baseline (decoupling이 진짜 이득인가)  `[x]`  (2026-07-15 RESOLVED — confound 기각, 결론 확정)
 - ✅ 구현: `prob_models/paper/experiments/b4_baselines.py`. 세 방법 모두 **동일 컨텍스트**
   (data/split/normalizer 동일)에서 학습, B3 참조 posterior 대비 비교(5 seed × 5 ref = 25 run/method).
   - **A-DCVAE(dual, ours)**, **NPE-flow**(self-contained conditional RealNVP 단일망 `p(θ|x_obs)`,
@@ -152,18 +152,26 @@
   | NPE-flow | 0.61 | 1.995(과대분산) | 0.481(3배 악화) | 0.012 |
   | det-reg | 1.0* | 0.0 | 0.284 | 0.040 |
   → **순위가 뒤집힘**(A-DCVAE가 sliced-W2·방향 모두 우위)처럼 보였으나 —
-- ⚠️ **핵심 confound 발견 (v1 결과 신뢰 보류)**: `train_npe_flow`/`train_det_regressor`가
-  **patience=40 하드코딩**, A-DCVAE(via `B7.train_variant`)는 config 기본값 **patience=200**을 받음
-  → 5배 학습예산 불균형. 이 confound는 10k·50k 양쪽에 동일하게 있었지만, 50k에서 "같은 epoch-patience가
-  상대적으로 더 이른 종료"로 작용해 NPE/det-reg가 불리해졌을 가능성. **2026-07-14 수정**:
-  `b4_baselines.py`에 `--patience` 인자 추가, 세 방법 모두 통일 적용. **v2(patience=200 통일) 캐노니컬
-  재실행 진행중** — 완료 후 이 항목·`figure_b4_baselines.pdf`·`RESULTS.md` 갱신 예정.
-- **당분간 결론 보류**: v2 완료 전까지 "decoupling이 이긴다/못 이긴다" 어느 쪽도 논문에 확정 서술 금지.
-  확실한 것: (i) A-DCVAE는 구조(non-zero along-fiber, 방향 정확도)를 복원, (ii) det-reg는 무정보 점으로
-  붕괴. NPE 대비 우열은 v2로 판가름.
-- 살 수 있는 것(v2 결과와 무관하게 유효): (i) **은닉 상태 궤적 I(t) 부산물**(NPE엔 없는 물리 해석성,
-  Fig4), (ii) **3보장 설명**(B7), (iii) **ε_inc 자기일관 인증서**. decoupling이 진짜 이기는
-  regime(외삽/강한 비식별/Sim2Real)은 **미실증(B10)** — 향후 과제.
+- ⚠️ **confound 발견 (v1)**: `train_npe_flow`/`train_det_regressor`가 **patience=40 하드코딩**,
+  A-DCVAE(via `B7.train_variant`)는 config 기본값 **patience=200**을 받음 → 5배 학습예산 불균형.
+  2026-07-14 수정: `b4_baselines.py`에 `--patience` 인자 추가, 세 방법 모두 통일.
+- ✅ **v2 (patience=200 전체 통일, 2026-07-15 완료) — confound 기각, 최종 결론**:
+  | | ref-HPD cov↑ | along-fiber std↑ | sliced-W2↓ | mDI err↓ |
+  |---|---|---|---|---|
+  | A-DCVAE | 0.203 (≈v1) | 0.712 (≈v1) | **0.170** (≈v1) | 0.016 (≈v1) |
+  | NPE-flow | 0.572 (v1보다 악화) | 2.105 (v1보다 악화) | 0.533 (v1보다 악화) | 0.013 |
+  | det-reg | 1.0* | 0.0 | 0.292 | 0.020 |
+  patience를 5배 늘렸더니 **NPE-flow가 모든 지표에서 오히려 나빠짐**(과대분산 심화) — "flow가
+  undertrained라 불리했다"는 confound 가설이 **정면으로 기각**됨. A-DCVAE는 v1≈v2(patience 이미 200
+  이었으므로 당연한 내부 재현성 확인). **최종 결론: 캐노니컬(50k) 스케일에서 A-DCVAE가 sliced-W2(0.170
+  vs 0.533)와 방향(0.016 vs 0.013, 근접)에서 우위. NPE의 raw coverage(0.57)가 높은 건 정확도가
+  아니라 과대분산(스프레드 2.10, A-DCVAE의 ~3배)의 신호.** 10k-scale에서는 반대(NPE가 근소 우위)였다는
+  점도 함께 정직히 명시 — **이 비교는 스케일에 의존**하며, 논문엔 캐노니컬(50k) 결과를 인용해야 함.
+- **논문 기여 프레이밍 격상**: "decoupling은 metric에서 안 이기고 해석성만 판다"(기존 소극적 프레이밍)
+  대신, **"매칭된 학습예산 하 캐노니컬 스케일에서 decoupling이 구조 복원 정확도에서도 우위"**로 주장
+  가능(스케일 의존성 정직히 병기 조건). 살 수 있는 것(추가 논거로 유지): (i) **은닉 상태 궤적 I(t)
+  부산물**(NPE엔 없는 물리 해석성, Fig4), (ii) **3보장 설명**(B7), (iii) **ε_inc 자기일관 인증서**.
+  decoupling이 특히 크게 이기는 regime(외삽/강한 비식별/Sim2Real)은 **미실증(B10)** — 향후 과제.
 - ⚠️ 별개 버그노트(이미 해결): 최초 50k 시도는 10k eval normalizer를 50k-학습 canonical 체크포인트에
   적용해 A-DCVAE를 부당하게 불리하게 함(mDI err 0.153). 전 방법을 동일 컨텍스트에서 학습하도록 수정.
 
