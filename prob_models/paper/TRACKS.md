@@ -62,18 +62,23 @@
   across-fiber CV 10.0%±1.4%** (B2 비식별 증명의 수치 실증). π* 비교: sliced-W2 0.20±0.14,
   ref-HPD95 coverage 18.8%±2.6%, W1(logmDI) 0.489±0.011 — π*가 fiber 방향은 따르나 과대분산
   (mDI CV 80% vs 10%)+일관된 offset(정직한 근사갭). `figure_b3_reference_posterior.pdf`.
-- [~] **E2 (B4): 강baseline** — 10k-scale 완료 + **50k 캐노니컬 스케일 재현 진행중**(2026-07-14).
-  self-contained conditional RealNVP NPE 단일망 + 결정론 MSE regressor(collapse: along-fiber std 0).
-  **결정론 iterative는 iter_det 체크포인트 대신 깨끗이 수렴하는 MSE regressor 사용** — G0 병리 전시
-  회피(§주의).
-  - 10k-scale 결과: decoupling이 단일망 NPE를 명확히 이기지 못함(sliced-W2 무승부, coverage는 NPE 우위).
-  - **50k 캐노니컬(v1) 결과: 순위가 뒤집힘**(A-DCVAE가 sliced-W2·mDI 방향 모두 우위) — 단
-    ⚠️ **confound 발견**: NPE-flow/det-reg가 patience=40(하드코딩)으로 학습, A-DCVAE만 patience=200
-    (config 기본값)을 받음. 2026-07-14 `b4_baselines.py`에 `--patience` 인자 추가해 세 방법 모두
-    통일, **v2(patience=200 전체 통일) 캐노니컬 재실행 중**(백그라운드, PID 기록은 세션 로그 참조).
-    **v2 완료 전까지 "decoupling이 이긴다/못이긴다" 어느 쪽도 논문에 확정 서술 금지.**
-  - `figure_b4_baselines.pdf` (v1 반영, v2 완료 시 갱신 예정). **(정규화기 불일치 버그는 별도로 이미
-    수정됨: 모든 방법을 동일 컨텍스트에서 학습).**
+- [x] **E2 (B4): 강baseline** — **완료(2026-07-15), v2로 최종 확정**. self-contained conditional
+  RealNVP NPE 단일망 + 결정론 MSE regressor(collapse: along-fiber std 0). **결정론 iterative는
+  iter_det 체크포인트 대신 깨끗이 수렴하는 MSE regressor 사용** — G0 병리 전시 회피(§주의).
+  - 10k-scale: decoupling이 단일망 NPE를 명확히 이기지 못함(sliced-W2 무승부, coverage는 NPE 우위).
+  - 50k 캐노니컬 v1: 순위 뒤집힘(A-DCVAE 우위)이었으나 patience 불균형(flow/reg=40, A-DCVAE=200)
+    confound 있었음.
+  - ✅ **v2(patience=200 전체 통일) 완료 — confound 기각, 결론 확정**: patience를 늘렸더니 NPE-flow는
+    **오히려 더 나빠짐**(coverage 0.610→0.572, along-fiber spread 1.995→2.105, sliced-W2
+    0.481→0.533) — "flow가 덜 학습돼서 불리했다"는 가설이 틀렸음을 직접 확인. A-DCVAE는 v1→v2 사실상
+    동일(0.170/0.712/0.016, 재현성 확인). **최종 결론: 캐노니컬 스케일에서 A-DCVAE가 sliced-W2(0.170
+    vs 0.533)·방향(0.016 vs 0.013 근접)에서 우위, NPE의 높은 raw coverage(0.57)는 과대분산의 신호일
+    뿐 정확도 우위가 아님.** 10k-scale에서는 반대였다는 점도 함께 명시(스케일 의존성).
+  - 논문 기여 프레이밍 갱신: "decoupling은 metric 대신 해석성만 판다"가 아니라 **"매칭된 학습예산 하
+    캐노니컬 스케일에서 decoupling이 구조 복원 정확도(sliced-W2·방향)에서도 우위"**로 격상 가능(단
+    스케일 의존성은 정직하게 명시). 은닉상태 해석성(I(t))·3보장 설명·ε_inc 인증서는 보완 논거로 유지.
+  - `figure_b4_baselines.pdf` (v2 최종 반영 완료). 정규화기 불일치 버그는 별도로 이미 수정됨(모든
+    방법을 동일 컨텍스트에서 학습).
 - [x] **E3 (B7): 3-보장 격리 ablation** — 완료(5 seed × 3 variant, **10k + 50k 캐노니컬 스케일 모두
   실행, 15/15 run 정상 종료**, ~17.2h). 이론과 정합, 캐노니컬 스케일에서도 재현:
   (a) N1 condition off → **κ 0.41→0.71↑**(50k, Thm1 수축 저하 신호가 10k보다 더 뚜렷함, div=0: 발산
