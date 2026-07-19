@@ -127,7 +127,7 @@ def plot_figure3_A_global_1D(global_true, global_single, global_iter, save_dir):
 
     ax = axes[0]
     sns.kdeplot(sg_f[:, 0], ax=ax, fill=True, color="royalblue", alpha=0.5, label="Single CVAE", clip=(0, 10))
-    sns.kdeplot(it_f[:, 0], ax=ax, fill=True, color="forestgreen", alpha=0.5, label="Iter CVAEs", clip=(0, 10))
+    sns.kdeplot(it_f[:, 0], ax=ax, fill=True, color="forestgreen", alpha=0.5, label="A-DCVAE", clip=(0, 10))
     sns.kdeplot(gt_f[:, 0], ax=ax, color="black", linestyle="--", linewidth=2, label="True Prior", clip=(0, 10))
     ax.set(xlim=(0, 5), xlabel=r"Insulin Sensitivity ($S_I$)", ylabel="Density", title="A. Global 1D Marginals (Population)")
     ax.legend(loc="upper right", fontsize=11)
@@ -166,7 +166,7 @@ def plot_figure3_B_global_2D(global_true, global_single, global_iter, save_dir):
         # Ground Truth를 면(Patch)으로 표시하여 Contour임을 명시
         Patch(facecolor='lightgrey', edgecolor='dimgrey', linewidth=1.5, label='True Prior Density'),
         Line2D([0], [0], marker='o', color='w', markerfacecolor='royalblue', markersize=8, label='Single CVAE Samples'),
-        Line2D([0], [0], marker='o', color='w', markerfacecolor='forestgreen', markersize=8, label='Iter CVAEs Samples')
+        Line2D([0], [0], marker='o', color='w', markerfacecolor='forestgreen', markersize=8, label='A-DCVAE Samples')
     ]
     ax.legend(handles=legend_elements, loc="upper right", fontsize=10)
     
@@ -250,7 +250,7 @@ def plot_figure3_C_local_2D(local_true, local_single, local_iter, save_dir):
     # 6. Custom Legend (loc="upper right" 유지)
     legend_elements = [
         Patch(facecolor='royalblue', alpha=0.6, label=r'Single $q(\theta|x_{obs})$'),
-        Patch(facecolor='forestgreen', alpha=0.6, label=r'Iter $q(\theta|x_{obs})$'),
+        Patch(facecolor='forestgreen', alpha=0.6, label=r'A-DCVAE $q(\theta|x_{obs})$'),
         Line2D([0], [0], color='purple', linestyle='--', linewidth=2.5, label=rf"Theoretical Valley ($C={C_val:.1f}$)"),
         Line2D([0], [0], marker='*', color='w', markerfacecolor='firebrick', markersize=15, markeredgecolor='black', label='Ground Truth')
     ]

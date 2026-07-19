@@ -44,7 +44,7 @@ Submission ID: Click to Enter OpenReview ID
 \maketitle
 
 \begin{abstract}
-Estimating the parameters of nonlinear dynamical systems from sparse, partial, and noisy observations is a severely ill-posed inverse problem, and under structural non-identifiability it exposes a failure that is easy to mistake for mere inaccuracy: a network trained to minimize squared error collapses to the conditional mean $\E[\vtheta \mid \mX_{\mathrm{obs}}]$, which for a non-identifiable ridge is a low-density, often unphysical point rather than a solution. We take this collapse as a starting point, not a conclusion. Since the non-identifiability lives entirely in the unobserved states, the target posterior $p(\vtheta \mid \mX_{\mathrm{obs}})$ is a mixture of sharp, well-posed conditionals $p(\vtheta \mid \mX_{\mathrm{obs}}, \mX_{\mathrm{hid}})$ blurred by hidden-state uncertainty, and the natural sampler for it alternates between a hidden-state conditional and a parameter conditional---the same alternating operator that a deterministic decoupled estimator runs, but whose deterministic fixed point is exactly the collapsed conditional mean. We keep the operator and change what it converges to: replacing each deterministic map with a stochastic kernel turns the iteration into a sampler of the joint posterior. We give two guarantees in this probabilistic regime that parallel the contraction-and-alignment of deterministic work---injected noise makes the chain uniformly ergodic, so a unique invariant law exists with no contraction assumption, and training the two conditionals as denoisers steers that law toward the true posterior with a controlled bound. On sparsely observed physiological and synthetic systems, the framework recovers structured, multimodal posteriors along non-identifiable manifolds without collapse, and we characterize the resulting coverage--sharpness trade-off honestly. Full statements and proofs appear in a companion manuscript.
+Estimating the parameters of nonlinear dynamical systems from sparse, partial, and noisy observations is a severely ill-posed inverse problem, and under structural non-identifiability it exposes a failure that is easy to mistake for mere inaccuracy: a network trained to minimize squared error collapses to the conditional mean $\E[\vtheta \mid \mX_{\mathrm{obs}}]$, which for a non-identifiable ridge is a low-density, often unphysical point rather than a solution. We take this collapse as a starting point, not a conclusion. Since the non-identifiability lives entirely in the unobserved states, the target posterior $p(\vtheta \mid \mX_{\mathrm{obs}})$ is a mixture of sharp, well-posed conditionals $p(\vtheta \mid \mX_{\mathrm{obs}}, \mX_{\mathrm{hid}})$ blurred by hidden-state uncertainty, and the natural sampler for it alternates between a hidden-state conditional and a parameter conditional---the same alternating operator that a deterministic decoupled estimator runs, but whose deterministic fixed point is exactly the collapsed conditional mean. We keep the operator and change what it converges to: replacing each deterministic map with a stochastic kernel turns the iteration into a sampler of the joint posterior. We give two guarantees in this probabilistic regime that parallel the contraction-and-alignment of deterministic work---injected noise makes the chain uniformly ergodic, so a unique invariant law exists with no contraction assumption, and training the two conditionals as denoisers steers that law toward the true posterior with a controlled bound. On a sparsely observed physiological model, the framework recovers structured, multimodal posteriors along non-identifiable manifolds without collapse. Graded against an analytic reference posterior at the training scale matching our checkpoints, decoupling reconstructs the reference more accurately---in sliced-Wasserstein distance---than a matched-budget single-network estimator, though we note this ordering is scale-dependent and characterize the coverage--sharpness trade-off honestly. Full statements and proofs appear in a companion manuscript.
 \end{abstract}
 
 \section{Introduction}
@@ -60,7 +60,7 @@ Why is $p(\vtheta \mid \mX_{\mathrm{obs}})$ so poorly behaved, and what fixes it
 \end{equation}
 This is the probabilistic rationale for decoupling: separate a well-posed parameter conditional from the hidden-state uncertainty that blurs it, rather than attacking the blurred marginal directly.
 
-The natural sampler for this mixture alternates between the two conditionals---drawing $\mX_{\mathrm{hid}} \sim p(\mX_{\mathrm{hid}} \mid \mX_{\mathrm{obs}}, \vtheta)$ and then $\vtheta \sim p(\vtheta \mid \mX_{\mathrm{obs}}, \mX_{\mathrm{hid}})$---a (pseudo-)Gibbs sweep defining an operator $\mathcal{T}$. A deterministic decoupled estimator runs exactly this operator with the conditional \emph{means}, so its fixed point is $\E[\vtheta \mid \mX_{\mathrm{obs}}]$: the collapsed center is not an artifact of a particular architecture but the fixed point of the mean operator, a one-line consequence of iterating $\mathcal{T}$ with means. Our move is to keep the operator and change what it converges to. Replacing each deterministic map by a stochastic kernel lets the same iteration sample the full conditional instead of its mean, so the question shifts from ``does $\mathcal{T}$ have a fixed point'' to ``what law does $\mathcal{T}$ converge to, and is it the right one.'' Deterministic decoupled estimators are thus a baseline class and a limiting case, not a prerequisite. We instantiate the two conditionals as Conditional Variational Autoencoders (a Dual CVAE) and alternate between them with a stochastic Pseudo-Gibbs routine that samples $\mX_{\mathrm{hid}}$ and $\vtheta$ given $\mX_{\mathrm{obs}}$.
+The natural sampler for this mixture alternates between the two conditionals---drawing $\mX_{\mathrm{hid}} \sim p(\mX_{\mathrm{hid}} \mid \mX_{\mathrm{obs}}, \vtheta)$ and then $\vtheta \sim p(\vtheta \mid \mX_{\mathrm{obs}}, \mX_{\mathrm{hid}})$---a (pseudo-)Gibbs sweep defining an operator $\mathcal{T}$. A deterministic decoupled estimator runs exactly this operator with the conditional \emph{means}, so its fixed point is $\E[\vtheta \mid \mX_{\mathrm{obs}}]$: the collapsed center is not an artifact of a particular architecture but the fixed point of the mean operator, a one-line consequence of iterating $\mathcal{T}$ with means. Our move is to keep the operator and change what it converges to. Replacing each deterministic map by a stochastic kernel lets the same iteration sample the full conditional instead of its mean, so the question shifts from ``does $\mathcal{T}$ have a fixed point'' to ``what law does $\mathcal{T}$ converge to, and is it the right one.'' Deterministic decoupled estimators are thus a baseline class and a limiting case, not a prerequisite. We instantiate the two conditionals as Conditional Variational Autoencoders (a dual-CVAE architecture) and alternate between them with a stochastic Pseudo-Gibbs routine that samples $\mX_{\mathrm{hid}}$ and $\vtheta$ given $\mX_{\mathrm{obs}}$; we call the resulting method \textbf{Alternating Denoising CVAEs (A-DCVAE)}.
 
 Two questions then replace the single fixed-point question, and we answer them in parallel to the contraction-and-alignment guarantees of deterministic work. \emph{Existence}: the injected noise gives $\mathcal{T}$ a strictly positive transition density on a compact state space, making it uniformly ergodic, so a unique invariant law $\pi^\ast$ exists and is reached geometrically---with \emph{no} contraction assumption, in contrast to the spectral-norm contraction a deterministic fixed point requires. \emph{Correctness}: training the two conditionals as denoisers steers $\pi^\ast$ toward the true posterior, the probabilistic counterpart of teacher forcing, with a bound that is controlled rather than zero and a self-consistency certificate computable from the trained model alone. We state these results in abbreviated form and defer full statements, assumptions, and proofs to a companion manuscript \citep{adcvae-theory}.
 
@@ -73,18 +73,15 @@ Two questions then replace the single fixed-point question, and we answer them i
 %     mean E[theta|X_obs], visibly OFF the fiber, in the low-density interior
 %     between fiber branches; a small caption tag "E[theta|X_obs]". Optional
 %     faint arrow: iterate T (means) -> single fixed point.
-%   Panel (b) "Track the fiber": Dual CVAE. Show a crescent-shaped point cloud
-%     hugging the fiber and covering the star; a few Pseudo-Gibbs sample arrows
-%     alternating along X_hid <-> theta to convey the sampler.
-%   Shared legend: star = truth, grey curve = fiber, dots = posterior samples.
-%   Keep it schematic; a real posterior inset from figure3.py (panel C) may be
-%   dropped in later. Replace the \fbox below with the final PDF/TikZ.
+%   Panel (b) "Track the fiber": A-DCVAE. Crescent-shaped point cloud hugging the
+%     fiber and covering the star; Pseudo-Gibbs arrows convey the sampler.
+%   Rendered by prob_models/paper/experiments/fig1_teaser.py (conceptual, self-contained).
 % ---------------------------------------------------------------------------
 \begin{figure}[h]
 \begin{center}
-\fbox{\rule[-.5cm]{0cm}{3.5cm} \rule[-.5cm]{5cm}{0cm}}
+\includegraphics[width=0.92\textwidth]{figures/figure1_teaser.pdf}
 \end{center}
-\caption{\textbf{Teaser: collapse to the mean vs.\ tracking the fiber.} Under partial observation the parameter posterior concentrates on a non-identifiable fiber (grey curve) passing through the truth (star). \textbf{(a)} A single-network or deterministic decoupled estimator, trained to minimize squared error, collapses to the conditional mean $\E[\vtheta \mid \mX_{\mathrm{obs}}]$---a confident point that sits off the fiber in a low-density region. \textbf{(b)} Our Dual CVAE runs the \emph{same} alternating operator with stochastic kernels, so the iteration samples the full conditional and traces the crescent-shaped fiber, covering the truth with calibrated, structured uncertainty.}
+\caption{\textbf{Teaser: collapse to the mean vs.\ tracking the fiber} (conceptual). Under partial observation the parameter posterior concentrates on a non-identifiable fiber (grey curve) passing through the truth (star). \textbf{(a)} A single-network or deterministic decoupled estimator, trained to minimize squared error, collapses to the conditional mean $\E[\vtheta \mid \mX_{\mathrm{obs}}]$---a confident point that sits off the fiber in a low-density region. \textbf{(b)} A-DCVAE runs the \emph{same} alternating operator with stochastic kernels, so the iteration samples the full conditional and traces the crescent-shaped fiber, covering the truth with calibrated, structured uncertainty.}
 \label{fig:teaser}
 \end{figure}
 
@@ -92,7 +89,7 @@ Our contributions are summarized as follows:
 \begin{itemize}
     \item A \emph{generative decoupling} framework that preserves the physical hidden-state/parameter partition and recasts non-identifiability as structured posterior uncertainty; the two-network alternation is \emph{derived} as a sampler of the joint posterior via the mixture identity~\eqref{eq:mixture}, not adopted as a heuristic.
     \item Two guarantees that replace global spectral contraction with local, noise-driven ones: existence of a unique invariant law by ergodicity (assuming no contraction) and steering of that law toward the true posterior by denoising, accompanied by a computable self-consistency certificate. We state them briefly here and prove them in the companion manuscript \citep{adcvae-theory}.
-    \item Empirical evidence, on a physiological model (the OGTT minimal model) and controlled synthetic systems, that the framework recovers structured multimodal posteriors along non-identifiable manifolds without collapse, while single-network and deterministic decoupled baselines collapse to the conditional mean; we characterize the coverage--sharpness trade-off honestly rather than claiming uniform superiority.
+    \item Empirical evidence on the OGTT minimal model, graded against an analytic reference posterior: A-DCVAE recovers the structured, multimodal posterior along the non-identifiable fiber without collapse and, at the training scale matching our canonical checkpoints, reconstructs the reference more accurately (in sliced-Wasserstein distance) than a matched-budget single-network NPE baseline, while a deterministic regressor collapses to the conditional mean. An ablation isolates the three noise ingredients, and we report the scale-dependence and coverage--sharpness trade-off honestly.
 \end{itemize}
 
 \section{Background \& Related Work}
@@ -124,14 +121,13 @@ Sampling from independently learned conditionals is pseudo-Gibbs on a dependency
 \section{Experimental Results: Identifiability \& Model Collapse}
 \label{sec:experiments}
 
-We evaluate our framework on physiological models known to contain structurally unidentifiable regimes under sparse conditions, notably the Oral Glucose Tolerance Test (OGTT) minimal model. Trajectories are generated within a clinically valid compact support representing metabolic variants from normal to diabetic ranges.
+We evaluate on the Oral Glucose Tolerance Test (OGTT) minimal model, a physiological system with a structurally unidentifiable regime under sparse observation: glucose depends on the parameters $\vtheta=(S_I,\sigma)$ only through the product $mDI = S_I\,\sigma$, so from glucose alone the pair is identifiable only up to the fiber $S_I\,\sigma = \text{const}$, resolved only by the hidden insulin trajectory. Trajectories are generated within a clinically valid compact support spanning metabolic variants from normal to diabetic ranges. Because the likelihood depends on $\vtheta$ only through $mDI$, we can build a cheap \emph{analytic reference posterior} by grid forward-simulation (\Secref{sec:reference}) and grade the sampler against it, rather than by self-consistency alone. Unless noted, results are at the canonical scale ($50$k simulations, patience-matched training) that matches our checkpoints, averaged over $5$ seeds.
 
 \begin{figure}[h]
 \begin{center}
-\fbox{\rule[-.5cm]{0cm}{3.5cm} \rule[-.5cm]{3.5cm}{0cm}} \quad
-\fbox{\rule[-.5cm]{0cm}{3.5cm} \rule[-.5cm]{3.5cm}{0cm}}
+\includegraphics[width=0.9\textwidth]{figures/figure2_mcmc.pdf}
 \end{center}
-\caption{\textbf{MCMC Convergence and Posterior Quality:} (Left) Trace plots demonstrating stable empirical convergence and mixing after a brief burn-in period. (Right) Autocorrelation metrics confirming rapid decay under local Jacobian constraints.}
+\caption{\textbf{Sampler diagnostics.} A $2\times2$ panel for a representative chain: the top row shows the pseudo-Gibbs traces of $S_I$ (left) and $\sigma$ (right), which mix stably about their marginals after a short burn-in; the bottom row shows the corresponding autocorrelation functions, which drop to noise within a few lags (mean lag-$1$ autocorrelation $0.012$ across chains), indicating fast mixing.}
 \label{fig:mcmc_diag}
 \end{figure}
 
@@ -141,9 +137,9 @@ We evaluate our framework on physiological models known to contain structurally 
 
 \begin{figure}[h]
 \begin{center}
-\fbox{\rule[-.5cm]{0cm}{3.5cm} \rule[-.5cm]{6cm}{0cm}}
+\includegraphics[width=0.92\textwidth]{figures/figure4_predictive.pdf}
 \end{center}
-\caption{\textbf{Posterior Predictive Check:} Forward ODE integration using samples drawn from the two peaks of our estimated bimodal posterior. Both parameter regimes reconstruct the sparse empirical observation track (dots) with exact precision, proving the model has decoded the true underlying system ambiguity.}
+\caption{\textbf{Posterior predictive check along the fiber.} Six parameter samples drawn \emph{along} the non-identifiable fiber $S_I\,\sigma = mDI$ are pushed through the forward ODE. \textbf{(Left)} All six reproduce essentially the same glucose curve through the sparse observations (dots), so glucose alone cannot separate them. \textbf{(Right)} The hidden insulin trajectories they imply diverge widely (peak $I$ from ${\sim}320$ down to ${\sim}45$). The ambiguity is thus a genuine observational non-identifiability---one that the hidden state, had it been measured, would resolve---not a modeling artifact.}
 \label{fig:predictive_check}
 \end{figure}
 
@@ -153,13 +149,13 @@ To stress-test our model, we evaluate inference degradation by incrementally inj
 
 \begin{figure}[h]
 \begin{center}
-\fbox{\rule[-.5cm]{0cm}{3.5cm} \rule[-.5cm]{6cm}{0cm}}
+\includegraphics[width=0.62\textwidth]{figures/figure5_noise_sensitivity.pdf}
 \end{center}
-\caption{\textbf{Noise Sensitivity Profile:} Deterministic baselines maintain a high-bias, flat-line error response. In contrast, generative architectures exhibit high-variance spiking curves once observation noise pushes inputs off the clean manifold.}
+\caption{\textbf{Noise sensitivity.} As Gaussian noise is added to the test observations (0--20\% of feature std), A-DCVAE's mean posterior standard deviation rises \emph{smoothly and monotonically} ($0.33 \to 0.64$), reporting growing uncertainty as inputs leave the training manifold. The Single-CVAE baseline stays flat and near zero (${\sim}0.003$), remaining confident regardless of perturbation.}
 \label{fig:noise}
 \end{figure}
 
-The high sensitivity of the Dual CVAE originates directly from its superior performance: it maps a razor-thin, precise geometric manifold of the physics equations. When observation noise pushes inputs off-manifold, the generative alignment falters, leading to variance spikes. This reveals that structural precision introduces sensitivity to noise, defining a distinct bias-variance frontier.
+The monotone widening of A-DCVAE's posterior as inputs move off-manifold is the model reporting honestly-growing uncertainty: it has learned a thin, precise geometric manifold of the clean dynamics, and inputs pushed away from it are met with wider, not falsely confident, predictions. The Single-CVAE baseline's flat, near-zero spread is the opposite failure---over-confidence that ignores the perturbation entirely. This is a bias--variance frontier rather than a defect: structural precision buys calibrated sensitivity to distribution shift, and the honest response is to widen. We revisit its out-of-distribution limits in the discussion of limitations.
 
 \section{Conclusion \& Future Work}
 \label{sec:conclusion}

@@ -234,6 +234,30 @@ networks. (W4) Table1 PICP↔MPIW 트레이드오프 서사·한계 정직성. F
 주의: experiment 서술·Table·Fig 최종본은 Track E 결과에 의존하므로, 결과 미확정 부분은 placeholder로.
 ```
 
+### ▶ Track W 3차 (draft 마무리) 프롬프트  — 2026-07-19 이후
+```
+prob_models(Paper 2, A-DCVAE) writing 트랙의 마무리 단계입니다. 먼저 TRACKS.md §0·§4(Track W)와
+로그(2026-07-19 항목), experiments/RESULTS.md를 읽으세요. 1·2차에서 B1/B8/W4/Fig1 서사 + Track E
+확정결과(B3/B4/B7) 통합 + 이름 통일(A-DCVAE) + figure 9종 완비가 끝났습니다. 남은 일:
+
+1. **Overleaf 첫 컴파일 (최우선, 구조 이슈 있음)**: main.tex가 경로를 두 기준으로 섞음 —
+   `.sty`/`math_commands.tex`는 iclr2026/ 기준, `sections/`·`figures/`는 상위 paper/ 기준(심링크 X).
+   그대로 올리면 Overleaf가 못 찾음. 해법: main.tex + iclr2026/*.sty + math_commands.tex를 sections/·
+   figures/와 같은 레벨(paper/ 루트)로 재배치하거나, \input/\graphicspath 경로를 한 기준으로 통일.
+   컴파일 후 실제 오류(정적검사로 못 잡는 것) 수정.
+2. **bib 12개 서지 검증**: papamakarios2016fast·greenberg2019automatic·lueckmann2021benchmarking·
+   papamakarios2021normalizing·ho2020denoising·song2021score·chung2023diffusion·kadkhodaie2021stochastic·
+   vono2019split·coeurdoux2024plug·arnold2001conditionally·lipman2023flow 의 저자/venue/권/페이지 대조.
+3. **통합 draft 전체 정독(coherence)**: Experiments가 커짐(non_identifiability→reference→baselines→
+   ablation→predictive/noise). 흐름·전환·중복·섹션 순서 점검. §5 Analysis(Fig5)가 ablation 뒤에 오는
+   배치가 자연스러운지 검토. abstract/intro가 주장 상향으로 밀도 높아짐 → 최종 tightening.
+4. (선택) figure3_A(1D marginal) 본문 추가 여부, companion 이론논문(Track T) 진척과의 정합.
+
+주의: 수치는 RESULTS.md가 정본(sliced-W2 0.170 vs 0.533 등). 과대주장 금지, 10k 스케일 역전은 유지.
+figure 재생성이 필요하면 experiments/regen_figure3.py·fig1_teaser.py·phase4_figures.py 참고(메인
+트리 CWD·GPU 필요). 먼저 Overleaf 구조 재배치안을 제시하고 합의 후 진행하세요.
+```
+
 ### 로그
 - 2026-07-13 — 최초 작성. 3트랙(E/T/W) 분리, todo·주의·kickoff 프롬프트 정리.
 - 2026-07-14 — **Track W 1차 완료(B1/B8/W4/Fig1 서술).** intro를 "공유 연산자 T, 수렴 대상을
@@ -242,3 +266,17 @@ networks. (W4) Table1 PICP↔MPIW 트레이드오프 서사·한계 정직성. F
   compatible conditionals). W4 정직성(PICP↔MPIW 방향성·Limitations/Sim2Real 완화). Fig1 캡션+설계스펙.
   bib 12개 추가(⚠️서지 검증). 미정의 `\xobs` 수정. 정적검사 통과(LaTeX 컴파일은 사용자 로컬).
   **미착수/의존**: experiment 수치·참조 posterior·ε_inc ablation·강baseline(B4)·Fig2/4/5는 Track E 대기.
+- 2026-07-19 — **Track W 2차: Track E 확정결과 통합.** (0) main으로 sync(PR#2 merge, `54a3cb8`).
+  (1) 캡션 3건 교정: Fig2(2패널→2×2 grid), Fig4(bimodal 과대주장→mDI fiber 6샘플·은닉 I 발산),
+  Fig5(spiking→완만 단조 0.33→0.64). \fbox placeholder 4개를 실제 PDF `\includegraphics`로 교체
+  (teaser·Fig2·Fig4·Fig5). (2) B4/B3/B7을 experiment1.tex 신규 3소절로 통합: `sec:reference`(B3
+  참조 posterior, 과대분산 정직 갭), `sec:baselines`(B4 v2 캐노니컬 표+그림, sliced-W2 0.170 vs
+  0.533), `sec:ablation`(B7 3보장 격리). (3) **주장 강도 상향+스케일 caveat**(Q1): abstract·
+  contributions에 "캐노니컬 스케일에서 sliced-W2 우위" 반영, 10k 역전 명시. "synthetic systems"
+  미실행 claim 삭제(정직성). (4) **method 이름 통일→A-DCVAE**(Dual CVAE/IterCVAEs/Iterative CVAEs
+  전부 교체; figure3.py 라벨도 Iter→A-DCVAE 패치). (5) Fig1 teaser
+  실제 PDF 생성(`figure1_teaser.pdf`, `experiments/fig1_teaser.py`, 개념도). (6) **figure3_B/C 재생성
+  완료**(`experiments/regen_figure3.py`, canonical 체크포인트 seed=42, GPU1/메인트리 실행) — 범례
+  Iter→A-DCVAE 통일, tail idx 319(S_I=1.454,σ=0.124)로 원본과 동일 샘플 재현. 정적검사 통과(cite·
+  ref/label·env·이름잔재 0). **미완**: bib 12개 서지검증(draft 완성 후), 로컬 LaTeX 컴파일(서버에
+  TeX 미설치 → tectonic 권장).
