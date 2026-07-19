@@ -87,13 +87,26 @@
   분포 복원이 목표.
 
 ## 9. 작업 목록 (제안 순서)
-- [ ] T2-1. `ε_inc` 상수 정리 증명(§4-공백1) → `theory_notes.tex`에 추가.
-- [ ] T2-2. approximate-MCMC 포지셔닝 절 초안(§7) + bib 확충.
-- [ ] T2-3. 수치 예시 E-a/b/c 설계·구현·plot.
-- [ ] T2-4. `theory_notes.tex` → JMLR 논문 초안 조립(§5 구조), 표기 통일(plain/bold) 포함.
+- [x] T2-1. `ε_inc` 상수 정리 증명(§4-공백1) → `theory_notes.tex`에 추가. (Thm:incbound, Lem:assembly,
+      Ass:truereg. `C_H=A+A(1+L_H†)L_P/(1−κ)`, `C_P=1+A(1+L_H†)/(1−κ)`, `A=2+L_P†`, `C=max`. 참 조건부
+      compatibility를 pivot으로, 참 조건부 W₂-Lipschitz(L_H†,L_P†) 가정 신설.)
+- [x] T2-2. approximate-MCMC 포지셔닝 절(§7) + bib 확충 → `jmlr/main.tex`. (perturbed-MCMC vs 우리
+      대상·ε_inc 차별화 3축 + 정직성 표 Table:einc; bib 17종.)
+- [x] T2-3. 수치 예시 E-a/b/c **설계+구현+plot 완료** → `jmlr/numerics/`(NumPy/SciPy). E-a κ=ρ²=0.640·
+      exactness 1e-10, E-b Thm B·incbound 전 δ 성립·MC-Bures 밀착, E-c coverage 0.95·along-ridge
+      1.19 vs 0.000·ε_inc 0.008. 그림 3종 §8 embed. Track E와 독립 수행(sliced_w2만 `_metrics.py` 공유).
+- [~] T2-4. `theory_notes.tex` → `jmlr/main.tex` 조립: 정리 본문·증명 이식(Thm A/rate/B/Prop inc/
+      Thm incbound full proof; 표준 예비지식 인용 축약), 표기 통일(bold θ,u), 노테이션 표 Table:notation,
+      **intro·discussion 산문 작성 완료**. 정적 검사 통과. 남음: T2-5 제목, 최종 다듬기(preliminaries §2-3
+      추가 축약 여지).
 - [ ] T2-5. 제목 확정(후보: *"Convergence and Consistency of Amortized Pseudo-Gibbs Samplers with
       Learned Conditionals"*, *"Ergodicity and Steering of Alternating Denoising Samplers"*).
 
 ### 로그
 - 2026-07-13 — 최초 작성. JMLR 1순위 확정. standalone 3-공백(ε_inc 상수·approx-MCMC 포지셔닝·
   수치검증), 구조·분업·리스크 정리.
+- 2026-07-14 — T2-1 완료. `theory_notes.tex`에 Assumption:truereg(참 조건부 W₂-Lipschitz) +
+  Lemma:assembly(가측 gluing 조립 bound) + Theorem:incbound(`ε_inc≤C(ε_H+ε_P)`, 명시 상수) +
+  Remark:incconst 추가. Remark:nodouble의 deferral 문장을 Thm:incbound 참조로 교체. 정적 검사 통과
+  (env 짝·ref/label 정합·중복 label 없음). 남은 standalone 공백: T2-2(approx-MCMC 포지셔닝),
+  T2-3(수치검증).

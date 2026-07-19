@@ -1,0 +1,836 @@
+\documentclass[11pt]{article}
+% =====================================================================
+%  JMLR companion theory paper -- DRAFT (Track T; T2-4 assembly in progress)
+%  Template-agnostic article; port to jmlr2e.sty later.
+%
+%  Ported from ../theory_notes.tex (Rev.2, 3rd-pass reviewed). Convention:
+%  standard measure-/Markov-theoretic facts are STATED WITH CITATION (not
+%  reproved) at paper altitude; the substantive/novel results carry full
+%  proofs. Notation unified to bold theta/u throughout (theory_notes mixes
+%  bold in secs 1-8 with plain in the contraction/steering secs).
+%
+%  Static-check convention (no LaTeX toolchain in-session):
+%   balanced \begin/\end; every \ref has a \label; every \cite has a \bibitem.
+% =====================================================================
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{graphicx}
+\usepackage[round,authoryear]{natbib}
+\usepackage{hyperref}
+
+\DeclareMathOperator{\intr}{int}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{fact}[theorem]{Fact}
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\newtheorem{assumption}{Assumption}
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Prob}{\mathbb{P}}
+\newcommand{\cF}{\mathcal{F}}
+\newcommand{\cP}{\mathcal{P}}
+\newcommand{\Om}{\Omega}
+\newcommand{\Leb}{\mathrm{Leb}}
+\newcommand{\TV}{\mathrm{TV}}
+\newcommand{\Normal}{\mathcal{N}}
+\newcommand{\xobs}{\bm{x}_{\mathrm{obs}}}
+\newcommand{\bth}{\bm{\theta}}
+\newcommand{\bu}{\bm{u}}
+\newcommand{\bz}{\bm{z}}
+\newcommand{\push}{{}_{\#}}
+\newcommand{\norm}[1]{\lVert #1 \rVert}
+\newcommand{\abs}[1]{\lvert #1 \rvert}
+\newcommand{\einc}{\varepsilon_{\mathrm{inc}}}
+\newcommand{\edist}{\varepsilon_{\mathrm{dist}}}
+
+% ---- Working title (finalize in T2-5) --------------------------------
+\title{\textbf{Convergence, Consistency, and a Computable Compatibility\\
+Certificate for Amortized Pseudo-Gibbs Samplers with Learned Conditionals}}
+\author{Anonymous (companion to the A-DCVAE application paper)}
+\date{Draft --- \today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We study amortized \emph{pseudo-Gibbs} samplers built by alternating two \emph{separately learned}
+neural conditional samplers $Q_H(\bu\mid\bth)$ and $Q_P(\bth\mid\bu)$ on a \emph{continuous} state
+space. Unlike a true Gibbs sampler, the two learned conditionals need not be the conditionals of any
+common joint: they may be \emph{incompatible}. We give a unified, non-asymptotic analysis of the
+resulting chain: (i) \emph{existence and uniform ergodicity} of a unique stationary law in total
+variation, from injected noise and compactness alone (no contraction assumed, Theorem~\ref{thm:A});
+(ii) a \emph{Wasserstein mixing rate} governed by the condition-Lipschitz constants
+(Theorem~\ref{thm:rate}); and (iii) a \emph{steering / consistency} bound on the distance from the
+stationary law to the true posterior (Theorem~\ref{thm:B}). Our central object is a computable
+\emph{self-consistency certificate} $\einc$, estimable from a single run of the trained model without
+access to the truth, which we show (a) vanishes iff the learned conditionals are compatible
+(Proposition~\ref{prop:inc}), and (b) is bounded by the individual approximation defects with an
+explicit constant (Theorem~\ref{thm:incbound}). We position the results against approximate/perturbed
+MCMC and dependency networks, and validate them on controlled examples.
+\end{abstract}
+
+\tableofcontents
+
+% =====================================================================
+\section{Introduction}
+\label{sec:intro}
+
+A true Gibbs sampler alternates the conditionals $p(\bu\mid\bth)$ and $p(\bth\mid\bu)$ of a
+\emph{single} joint law; compatibility is automatic and the chain is exact for that joint. We study
+what happens when the two conditionals are instead \emph{learned separately}, as neural samplers
+$Q_H(\bu\mid\bth)$ and $Q_P(\bth\mid\bu)$, and alternated on a \emph{continuous} state space. Nothing
+forces $Q_H,Q_P$ to be the conditionals of any common joint---they may be \emph{incompatible}---so
+four questions arise: does the sweep converge (existence), how fast (rate), to \emph{what} and how far
+from the true posterior (steering), and can one \emph{detect} incompatibility without knowing the
+truth (certification)?
+
+The continuous setting is where the difficulty concentrates. For a \emph{finite} state space a
+strictly positive transition matrix already yields a unique stationary law and geometric convergence
+by Perron--Frobenius; this is the regime of dependency networks \citep{heckerman2000}, whose analysis
+of separately learned conditionals is discrete and asymptotic. On a continuous space positivity is not
+enough: we must supply a minorization to obtain existence (Section~\ref{sec:existence}), and a
+Wasserstein contraction---not total variation, which is blind to how close distinct points are---to
+obtain a dimension-robust rate and a stability constant (Sections~\ref{sec:rate}--\ref{sec:steering}).
+Our steering bound has the shape of a classical perturbed-MCMC bound
+\citep{mitrophanov2005,rudolf2018}, and we are explicit that the machinery is standard; what is new is
+the \emph{object}---separately learned, possibly incompatible conditionals in continuous space---and a
+\emph{computable} certificate of self-consistency. Section~\ref{sec:positioning} makes the comparison
+precise.
+
+\paragraph{Contributions.}
+\begin{enumerate}
+  \item \textbf{A new object made rigorous.} A non-asymptotic, continuous-state theory for Gibbs
+        sweeps assembled from \emph{separately learned, possibly incompatible} conditionals:
+        existence/uniform ergodicity (Theorem~\ref{thm:A}), a Wasserstein rate (Theorem~\ref{thm:rate}),
+        and a steering bound to the true posterior (Theorem~\ref{thm:B}).
+  \item \textbf{A computable compatibility certificate $\einc$.} Estimable from one run of the trained
+        model, with no access to the truth; it vanishes exactly when the two conditionals are
+        compatible (Proposition~\ref{prop:inc}), and is dominated by the individual approximation
+        defects with an \emph{explicit} constant (Theorem~\ref{thm:incbound}).
+  \item \textbf{A unified frame + noise taxonomy} dissolving the apparent ``more contraction
+        $\Rightarrow$ more collapse'' tension (Remark~\ref{rem:noises}).
+\end{enumerate}
+Simulation-based / amortized inference \citep{papamakarios2016,cranmer2020} motivates the learned
+conditionals; our analysis is agnostic to how they are trained.
+
+% =====================================================================
+\section{Preliminaries and notation}
+\label{sec:prelim}
+
+We work on Borel subsets of Euclidean space. For $S\subseteq\R^d$, $\intr S$ denotes interior,
+$\partial S$ boundary, $\Leb$ Lebesgue measure, and $\cP(\Om)$ the probability measures on
+$(\Om,\cF)$ with $\cF=\mathcal B(\Om)$. Pushforward is $(f\push\mu)(A)=\mu(f^{-1}(A))$.
+Table~\ref{tab:notation} collects the symbols that recur; we draw attention to the several
+$\varepsilon$'s, which name \emph{distinct} quantities.
+
+\begin{table}[h]
+\centering
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}l l l@{}}
+\toprule
+Symbol & Meaning & Introduced \\
+\midrule
+\multicolumn{3}{@{}l}{\emph{Constants and defects}}\\
+$\sigma_H,\sigma_P>0$ & Gaussian injection-noise scales (noise class N4) & Def.~\ref{def:condmaps}\\
+$L_H,L_P$ & condition-Lipschitz constants of the \emph{learned} decoders & Asm.~\ref{ass:lip}\\
+$\kappa=L_HL_P$ & sweep $W_2$-contraction constant & Thm.~\ref{thm:rate}\\
+$L_H^\dagger,L_P^\dagger$ & condition-$W_2$-Lipschitz constants of the \emph{true} conditionals & Asm.~\ref{ass:truereg}\\
+$\delta_H,\delta_P$ & uniform Lebesgue-density lower bounds of $Q_H,Q_P$ & Eq.~\eqref{eq:deltaH}\\
+$\varepsilon=\delta_H\delta_P\Leb(\Om)$ & Doeblin minorization constant; TV rate $(1-\varepsilon)^n$ & Lem.~\ref{lem:minor}\\
+$\varepsilon_H,\varepsilon_P$ & approximation defects $\sup W_2(\text{learned},\text{true})$ & Eq.~\eqref{eq:defects}\\
+$\einc$ & self-consistency defect $W_2(\Pi^\rightarrow,\Pi^\leftarrow)$ (\emph{computable}) & Eq.~\eqref{eq:einc}\\
+$\edist$ & distortion defect ($\sigma$-smoothing $+$ projection), folded into $\varepsilon_H,\varepsilon_P$ & Rem.~\ref{rem:edist}\\
+$C,C_H,C_P$ & constants in $\einc\le C(\varepsilon_H+\varepsilon_P)$ & Thm.~\ref{thm:incbound}\\
+\midrule
+\multicolumn{3}{@{}l}{\emph{Kernels}}\\
+$Q_H(\cdot\mid\bth),\,Q_P(\cdot\mid\bu)$ & learned conditionals & Def.~\ref{def:condmaps}\\
+$p^\dagger_H(\cdot\mid\bth),\,p^\dagger_P(\cdot\mid\bu)$ & true conditionals & Asm.~\ref{ass:suptrue}\\
+$T$ & full one-sweep kernel on $\Om=\Om_H\times\Om_\Theta$ & Def.~\ref{def:T}\\
+$K,\,K^\dagger$ & $\bth$-marginal sweep kernels: learned, true & Thm.~\ref{thm:rate},\,\S\ref{sec:steering}\\
+\midrule
+\multicolumn{3}{@{}l}{\emph{Measures}}\\
+$\pi^\ast$ & joint invariant law of $T$ (TV) & Thm.~\ref{thm:A}\\
+$\nu^\ast$ & $\bth$-marginal invariant (the sampler's output law) & Thm.~\ref{thm:rate}\\
+$\nu^\dagger=p(\bth\mid\xobs)$ & true $\bth$-posterior (the estimand) & \S\ref{sec:steering}\\
+$\mu^\ast,\,\mu^\dagger$ & hidden-state marginals: forward-sweep, true & \S\ref{sec:steering}\\
+$\Pi^\dagger=p(\bth,\bu\mid\xobs)$ & true joint posterior & Asm.~\ref{ass:suptrue}\\
+$\Pi^\rightarrow=\nu^\ast\!\otimes Q_H,\ \Pi^\leftarrow=Q_P\!\otimes\mu^\ast$ & forward/backward assembled joints & Eq.~\eqref{eq:einc}\\
+\bottomrule
+\end{tabular}
+\caption{Notation. The five defect symbols $\varepsilon,\varepsilon_H,\varepsilon_P,\einc,\edist$
+are \emph{distinct}: $\varepsilon$ is the TV minorization constant; $\varepsilon_H,\varepsilon_P$
+measure learned-vs-true conditional error; $\einc$ is the computable self-consistency defect; $\edist$
+is the $\sigma$/projection distortion folded into $\varepsilon_H,\varepsilon_P$.}
+\label{tab:notation}
+\end{table}
+
+\paragraph{Metrics and standard facts (cited).}
+The total variation distance is $\norm{\mu-\nu}_\TV=\sup_{A}\abs{\mu(A)-\nu(A)}=\tfrac12\abs{\mu-\nu}(\Om)$;
+on compact $\Om$ the quadratic Wasserstein distance is
+$W_2(\mu,\nu)=(\inf_{\gamma\in\Gamma(\mu,\nu)}\int\norm{x-y}^2\,d\gamma)^{1/2}$ over couplings
+$\Gamma(\mu,\nu)$. We use the following classical facts without reproof.
+\begin{fact}[Standard analytic toolkit]
+\label{fact:std}
+\emph{(a)} $(\cP(\Om),\norm{\cdot}_\TV)$ is complete \citep{folland}; the measure action
+$\mu\mapsto\mu T$ of any Markov kernel is TV-nonexpansive, and for any coupling $(X,Y)$ of $\mu,\nu$,
+$\norm{\mu-\nu}_\TV\le\Prob(X\neq Y)$. \emph{(b)} Ionescu--Tulcea builds a Markov chain from any kernel
+on any measurable space, with no topological assumption \citep{kallenberg}. \emph{(c)} For nonempty
+compact convex $K\subset\R^d$, the Euclidean projection $\mathcal B_K$ is single-valued, $1$-Lipschitz,
+fixes $K$, sends $\R^d\setminus K$ into $\partial K$, and satisfies $\mathcal B_K^{-1}(A)=A$ for
+$A\subseteq\intr K$ \citep{hiriart}; moreover $\Leb(\partial K)=0$. \emph{(d)} On compact $\Om$,
+$(\cP(\Om),W_2)$ is a complete metric space; $L$-Lipschitz maps satisfy
+$W_2(f\push\mu,f\push\nu)\le L\,W_2(\mu,\nu)$, so coordinate marginalization is $1$-Lipschitz
+\citep{villani}. \emph{(e)} \textup{(Measurable coupling selection.)} For Markov kernels $K,K'$ from
+$(\mathsf S,\mathcal S)$ to a compact $\Om$ there is a measurable family $s\mapsto\gamma_s$ of optimal
+couplings of $K(s,\cdot),K'(s,\cdot)$ \citep[Cor.~5.22]{villani}; gluing against any
+$\rho\in\cP(\mathsf S)$ gives
+$W_2(\rho K,\rho K')^2\le\int W_2(K(s,\cdot),K'(s,\cdot))^2\,\rho(ds)$. \emph{(f)}
+\textup{(Banach in $W_2$.)} If $\mu\mapsto\mu K$ is a $\kappa$-contraction with $\kappa\in[0,1)$, then
+$K$ has a unique invariant $\nu^\ast$ with $W_2(\mu_0 K^n,\nu^\ast)\le\kappa^n W_2(\mu_0,\nu^\ast)$.
+\end{fact}
+
+% =====================================================================
+\section{The amortized pseudo-Gibbs kernel}
+\label{sec:kernel}
+
+The sparse observation $\xobs$ is fixed throughout and suppressed. The hidden-state trajectory is
+$\bu\in\R^{d_H}$ and the parameter is $\bth\in\R^{d_\Theta}$, with joint state $\bz=(\bu,\bth)$.
+Decoders $g_\phi:\R^{d_\Theta}\times\R^{m_H}\to\R^{d_H}$, $g_\psi:\R^{d_H}\times\R^{m_P}\to\R^{d_\Theta}$
+act on latents $\bm z_H\sim\Normal(\bm0,I_{m_H})$, $\bm z_P\sim\Normal(\bm0,I_{m_P})$;
+$\mathcal B_H,\mathcal B_\Theta$ are Euclidean projections onto compact convex bodies
+$\Om_H,\Om_\Theta$.
+
+\begin{definition}[Conditional stochastic maps]
+\label{def:condmaps}
+With $\bm\xi_H\sim\Normal(\bm0,I_{d_H})$, $\bm\xi_P\sim\Normal(\bm0,I_{d_\Theta})$ (all latents and
+injection noises mutually independent) and scales $\sigma_H,\sigma_P>0$,
+\[
+  Q_H(\cdot\mid\bth):=(\mathcal B_H)\push\,\mathrm{law}\big(g_\phi(\bth,\bm z_H)+\sigma_H\bm\xi_H\big),
+  \quad
+  Q_P(\cdot\mid\bu):=(\mathcal B_\Theta)\push\,\mathrm{law}\big(g_\psi(\bu,\bm z_P)+\sigma_P\bm\xi_P\big).
+\]
+The pre-projection hidden step has Lebesgue density on $\R^{d_H}$
+\begin{equation}\label{eq:qH-density}
+  q_H(\bm y\mid\bth)=\int_{\R^{m_H}}\Normal\big(\bm y;g_\phi(\bth,\bm z_H),\sigma_H^2 I_{d_H}\big)\,
+  \Normal(\bm z_H;\bm0,I_{m_H})\,d\bm z_H,
+\end{equation}
+an infinite Gaussian mixture; $q_P(\cdot\mid\bu)$ is analogous.
+\end{definition}
+
+\begin{definition}[The inference kernel $T$]
+\label{def:T}
+On $\Om:=\Om_H\times\Om_\Theta$, one sweep draws $\bu'\sim Q_H(\cdot\mid\bth)$ then
+$\bth'\sim Q_P(\cdot\mid\bu')$:
+\[
+  T\big((\bu,\bth),A\big)=\int_{\Om_H}Q_P\big(A_{\bu'}\mid\bu'\big)\,Q_H(d\bu'\mid\bth),
+  \qquad A_{\bu'}:=\{\bth':(\bu',\bth')\in A\},
+\]
+depending on the current state only through $\bth$.
+\end{definition}
+
+\begin{assumption}[Compact convex state space]
+\label{ass:compact}
+$\Om_H,\Om_\Theta$ are nonempty, compact, convex with nonempty interior, and
+$\mathcal B_H,\mathcal B_\Theta$ project onto them; thus $\Om$ is compact with $\Leb(\Om)\in(0,\infty)$
+and $\Leb(\partial\Om)=0$ (Fact~\ref{fact:std}(c)).
+\end{assumption}
+\begin{assumption}[Continuity and nondegenerate noise]
+\label{ass:cont}
+For the fixed $\xobs$, $g_\phi,g_\psi$ are continuous and $\sigma_H,\sigma_P>0$.
+\end{assumption}
+\noindent Both hold \emph{by construction}: projection gives Assumption~\ref{ass:compact};
+continuous-activation networks with positive sampling noise give Assumption~\ref{ass:cont}.
+
+\begin{lemma}[$T$ is a Markov kernel]
+\label{lem:measurable}
+Under Assumptions~\ref{ass:compact}--\ref{ass:cont}, $Q_H,Q_P$ and $T$ are Markov kernels.
+\end{lemma}
+\begin{proof}
+By dominated convergence \eqref{eq:qH-density} is continuous, hence Borel, in $(\bm y,\bth)$; writing
+$Q_H(A\mid\bth)=\int\mathbf 1_A(\mathcal B_H(\bm y))\,q_H(\bm y\mid\bth)\,d\bm y$, Tonelli gives
+measurability in $\bth$, and $Q_H(\cdot\mid\bth)$ is a probability measure (pushforward). Symmetrically
+for $Q_P$. Section integration against a kernel preserves measurability \citep[Ch.~1]{kallenberg}, so
+$\bth\mapsto\int Q_P(A_{\bu'}\mid\bu')\,Q_H(d\bu'\mid\bth)=T((\bu,\bth),A)$ is measurable and
+$T((\bu,\bth),\cdot)$ is a probability measure.
+\end{proof}
+
+% =====================================================================
+\section{Existence and uniform ergodicity (Theorem A)}
+\label{sec:existence}
+
+\begin{definition}[Minorization]
+\label{def:minor}
+$T$ satisfies \emph{minorization} with $(\varepsilon,\nu)$, $\varepsilon\in(0,1]$, $\nu\in\cP(\Om)$,
+if $T(x,A)\ge\varepsilon\,\nu(A)$ for all $x,A$.
+\end{definition}
+
+\begin{theorem}[Doeblin; {\citealp[Ch.~16]{meyntweedie}}]
+\label{thm:doeblin}
+If a Markov kernel $T$ on $(\Om,\cF)$ with Borel diagonal satisfies minorization with
+$(\varepsilon,\nu)$, it has a unique invariant $\pi\in\cP(\Om)$ and
+$\sup_{x}\norm{T^n(x,\cdot)-\pi}_\TV\le(1-\varepsilon)^n$, hence
+$\norm{\mu_0T^n-\pi}_\TV\le(1-\varepsilon)^n$ for all $\mu_0$.
+\end{theorem}
+
+\begin{lemma}[Uniform minorization of $T$]
+\label{lem:minor}
+Under Assumptions~\ref{ass:compact}--\ref{ass:cont}, $T$ satisfies minorization with
+$\nu(\cdot)=\Leb(\cdot\cap\intr\Om)/\Leb(\Om)$ and some $\varepsilon\in(0,1]$.
+\end{lemma}
+\begin{proof}
+\emph{Uniform density lower bound.} Fix $R>0$ with $p_R:=\Prob(\norm{\bm z_H}\le R)>0$. Since
+$\Om_\Theta\times\{\norm{\bm z_H}\le R\}$ is compact and $g_\phi$ continuous,
+$M_H:=\sup\norm{g_\phi(\bth,\bm z_H)}<\infty$ over it; let $M_H':=\sup_{\bm y\in\Om_H}\norm{\bm y}$.
+For $\bm y\in\Om_H,\bth\in\Om_\Theta,\norm{\bm z_H}\le R$,
+$\Normal(\bm y;g_\phi(\bth,\bm z_H),\sigma_H^2 I)\ge(2\pi\sigma_H^2)^{-d_H/2}\exp(-(M_H+M_H')^2/2\sigma_H^2)=:c_H>0$.
+Restricting \eqref{eq:qH-density} to $\{\norm{\bm z_H}\le R\}$,
+\begin{equation}\label{eq:deltaH}
+  q_H(\bm y\mid\bth)\ge c_H\,p_R=:\delta_H>0\quad\text{uniformly},\qquad
+  \text{and analogously } q_P(\cdot\mid\bu)\ge\delta_P>0.
+\end{equation}
+\emph{Projection preserves the interior bound.} For $A\subseteq\intr\Om_H$, Fact~\ref{fact:std}(c)
+gives $\mathcal B_H^{-1}(A)=A$, so $Q_H(A\mid\bth)=\int_A q_H\ge\delta_H\Leb(A)$; likewise
+$Q_P(B\mid\bu)\ge\delta_P\Leb(B)$ for $B\subseteq\intr\Om_\Theta$. \emph{Composition.} Using
+$\intr\Om=\intr\Om_H\times\intr\Om_\Theta$ and Tonelli, for any $A$ and state $(\bu,\bth)$,
+\[
+  T\big((\bu,\bth),A\big)\ge\int_{\intr\Om_H}\delta_P\,\Leb(A_{\bu'}\cap\intr\Om_\Theta)\,\delta_H\,d\bu'
+  =\delta_H\delta_P\,\Leb(A\cap\intr\Om).
+\]
+Set $\varepsilon:=\delta_H\delta_P\Leb(\Om)$ and $\nu(\cdot)=\Leb(\cdot\cap\intr\Om)/\Leb(\Om)$; then
+$T\ge\varepsilon\nu$, and $A=\Om$ gives $\varepsilon\in(0,1]$ (as $\nu(\Om)=1$ by $\Leb(\partial\Om)=0$).
+\end{proof}
+
+\begin{theorem}[Uniform ergodicity / global convergence]
+\label{thm:A}
+Under Assumptions~\ref{ass:compact}--\ref{ass:cont}, $T$ has a unique invariant $\pi^\ast\in\cP(\Om)$
+and, for every $\mu_0$, $\norm{\mu_0T^n-\pi^\ast}_\TV\le(1-\varepsilon)^n$ with
+$\varepsilon=\delta_H\delta_P\Leb(\Om)\in(0,1]$. The rate is uniform over initializations.
+\end{theorem}
+\begin{proof}
+$T$ is a kernel (Lemma~\ref{lem:measurable}); $\Om\subseteq\R^d$ has closed, hence Borel, diagonal;
+minorization holds (Lemma~\ref{lem:minor}). Apply Theorem~\ref{thm:doeblin}.
+\end{proof}
+
+\begin{remark}[The TV constant is loose in high dimension]
+\label{rem:scope}
+From \eqref{eq:deltaH}, $\delta_H=(2\pi\sigma_H^2)^{-d_H/2}p_R\exp(-(M_H+M_H')^2/2\sigma_H^2)$, whose
+prefactor and exponent are strongly dimension- and $\sigma$-dependent; so $\varepsilon$ is typically
+minuscule and $(1-\varepsilon)^n$ certifies convergence but is a loose rate. Dimension-robust rates
+come from the Wasserstein contraction below, on disjoint hypotheses.
+\end{remark}
+
+% =====================================================================
+\section{Mixing rate: Wasserstein contraction (Theorem~\ref{thm:rate})}
+\label{sec:rate}
+
+\begin{assumption}[Conditional Lipschitz decoders --- (A-contraction)]
+\label{ass:lip}
+There exist $L_H,L_P<\infty$ with $\sup_{z}\mathrm{Lip}_{\bth\in\Om_\Theta}(g_\phi(\cdot,z))\le L_H$ and
+$\sup_{z}\mathrm{Lip}_{\bu\in\Om_H}(g_\psi(\cdot,z))\le L_P$: each decoder mean is Lipschitz in its
+\emph{conditioning} variable, uniformly in the latent. This is exactly the quantity condition-noise
+injection regularizes by the noise-equals-Tikhonov identity \citep{bishop1995}; we posit it as an
+assumption and support it empirically.
+\end{assumption}
+
+\begin{lemma}[Conditional $W_2$-Lipschitzness; the injection noise cancels]
+\label{lem:condlip}
+Under Assumptions~\ref{ass:compact},\ref{ass:lip}, $W_2(Q_H(\cdot\mid\bth),Q_H(\cdot\mid\bth'))\le
+L_H\norm{\bth-\bth'}$ and $W_2(Q_P(\cdot\mid\bu),Q_P(\cdot\mid\bu'))\le L_P\norm{\bu-\bu'}$.
+\end{lemma}
+\begin{proof}
+Couple by sharing latent $\bm z_H$ and injection noise $\bm\xi_H$:
+$U=\mathcal B_H(g_\phi(\bth,\bm z_H)+\sigma_H\bm\xi_H)$, $U'=\mathcal B_H(g_\phi(\bth',\bm z_H)+\sigma_H\bm\xi_H)$.
+As $\mathcal B_H$ is $1$-Lipschitz and $\sigma_H\bm\xi_H$ cancels,
+$\norm{U-U'}\le\norm{g_\phi(\bth,\bm z_H)-g_\phi(\bth',\bm z_H)}\le L_H\norm{\bth-\bth'}$ pathwise, so
+$W_2\le(\E\norm{U-U'}^2)^{1/2}\le L_H\norm{\bth-\bth'}$. Same for $Q_P$.
+\end{proof}
+
+\begin{theorem}[Sweep contraction]
+\label{thm:rate}
+Let $K(\bth,\cdot)=\int_{\Om_H}Q_P(\cdot\mid\bu)\,Q_H(d\bu\mid\bth)$ be the $\bth$-marginal sweep. Under
+Assumptions~\ref{ass:compact}--\ref{ass:lip},
+$W_2(K(\bth,\cdot),K(\bth',\cdot))\le\kappa\norm{\bth-\bth'}$ with $\kappa:=L_HL_P$, and the measure
+action is a $\kappa$-contraction. If $\kappa<1$, $K$ has a unique invariant $\nu^\ast\in\cP(\Om_\Theta)$
+with $W_2(\mu_0K^n,\nu^\ast)\le\kappa^n W_2(\mu_0,\nu^\ast)$, equal to the $\bth$-marginal of $\pi^\ast$.
+\end{theorem}
+\begin{proof}
+Share all four noises. With $U,U'$ as in Lemma~\ref{lem:condlip} and
+$\Theta'=\mathcal B_\Theta(g_\psi(U,\bm z_P)+\sigma_P\bm\xi_P)$,
+$\tilde\Theta'=\mathcal B_\Theta(g_\psi(U',\bm z_P)+\sigma_P\bm\xi_P)$, the same cancellation gives
+$\norm{\Theta'-\tilde\Theta'}\le L_P\norm{U-U'}\le\kappa\norm{\bth-\bth'}$ pathwise, so
+$W_2(K(\bth,\cdot),K(\bth',\cdot))\le\kappa\norm{\bth-\bth'}$. This shared-noise coupling is an explicit
+measurable map; gluing it against an optimal coupling of $\mu,\mu'$ gives
+$W_2(\mu K,\mu'K)\le\kappa W_2(\mu,\mu')$. For $\kappa<1$, Fact~\ref{fact:std}(f) yields $\nu^\ast$ and
+the rate; invariance of $\pi^\ast$ under $T$ identifies its $\bth$-marginal with $\nu^\ast$.
+\end{proof}
+
+\begin{remark}[The four noises; the collapse ``paradox'' dissolves]
+\label{rem:noises}
+$\kappa=L_HL_P$ is governed \emph{solely} by the condition-Lipschitz constants (regularized by
+\citealp{bishop1995}); the injection noise $\sigma_H,\sigma_P$ and the latent \emph{cancel} in the
+couplings and do not enter $\kappa$. Conversely, $\sigma>0$ is exactly what keeps each $Q$
+nondegenerate (Lemma~\ref{lem:minor}) and sets the width of $\pi^\ast$; a deterministic map would
+$W_2$-contract to a point mass---the mode collapse to avoid. Tightening the contraction and preventing
+collapse thus act on \emph{disjoint} parts of the analysis: the apparent ``more contraction
+$\Rightarrow$ more collapse'' tension was an artifact of conflating the condition-Lipschitz constant
+with the injection scale.
+\end{remark}
+
+% =====================================================================
+\section{Steering, consistency, and the certificate (Theorem B, $\einc$)}
+\label{sec:steering}
+
+\begin{assumption}[The domain contains the true support]
+\label{ass:suptrue}
+$\operatorname{supp}\Pi^\dagger\subseteq\Om$, where $\Pi^\dagger:=p(\bu,\bth\mid\xobs)$ is the true
+joint posterior. Fix regular versions of the true conditionals $p^\dagger_H(\cdot\mid\bth)$,
+$p^\dagger_P(\cdot\mid\bu)$ for every $\bth,\bu$.
+\end{assumption}
+
+\paragraph{The target.} Let $K^\dagger(\bth,\cdot)=\int p^\dagger_P(\cdot\mid\bu)\,p^\dagger_H(d\bu\mid\bth)$
+be the true sweep. Since $p^\dagger_H,p^\dagger_P$ are conditionals of the one joint $\Pi^\dagger$
+(hence compatible), Gibbs is exact: $\Pi^\dagger$ is $K^\dagger$-invariant and its $\bth$-marginal
+$\nu^\dagger:=p(\bth\mid\xobs)$ is the estimand. Define the approximation defects
+\begin{equation}\label{eq:defects}
+  \varepsilon_H:=\sup_{\bth}W_2\big(Q_H(\cdot\mid\bth),p^\dagger_H(\cdot\mid\bth)\big),\qquad
+  \varepsilon_P:=\sup_{\bu}W_2\big(Q_P(\cdot\mid\bu),p^\dagger_P(\cdot\mid\bu)\big).
+\end{equation}
+
+\begin{lemma}[Operator discrepancy]
+\label{lem:opdisc}
+Under Assumptions~\ref{ass:compact}--\ref{ass:lip},
+$\sup_{\bth}W_2(K(\bth,\cdot),K^\dagger(\bth,\cdot))\le L_P\varepsilon_H+\varepsilon_P$.
+\end{lemma}
+\begin{proof}
+Interpolate through $K'(\bth,\cdot)=\int Q_P(\cdot\mid\bu)\,p^\dagger_H(d\bu\mid\bth)$. \emph{Swap $H$:}
+take an optimal coupling $(U,U^\dagger)$ of $Q_H(\cdot\mid\bth),p^\dagger_H(\cdot\mid\bth)$ and draw the
+$P$-step by shared noise (Lemma~\ref{lem:condlip}), so
+$\norm{\theta'-\theta'^\dagger}\le L_P\norm{U-U^\dagger}$, giving $W_2(K,K')\le L_P\varepsilon_H$.
+\emph{Swap $P$:} with the same $\bu$, couple $Q_P(\cdot\mid\bu),p^\dagger_P(\cdot\mid\bu)$ by a
+measurable family (Fact~\ref{fact:std}(e)) glued against $p^\dagger_H(\cdot\mid\bth)$, giving
+$W_2(K',K^\dagger)\le\varepsilon_P$. Sum and take $\sup_{\bth}$.
+\end{proof}
+
+\begin{lemma}[Fixed-point perturbation]
+\label{lem:perturb}
+If $K$'s action is a $\kappa$-contraction ($\kappa\in[0,1)$) with invariant $\nu^\ast$ and $K'$ is any
+kernel with invariant $\nu'$, then
+$W_2(\nu^\ast,\nu')\le\frac{1}{1-\kappa}\sup_{\bth}W_2(K(\bth,\cdot),K'(\bth,\cdot))$.
+\end{lemma}
+\begin{proof}
+$W_2(\nu^\ast,\nu')=W_2(\nu^\ast K,\nu'K')\le W_2(\nu^\ast K,\nu'K)+W_2(\nu'K,\nu'K')
+\le\kappa W_2(\nu^\ast,\nu')+\sup_{\bth}W_2(K(\bth,\cdot),K'(\bth,\cdot))$, using
+Fact~\ref{fact:std}(e) for the second term; rearrange.
+\end{proof}
+
+\begin{theorem}[Steering bound]
+\label{thm:B}
+Under Assumptions~\ref{ass:compact}--\ref{ass:lip} with $\kappa<1$,
+\[
+  W_2\big(\nu^\ast,\,p(\bth\mid\xobs)\big)\le\frac{L_P\varepsilon_H+\varepsilon_P}{1-\kappa}.
+\]
+In particular $\varepsilon_H=\varepsilon_P=0$ gives $\nu^\ast=p(\bth\mid\xobs)$ exactly (the
+compatible/well-specified case).
+\end{theorem}
+\begin{proof}
+$K$ is a $\kappa$-contraction with invariant $\nu^\ast$ (Theorem~\ref{thm:rate}), $K^\dagger$ has
+invariant $\nu^\dagger$; apply Lemma~\ref{lem:perturb} and Lemma~\ref{lem:opdisc}.
+\end{proof}
+
+\paragraph{The computable self-consistency defect.} Let
+$\mu^\ast(d\bu):=\int Q_H(d\bu\mid\bth)\,\nu^\ast(d\bth)$ and form, on $\Om_\Theta\times\Om_H$,
+\begin{equation}\label{eq:einc}
+  \Pi^{\rightarrow}(d\bth,d\bu):=\nu^\ast(d\bth)\,Q_H(d\bu\mid\bth),\quad
+  \Pi^{\leftarrow}(d\bth,d\bu):=Q_P(d\bth\mid\bu)\,\mu^\ast(d\bu),\quad
+  \einc:=W_2(\Pi^{\rightarrow},\Pi^{\leftarrow}).
+\end{equation}
+Both have $\bu$-marginal $\mu^\ast$; $\einc$ is the forward-vs-backward sweep inconsistency, estimable
+from samples of the trained model alone.
+
+\begin{proposition}[$\einc$ certifies compatibility]
+\label{prop:inc}
+Assume $\kappa<1$. Then $\einc=0$ iff $Q_H,Q_P$ are compatible (a.e.\ the conditionals of a common
+joint), in which case $\Pi^\rightarrow=\Pi^\leftarrow$ and $\nu^\ast$ is its $\bth$-marginal.
+\end{proposition}
+\begin{proof}
+$(\Leftarrow)$ A witnessing joint $\Pi'$ reproduces itself under one forward sweep, so
+$\Pi'_\theta=\nu^\ast$ (unique) and $\Pi'=\nu^\ast\otimes Q_H=\Pi^\rightarrow=Q_P\otimes\mu^\ast=\Pi^\leftarrow$.
+$(\Rightarrow)$ $\einc=0\Rightarrow\Pi^\rightarrow=\Pi^\leftarrow=:\Pi$, which has $\bu\mid\bth$-law
+$Q_H$ and $\bth\mid\bu$-law $Q_P$, so they are compatible with witness $\Pi$.
+\end{proof}
+
+\begin{remark}[$\Pi^\leftarrow$ is the stationary joint]
+\label{rem:pileft}
+At stationarity the swept state has $\bu'\sim\mu^\ast$ and $\bth'\sim Q_P(\cdot\mid\bu')$, i.e.\
+$\pi^\ast=\Pi^\leftarrow$ (up to the isometric coordinate swap
+$\Om_H\times\Om_\Theta\cong\Om_\Theta\times\Om_H$). Hence $\einc=W_2(\Pi^\rightarrow,\pi^\ast)$: the
+defect measures how far the forward pairing sits from the sampler's own stationary joint---a single-run
+quantity.
+\end{remark}
+
+\begin{remark}[Why the defects are not summed --- no double counting]
+\label{rem:nodouble}
+Adding $\einc$ to Theorem~\ref{thm:B} would double count: because the true conditionals are compatible,
+the forward and backward true joints coincide, so $\einc$ is \emph{dominated by} the approximation
+defects rather than independent of them. The precise constant is Theorem~\ref{thm:incbound}.
+\end{remark}
+
+\paragraph{The constant.} We now discharge Remark~\ref{rem:nodouble} with an explicit constant. Beyond
+the learned-model regularity in force, we need one hypothesis on the truth.
+
+\begin{assumption}[Regularity of the true conditionals]
+\label{ass:truereg}
+The fixed versions of Assumption~\ref{ass:suptrue} are $W_2$-Lipschitz in their conditioning variable:
+for some $L_H^\dagger,L_P^\dagger<\infty$,
+$W_2(p^\dagger_H(\cdot\mid\bth),p^\dagger_H(\cdot\mid\bth'))\le L_H^\dagger\norm{\bth-\bth'}$ and
+$W_2(p^\dagger_P(\cdot\mid\bu),p^\dagger_P(\cdot\mid\bu'))\le L_P^\dagger\norm{\bu-\bu'}$. This is the
+true-posterior analogue of Assumption~\ref{ass:lip} and constrains only the \emph{truth}.
+\end{assumption}
+
+\begin{lemma}[Joint assembly bound]
+\label{lem:assembly}
+Let $\alpha,\alpha'\in\cP(\mathsf S)$, $M,M'$ Markov kernels from compact $\mathsf S$ to compact
+$\Om'$, and $\Pi(ds,dy)=\alpha(ds)M(s,dy)$, $\Pi'(ds,dy)=\alpha'(ds)M'(s,dy)$ on $\mathsf S\times\Om'$
+(Euclidean product metric). Then for \emph{every} $\gamma\in\Gamma(\alpha,\alpha')$,
+\[
+  W_2(\Pi,\Pi')^2\le\int\norm{s-s'}^2\gamma(ds,ds')+\int W_2\big(M(s,\cdot),M'(s',\cdot)\big)^2\gamma(ds,ds').
+\]
+\end{lemma}
+\begin{proof}
+Viewing $M,M'$ as kernels from $\mathsf S\times\mathsf S$, Fact~\ref{fact:std}(e) gives a measurable
+family $(s,s')\mapsto\gamma^M_{s,s'}$ of optimal couplings of $M(s,\cdot),M'(s',\cdot)$. Then
+$\Xi(ds,ds',dy,dy'):=\gamma(ds,ds')\gamma^M_{s,s'}(dy,dy')$ is a coupling of $\Pi,\Pi'$ (its $(s,y)$-
+and $(s',y')$-marginals are $\Pi,\Pi'$), and evaluating $\int(\norm{s-s'}^2+\norm{y-y'}^2)\,d\Xi$ gives
+the bound.
+\end{proof}
+
+\begin{theorem}[The self-consistency defect is dominated by the approximation defects]
+\label{thm:incbound}
+Under Assumptions~\ref{ass:compact}--\ref{ass:lip} with $\kappa<1$ and
+Assumptions~\ref{ass:suptrue}--\ref{ass:truereg}, with $A:=2+L_P^\dagger$,
+\[
+  \einc\le C_H\varepsilon_H+C_P\varepsilon_P\le C(\varepsilon_H+\varepsilon_P),\quad
+  C_H=A+\tfrac{A(1+L_H^\dagger)L_P}{1-\kappa},\ \
+  C_P=1+\tfrac{A(1+L_H^\dagger)}{1-\kappa},\ \ C=\max(C_H,C_P).
+\]
+In particular $\einc=0$ whenever $\varepsilon_H=\varepsilon_P=0$, consistent with
+Proposition~\ref{prop:inc}.
+\end{theorem}
+\begin{proof}
+$W_2$ on products uses the Euclidean product metric; the isometric swap
+$\Om_\Theta\times\Om_H\cong\Om_H\times\Om_\Theta$ (Remark~\ref{rem:pileft}) lets the three joints be
+compared in one space. Set $D:=W_2(\nu^\ast,\nu^\dagger)$; Theorem~\ref{thm:B} gives
+$D\le(L_P\varepsilon_H+\varepsilon_P)/(1-\kappa)$. Since $p^\dagger_H,p^\dagger_P$ are the conditionals
+of the single joint $\Pi^\dagger$, its two disintegrations coincide,
+\begin{equation}\label{eq:pivot}
+  \Pi^\dagger=\nu^\dagger(d\bth)p^\dagger_H(d\bu\mid\bth)=\mu^\dagger(d\bu)p^\dagger_P(d\bth\mid\bu),
+  \quad\mu^\dagger:=\text{$\bu$-marginal of }\Pi^\dagger .
+\end{equation}
+
+\emph{Step 1 (forward).} Apply Lemma~\ref{lem:assembly} with $\alpha=\nu^\ast,\alpha'=\nu^\dagger,
+M=Q_H,M'=p^\dagger_H$ and an optimal $\gamma$ ($\int\norm{\bth-\bth'}^2\gamma=D^2$). The joints are
+$\Pi^\rightarrow$ and, by \eqref{eq:pivot}, $\Pi^\dagger$. By the triangle inequality and
+Assumption~\ref{ass:truereg}, $W_2(Q_H(\cdot\mid\bth),p^\dagger_H(\cdot\mid\bth'))\le\varepsilon_H+
+L_H^\dagger\norm{\bth-\bth'}$; Minkowski in $L^2(\gamma)$ and $\sqrt{a^2+b^2}\le a+b$ give
+\begin{equation}\label{eq:rH}
+  W_2(\Pi^\rightarrow,\Pi^\dagger)\le\varepsilon_H+(1+L_H^\dagger)D=:r_H.
+\end{equation}
+\emph{Step 2 (backward).} The $\bu$-marginals of $\Pi^\rightarrow,\Pi^\dagger$ are $\mu^\ast,\mu^\dagger$;
+marginalization is $1$-Lipschitz (Fact~\ref{fact:std}(d)), so $E:=W_2(\mu^\ast,\mu^\dagger)\le r_H$ by
+\eqref{eq:rH}. Applying Lemma~\ref{lem:assembly} with $\alpha=\mu^\ast,\alpha'=\mu^\dagger,M=Q_P,
+M'=p^\dagger_P$ (joints $\Pi^\leftarrow$ and $\Pi^\dagger$, by \eqref{eq:pivot}) and the analogous bound,
+\begin{equation}\label{eq:rP}
+  W_2(\Pi^\leftarrow,\Pi^\dagger)\le\varepsilon_P+(1+L_P^\dagger)E\le\varepsilon_P+(1+L_P^\dagger)r_H=:r_P.
+\end{equation}
+\emph{Step 3.} By the triangle inequality and $A=2+L_P^\dagger$,
+$\einc\le r_H+r_P=A\,r_H+\varepsilon_P=A\varepsilon_H+\varepsilon_P+A(1+L_H^\dagger)D$. Substituting the
+bound on $D$ and collecting coefficients gives $C_H,C_P$. If $\varepsilon_H=\varepsilon_P=0$ then $D=0$,
+so $r_H=r_P=0$.
+\end{proof}
+
+\begin{remark}[Reading the constant; the one-sided guarantee]
+\label{rem:incconst}
+$C$ inflates only through $1/(1-\kappa)$ as $\kappa\uparrow1$, and grows with the true-conditional
+roughness $L_H^\dagger,L_P^\dagger$ and the learned $L_P$; it does \emph{not} depend on $\sigma$ or
+dimension directly (contrast $\varepsilon$, Remark~\ref{rem:scope}). Thus small $\varepsilon_H,
+\varepsilon_P$ force small $\einc$, and---contrapositively---a large \emph{observed} $\einc$ certifies
+that some conditional is inaccurate. The reverse fails: $\einc$ small does \emph{not} imply closeness to
+truth (a model can be self-consistent yet wrong), so $\einc$ certifies \emph{compatibility}
+(Proposition~\ref{prop:inc}), not \emph{accuracy}---the latter is Theorem~\ref{thm:B}. This is the
+sense in which $\einc$ is a computable \emph{shadow} of the uncomputable $\varepsilon_H,\varepsilon_P$.
+\end{remark}
+
+\begin{remark}[Where the distortion defect lives]
+\label{rem:edist}
+As $p^\dagger_H,p^\dagger_P$ are the \emph{clean} true conditionals, $\varepsilon_H,\varepsilon_P$
+silently include a distortion defect
+$\edist=O(\sigma_H+\sigma_P)+(\E\norm{\bm Y-\mathcal B(\bm Y)}^2)^{1/2}$ (injection smoothing plus RMS
+projection displacement). Referencing instead the $\sigma$-smoothed projected conditionals
+$p^{\dagger,\sigma}_H,p^{\dagger,\sigma}_P$ isolates pure learning error and adds a single
+$W_2(\nu^{\dagger,\sigma},\nu^\dagger)=O(\sigma)$ smoothing term, which has an irreducible floor since
+$\sigma>0$ is required for Theorem~\ref{thm:A} and non-collapse; in the non-identifiable regime this
+floor is small relative to the true ridge width, so the ridge is faithfully covered.
+\end{remark}
+
+% =====================================================================
+\section{Positioning against approximate MCMC and dependency networks}
+\label{sec:positioning}
+
+The tools we use are standard, and we say so plainly: our steering bound (Theorem~\ref{thm:B}) has the
+same shape---perturbation size over $1-\text{contraction}$---as classical \emph{perturbed-MCMC}
+bounds. Novelty therefore lies not in the machinery but in the \emph{object} analyzed and in a
+\emph{computable certificate}.
+
+\paragraph{Approximate / perturbed MCMC.}
+In perturbation theory for Markov chains \citep{mitrophanov2005,rudolf2018,johndrow2015,medina2016,negrea2021}
+one fixes a single \emph{ideal} kernel $P$ whose invariant law is the known target $\pi$, and a single
+\emph{approximate} kernel $\hat P$ actually simulated, bounding $\|\hat\pi-\pi\|$ by the operator
+discrepancy over a contraction gap. Two structural features distinguish our setting. First, the object
+perturbed is not one chain but a \emph{pair of separately learned conditionals} $Q_H,Q_P$ that
+\emph{need not be the conditionals of any joint}; the very notion of (in)compatibility does not arise
+with one chain approximating one target. Second, the perturbation ``size'' there, like our
+$\varepsilon_H,\varepsilon_P$, is generally \emph{not computable} without the truth. Our contribution is
+a certificate that is.
+
+\paragraph{Dependency networks and conditional specification.}
+Learning each conditional separately and running pseudo-Gibbs is the dependency-network recipe
+\citep{heckerman2000}, and compatibility of a conditional specification is classical
+\citep{arnold1999}; but those analyses are \emph{discrete} and \emph{asymptotic}. We give
+\emph{continuous}-state, \emph{non-asymptotic}, quantitative $W_2$ statements and a computable
+compatibility defect bounded to the approximation error.
+
+\paragraph{Iterated random functions / Wasserstein ergodicity.}
+The $W_2$ contraction is in the lineage of iterated random functions \citep{diaconis1999} and
+Wasserstein/Harris ergodicity \citep{hairer2011}; we use it as a tool and credit it as such.
+
+\paragraph{The certificate $\einc$, precisely.}
+Table~\ref{tab:einc} states what $\einc$ does and does not guarantee. Its one-sided nature is the
+honest boundary of the claim, and no analogue of such an in-run certificate---tying the uncomputable
+perturbation size to an observable quantity with an explicit constant---exists in the perturbed-MCMC
+literature.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lcl@{}}
+\toprule
+Statement & Holds? & Backing \\
+\midrule
+$\varepsilon_H,\varepsilon_P$ small $\Rightarrow \einc$ small & yes & Thm.~\ref{thm:incbound} \\
+$\einc$ large $\Rightarrow$ some conditional inaccurate & yes & contrapositive of Thm.~\ref{thm:incbound} \\
+$\einc=0 \Rightarrow$ sampling a genuine joint's marginal & yes & Prop.~\ref{prop:inc} \\
+$\einc$ small $\Rightarrow$ close to the truth & \textbf{no} & (accuracy is Thm.~\ref{thm:B}, not $\einc$) \\
+\bottomrule
+\end{tabular}
+\caption{What the computable certificate $\einc$ guarantees: a \emph{one-sided} shadow of the
+approximation defects, never a substitute for the steering bound.}
+\label{tab:einc}
+\end{table}
+
+% =====================================================================
+\section{Numerical illustration}
+\label{sec:numerics}
+
+Three controlled experiments show the constants are real and the bounds meaningful. The first two are
+linear-Gaussian, so the true posterior, $\kappa$, the defects $\varepsilon_H,\varepsilon_P$, and
+$\einc$ are all available in closed form (Wasserstein distances between Gaussians via the Bures
+formula); a Monte-Carlo run confirms them and demonstrates single-run estimability of $\einc$. All code
+is NumPy/SciPy and reproduces in seconds; details in the supplementary notes.
+
+\paragraph{(E-a) Linear-Gaussian, compatible.}
+A genuine bivariate Gaussian $(\bu,\bth)\sim\Normal(\bm0,\Sigma)$ with correlation $\rho$ supplies the
+truth, and the learned conditionals are set equal to the true ones ($\varepsilon_H=\varepsilon_P=0$).
+The condition-Lipschitz constants give $\kappa=L_HL_P=\rho^2$---the classical bivariate-Gaussian Gibbs
+autocorrelation, an independent check---and unequal marginal scales make one individual $L>1$ while
+$\kappa<1$, illustrating Remark~\ref{rem:noises}. Figure~\ref{fig:Ea} confirms both claims: at
+$\rho=0.8$ ($L_H=1.60>1$, $L_P=0.40$, $\kappa=0.640$) the exact AR(1) $\bth$-chain's $W_2$ to
+stationarity decays geometrically at slope exactly $\log\kappa$, saturating the rate bound of
+Theorem~\ref{thm:rate}, and the stationary law matches $\nu^\dagger$ to $10^{-10}$ (Theorem~\ref{thm:B}
+exactness). The Monte-Carlo estimate tracks the closed form down to its finite-sample floor.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.62\linewidth]{figures/num_Ea_rate.pdf}
+\caption{\textbf{E-a.} Geometric convergence at rate $\kappa=\rho^2=0.640$; closed-form $W_2$ (blue)
+saturates the Theorem~\ref{thm:rate} bound (red), and $\nu^\ast=\nu^\dagger$ exactly.}
+\label{fig:Ea}
+\end{figure}
+
+\paragraph{(E-b) Controlled incompatibility.}
+Perturbing the $P$-conditional slope by $\delta$ (keeping $\varepsilon_H=0$, dialing
+$\varepsilon_P=\delta U$ on the box of radius $U$) makes the pair incompatible while keeping the chain
+Gaussian. Figure~\ref{fig:Eb} shows both bounds hold across $\delta\in[0,0.18]$: the steering bound
+$\varepsilon_P/(1-\kappa_\delta)$ dominates the true $W_2(\nu^\ast_\delta,\nu^\dagger)$
+(Theorem~\ref{thm:B}), and the incompatibility bound $C_P\varepsilon_P$ dominates the closed-form
+$\einc$ (Theorem~\ref{thm:incbound}), with $\einc/\varepsilon_P\in[0.035,0.039]$ bounded (so $\einc$
+tracks $\varepsilon_P$) and $\einc(0)=0$ (compatible). A single-run empirical-covariance estimate of
+$\einc$ matches the closed form ($0.109$ vs $0.105$ at $\delta=0.18$); the general nonparametric
+sliced-$W_2$ estimator (used on the real model in the companion application) lower-bounds it, above its
+$\delta{=}0$ resolution floor.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.98\linewidth]{figures/num_Eb_bounds.pdf}
+\caption{\textbf{E-b.} Both theoretical bounds (red dashed) hold for every incompatibility level
+$\delta$; the computable $\einc$ (blue) tracks $\varepsilon_P$ and vanishes with it. Panel B overlays a
+single-run empirical-covariance Bures estimate (green) and the general sliced-$W_2$ lower bound (purple)
+with its null floor.}
+\label{fig:Eb}
+\end{figure}
+
+\paragraph{(E-c) Non-identifiable toy.}
+A product-degenerate forward map $\bu=a\cdot b$ (parameters $\bth=(a,b)$) yields a hyperbolic-ridge
+posterior $\{ab=x_{\mathrm{obs}}\}$---the pure-mathematics reduction of the application's
+$S_I\!\cdot\!\sigma$ fiber. With learned $=$ true conditionals the experiment isolates
+non-identifiability. Figure~\ref{fig:Ec} shows the stochastic dual sweep covers the ridge (HPD$95$
+coverage $0.95$, sliced-$W_2$ to the grid reference $0.046$) with along-ridge spread $1.19$, while a
+deterministic mean-map ping-pong collapses to a single point (along-ridge spread $0.000$); the monitored
+$\einc=0.008\approx0$ certifies compatibility on the ridge (Proposition~\ref{prop:inc}). This is the
+distributional analogue of the regression-to-mean collapse that motivates the whole construction.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.98\linewidth]{figures/num_Ec_ridge.pdf}
+\caption{\textbf{E-c.} Left: the stochastic sweep (blue) covers the non-identifiable ridge $ab=1$ while
+the deterministic ping-pong (red $\times$) collapses to a point. Right: along-ridge coordinate---broad
+under the sampler, degenerate under the deterministic map.}
+\label{fig:Ec}
+\end{figure}
+
+% =====================================================================
+\section{Discussion and limitations}
+\label{sec:discussion}
+
+\paragraph{The contraction hypothesis.} Existence and uniform ergodicity (Theorem~\ref{thm:A}) are
+proved from what the algorithm controls---compactness and $\sigma>0$---with \emph{no} contraction
+assumed. The rate and the steering constant, however, rest on the condition-Lipschitz bound
+$\kappa=L_HL_P<1$ (Assumption~\ref{ass:lip}), which training \emph{encourages} but does not
+\emph{certify}: condition-noise injection penalizes $\E\|\nabla_{\text{cond}}g\|_F^2$
+\citep{bishop1995}, promoting small $L_H,L_P$, and one can treat $\kappa$ as a free constant and
+support $\kappa<1$ empirically through autocorrelation decay and the monitored $\einc$. We regard this
+as an honest assumption rather than a theorem, and phrase every rate/steering statement conditionally
+on it.
+
+\paragraph{The $\sigma$-floor.} The injection noise $\sigma_H,\sigma_P>0$ is doubly load-bearing: it
+supplies the minorization of Theorem~\ref{thm:A} and prevents mode collapse, yet it also smooths each
+conditional, contributing an irreducible $O(\sigma)$ term to the distortion defect
+(Remark~\ref{rem:edist}). This floor cannot be removed without losing the guarantees; the reconciling
+point is that the target is a \emph{distribution}, not a point, and in the non-identifiable regime the
+floor is small relative to the width of the true posterior ridge, so the ridge is faithfully covered
+(experiment E-c).
+
+\paragraph{The certificate is one-sided.} $\einc$ certifies \emph{compatibility}, not \emph{accuracy}:
+$\einc=0$ means the sampler draws from a genuine joint's marginal (Proposition~\ref{prop:inc}), and a
+large observed $\einc$ is a rigorous witness of an inaccurate conditional (contrapositive of
+Theorem~\ref{thm:incbound}), but a small $\einc$ does not imply closeness to the truth. Accuracy is the
+separate content of Theorem~\ref{thm:B}, whose defects $\varepsilon_H,\varepsilon_P$ require the
+unknown truth. Reading $\einc$ as an accuracy certificate would be a mistake; it is a computable shadow.
+
+\paragraph{Extensions.} Several directions are natural: a joint $(\bu,\bth)$ contraction under a
+weighted product metric (constant still governed by $L_H,L_P$); non-compact domains via a
+Lyapunov/drift condition in place of the boundary projection; injection noise beyond Gaussian
+(any nondegenerate, positive-density family suffices for the minorization); quantifying
+$\varepsilon_H,\varepsilon_P$ from finite data and capacity, linking to simulation-based inference
+\citep{papamakarios2016,cranmer2020}; and relaxing the true-conditional regularity
+(Assumption~\ref{ass:truereg}) to local or integrated Lipschitz control. The bounds here are
+worst-case (suprema over the conditioning variable) and the constants can be loose; sharpening them,
+and characterizing when $\einc$ is not merely an upper but also a lower proxy for the approximation
+error, are open.
+
+% =====================================================================
+\begin{thebibliography}{99}
+
+\bibitem[Arnold et al.(1999)]{arnold1999}
+B.~C. Arnold, E.~Castillo, and J.~M. Sarabia.
+\emph{Conditional Specification of Statistical Models}. Springer, 1999.
+
+\bibitem[Bishop(1995)]{bishop1995}
+C.~M. Bishop.
+Training with noise is equivalent to Tikhonov regularization.
+\emph{Neural Computation}, 7(1):108--116, 1995.
+
+\bibitem[Cranmer et al.(2020)]{cranmer2020}
+K.~Cranmer, J.~Brehmer, and G.~Louppe.
+The frontier of simulation-based inference.
+\emph{PNAS}, 117(48):30055--30062, 2020.
+
+\bibitem[Diaconis and Freedman(1999)]{diaconis1999}
+P.~Diaconis and D.~Freedman.
+Iterated random functions.
+\emph{SIAM Review}, 41(1):45--76, 1999.
+
+\bibitem[Folland(1999)]{folland}
+G.~B. Folland.
+\emph{Real Analysis: Modern Techniques and Their Applications}, 2nd ed. Wiley, 1999.
+
+\bibitem[Hairer et al.(2011)]{hairer2011}
+M.~Hairer, J.~C. Mattingly, and M.~Scheutzow.
+Asymptotic coupling and a general form of Harris' theorem for Markov processes.
+\emph{Probability Theory and Related Fields}, 149(1--2):223--259, 2011.
+
+\bibitem[Heckerman et al.(2000)]{heckerman2000}
+D.~Heckerman, D.~M. Chickering, C.~Meek, R.~Rounthwaite, and C.~Kadie.
+Dependency networks for inference, collaborative filtering, and data visualization.
+\emph{Journal of Machine Learning Research}, 1:49--75, 2000.
+
+\bibitem[Hiriart-Urruty and Lemar\'echal(2001)]{hiriart}
+J.-B. Hiriart-Urruty and C.~Lemar\'echal.
+\emph{Fundamentals of Convex Analysis}. Springer, 2001.
+
+\bibitem[Johndrow et al.(2015)]{johndrow2015}
+J.~E. Johndrow, J.~C. Mattingly, S.~Mukherjee, and D.~Dunson.
+Approximations of Markov chains and high-dimensional Bayesian inference.
+\emph{arXiv:1508.03387}, 2015.
+
+\bibitem[Kallenberg(2002)]{kallenberg}
+O.~Kallenberg.
+\emph{Foundations of Modern Probability}, 2nd ed. Springer, 2002.
+
+\bibitem[Medina-Aguayo et al.(2016)]{medina2016}
+F.~J. Medina-Aguayo, A.~Lee, and G.~O. Roberts.
+Stability of noisy Metropolis--Hastings.
+\emph{Statistics and Computing}, 26:1187--1211, 2016.
+
+\bibitem[Meyn and Tweedie(2009)]{meyntweedie}
+S.~Meyn and R.~L. Tweedie.
+\emph{Markov Chains and Stochastic Stability}, 2nd ed. Cambridge Univ.\ Press, 2009.
+
+\bibitem[Mitrophanov(2005)]{mitrophanov2005}
+A.~Yu. Mitrophanov.
+Sensitivity and convergence of uniformly ergodic Markov chains.
+\emph{Journal of Applied Probability}, 42(4):1003--1014, 2005.
+
+\bibitem[Negrea and Rosenthal(2021)]{negrea2021}
+J.~Negrea and J.~S. Rosenthal.
+Approximations of geometrically ergodic reversible Markov chains.
+\emph{Advances in Applied Probability}, 53(4):981--1022, 2021.
+
+\bibitem[Papamakarios and Murray(2016)]{papamakarios2016}
+G.~Papamakarios and I.~Murray.
+Fast $\varepsilon$-free inference of simulation models with Bayesian conditional density estimation.
+\emph{NeurIPS}, 2016.
+
+\bibitem[Rudolf and Schweizer(2018)]{rudolf2018}
+D.~Rudolf and N.~Schweizer.
+Perturbation theory for Markov chains via Wasserstein distance.
+\emph{Bernoulli}, 24(4A):2610--2639, 2018.
+
+\bibitem[Villani(2009)]{villani}
+C.~Villani.
+\emph{Optimal Transport: Old and New}. Springer, 2009.
+
+\end{thebibliography}
+
+\end{document}

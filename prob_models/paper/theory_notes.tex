@@ -930,13 +930,166 @@ double count. Since the true conditionals are compatible, the true joints built 
 coincide ($\Pi^\rightarrow_\dagger=\Pi^\leftarrow_\dagger=\Pi^\dagger$), so by a triangle inequality
 $\varepsilon_{\mathrm{inc}}\le W_2(\Pi^\rightarrow,\Pi^\dagger)+W_2(\Pi^\dagger,\Pi^\leftarrow)$; each
 term can in turn be controlled by $W_2(\nu^\ast,\nu^\dagger)$ (Theorem~\ref{thm:B}) together with
-$\varepsilon_H,\varepsilon_P$ and Lemma~\ref{lem:condlip}. One expects, accordingly, a bound
-$\varepsilon_{\mathrm{inc}}\le C\,(\varepsilon_H+\varepsilon_P)$ with $C$ depending on $\kappa,L_H,L_P$
-(and the regularity of the true conditionals); we defer the precise constant to a later note. The
+$\varepsilon_H,\varepsilon_P$ and Lemma~\ref{lem:condlip}. One obtains, accordingly, a bound
+$\varepsilon_{\mathrm{inc}}\le C\,(\varepsilon_H+\varepsilon_P)$ with $C$ depending on $\kappa,L_P$
+and the regularity of the true conditionals; the precise constant is furnished by
+Theorem~\ref{thm:incbound} below. The
 qualitative point stands regardless: $\varepsilon_{\mathrm{inc}}$ is \emph{dominated by} the
 approximation defects, not independent of them --- $\varepsilon_H,\varepsilon_P$ govern the distance to
 truth (Theorem~\ref{thm:B}), while $\varepsilon_{\mathrm{inc}}$ is its computable \emph{shadow}, the
 quantity one can actually monitor (e.g.\ across noise scales; cf.\ the ablation program).
+\end{remark}
+
+% --------------------------------------------------------------------
+\subsection*{The constant in $\varepsilon_{\mathrm{inc}}\le C(\varepsilon_H+\varepsilon_P)$}
+\label{sec:incconst}
+
+We now discharge the deferred claim of Remark~\ref{rem:nodouble} and produce an explicit constant. The
+mechanism is that the \emph{true} conditionals, being conditionals of the one joint $\Pi^\dagger$, are
+compatible, so the forward- and backward-assembled true joints coincide; that common joint is used as a
+pivot between $\Pi^\rightarrow$ and $\Pi^\leftarrow$. Beyond the learned-model regularity already in
+force we need one regularity hypothesis on the \emph{truth}.
+
+\begin{assumption}[Regularity of the true conditionals]
+\label{ass:truereg}
+The fixed regular versions of Assumption~\ref{ass:suptrue} are $W_2$-Lipschitz in their conditioning
+variable: there exist $L_H^\dagger,L_P^\dagger<\infty$ with, for all $\theta,\theta'\in\Om_\Theta$ and
+$u,u'\in\Om_H$,
+\[
+  W_2\big(p^\dagger_H(\cdot\mid\theta),p^\dagger_H(\cdot\mid\theta')\big)\le L_H^\dagger\norm{\theta-\theta'},
+  \qquad
+  W_2\big(p^\dagger_P(\cdot\mid u),p^\dagger_P(\cdot\mid u')\big)\le L_P^\dagger\norm{u-u'}.
+\]
+This is the true-posterior analogue of Assumption~\ref{ass:lip}. It holds, for instance, whenever the
+true joint has a density bounded away from $0$ and $\infty$ on the compact $\Om$ with conditional means
+Lipschitz in the conditioning variable. It constrains only the \emph{truth}, not the learned model.
+\end{assumption}
+
+\begin{lemma}[Joint assembly bound]
+\label{lem:assembly}
+Let $\alpha,\alpha'\in\cP(\mathsf S)$ for a compact $\mathsf S\subseteq\R^{d_{\mathsf S}}$, let $M,M'$ be
+Markov kernels from $\mathsf S$ to a compact $\Om'\subseteq\R^{d'}$, and form the assembled joints
+$\Pi(ds,dy)=\alpha(ds)\,M(s,dy)$, $\Pi'(ds,dy)=\alpha'(ds)\,M'(s,dy)$ on $\mathsf S\times\Om'$ with the
+Euclidean product metric. Then for \emph{every} coupling $\gamma\in\Gamma(\alpha,\alpha')$,
+\[
+  W_2(\Pi,\Pi')^2\ \le\ \int\norm{s-s'}^2\,\gamma(ds,ds')
+  \ +\ \int W_2\big(M(s,\cdot),M'(s',\cdot)\big)^2\,\gamma(ds,ds').
+\]
+\end{lemma}
+\begin{proof}
+View $M,M'$ as kernels from $\mathsf S\times\mathsf S$, each ignoring one coordinate (the first ignoring
+$s'$, the second $s$). By Fact~\ref{fact:msel} (with base space $\mathsf S\times\mathsf S$) there is a
+measurable family $(s,s')\mapsto\gamma^M_{s,s'}\in\cP(\Om'\times\Om')$ of optimal couplings of
+$M(s,\cdot),M'(s',\cdot)$, so $\int\norm{y-y'}^2\,\gamma^M_{s,s'}(dy,dy')=W_2(M(s,\cdot),M'(s',\cdot))^2$.
+Glue against $\gamma$:
+\[
+  \Xi(ds,ds',dy,dy'):=\gamma(ds,ds')\,\gamma^M_{s,s'}(dy,dy')
+\]
+is a probability measure on $(\mathsf S\times\Om')^2$ (measurability of $(s,s')\mapsto\gamma^M_{s,s'}$
+makes the integral against $\gamma$ well defined). Its $(s,y)$-marginal is
+$\int\gamma(ds,ds')\,M(s,dy)=\alpha(ds)\,M(s,dy)=\Pi$ (integrate out $(s',y')$; the inner kernel has
+first marginal $M(s,\cdot)$ and $\gamma$ has first marginal $\alpha$), and symmetrically its
+$(s',y')$-marginal is $\Pi'$. Thus $\Xi$ is a coupling of $\Pi,\Pi'$, and by Def.~\ref{def:w2}
+(product metric $\norm{(s,y)-(s',y')}^2=\norm{s-s'}^2+\norm{y-y'}^2$),
+\[
+  W_2(\Pi,\Pi')^2\le\int\!\big(\norm{s-s'}^2+\norm{y-y'}^2\big)\,d\Xi
+  =\int\norm{s-s'}^2\gamma(ds,ds')+\int W_2\big(M(s,\cdot),M'(s',\cdot)\big)^2\gamma(ds,ds').\qedhere
+\]
+\end{proof}
+
+\begin{theorem}[The self-consistency defect is dominated by the approximation defects]
+\label{thm:incbound}
+Under Assumptions~\ref{ass:compact}--\ref{ass:lip} with $\kappa=L_HL_P<1$, and
+Assumptions~\ref{ass:suptrue}--\ref{ass:truereg},
+\[
+  \varepsilon_{\mathrm{inc}}\ \le\ C_H\,\varepsilon_H+C_P\,\varepsilon_P\ \le\ C\,(\varepsilon_H+\varepsilon_P),
+\]
+where, writing $A:=(2+L_P^\dagger)$,
+\[
+  C_H=A+\frac{A\,(1+L_H^\dagger)\,L_P}{1-\kappa},\qquad
+  C_P=1+\frac{A\,(1+L_H^\dagger)}{1-\kappa},\qquad
+  C=\max(C_H,C_P).
+\]
+In particular $\varepsilon_{\mathrm{inc}}=0$ whenever $\varepsilon_H=\varepsilon_P=0$, in agreement with
+Proposition~\ref{prop:inc}.
+\end{theorem}
+\begin{proof}
+Throughout, $W_2$ on the product spaces uses the Euclidean product metric; the isometric coordinate
+swap $\Om_\Theta\times\Om_H\cong\Om_H\times\Om_\Theta$ (as in Remark~\ref{rem:pileftpi}) preserves
+$W_2$, so the three joints $\Pi^\rightarrow,\Pi^\leftarrow,\Pi^\dagger$ may be compared in one metric
+space. Set $D:=W_2(\nu^\ast,\nu^\dagger)$; Theorem~\ref{thm:B} gives
+$D\le(L_P\varepsilon_H+\varepsilon_P)/(1-\kappa)$.
+
+\emph{The pivot.} Since $p^\dagger_H,p^\dagger_P$ are the conditionals of the single joint $\Pi^\dagger$
+(Assumption~\ref{ass:suptrue}), its two disintegrations coincide:
+\begin{equation}\label{eq:pivot}
+  \Pi^\dagger=\nu^\dagger(d\theta)\,p^\dagger_H(du\mid\theta)=\mu^\dagger(du)\,p^\dagger_P(d\theta\mid u),
+  \qquad \mu^\dagger:=\text{$u$-marginal of }\Pi^\dagger .
+\end{equation}
+
+\emph{Step 1 (forward defect).} Apply Lemma~\ref{lem:assembly} with $\mathsf S=\Om_\Theta$,
+$\Om'=\Om_H$, $\alpha=\nu^\ast$, $\alpha'=\nu^\dagger$, $M=Q_H$, $M'=p^\dagger_H$, and $\gamma$ an optimal
+coupling of $\nu^\ast,\nu^\dagger$ (so $\int\norm{\theta-\theta'}^2\gamma=D^2$). The assembled joints are
+$\Pi^\rightarrow=\nu^\ast\otimes Q_H$ and, by the first equality of \eqref{eq:pivot}, $\Pi^\dagger$. By
+the triangle inequality for $W_2$, Assumption~\ref{ass:truereg}, and the definition of $\varepsilon_H$,
+\[
+  W_2\big(Q_H(\cdot\mid\theta),p^\dagger_H(\cdot\mid\theta')\big)
+  \le W_2\big(Q_H(\cdot\mid\theta),p^\dagger_H(\cdot\mid\theta)\big)
+   +W_2\big(p^\dagger_H(\cdot\mid\theta),p^\dagger_H(\cdot\mid\theta')\big)
+  \le\varepsilon_H+L_H^\dagger\norm{\theta-\theta'}.
+\]
+Minkowski's inequality in $L^2(\gamma)$ gives
+$\big(\int(\varepsilon_H+L_H^\dagger\norm{\theta-\theta'})^2\gamma\big)^{1/2}\le\varepsilon_H+L_H^\dagger D$,
+so Lemma~\ref{lem:assembly} yields $W_2(\Pi^\rightarrow,\Pi^\dagger)^2\le D^2+(\varepsilon_H+L_H^\dagger D)^2$.
+Using $\sqrt{a^2+b^2}\le a+b$ ($a,b\ge0$),
+\begin{equation}\label{eq:rH}
+  W_2(\Pi^\rightarrow,\Pi^\dagger)\ \le\ \varepsilon_H+(1+L_H^\dagger)D\ =:\ r_H .
+\end{equation}
+
+\emph{Step 2 (backward defect).} The $u$-marginals of $\Pi^\rightarrow$ and $\Pi^\dagger$ are
+$\mu^\ast$ (Def.\ of $\varepsilon_{\mathrm{inc}}$) and $\mu^\dagger$ \eqref{eq:pivot}; coordinate
+marginalization is $1$-Lipschitz for $W_2$ (Fact~\ref{fact:w2lip}), so with \eqref{eq:rH}
+\begin{equation}\label{eq:muEbound}
+  E:=W_2(\mu^\ast,\mu^\dagger)\ \le\ W_2(\Pi^\rightarrow,\Pi^\dagger)\ \le\ r_H .
+\end{equation}
+Now apply Lemma~\ref{lem:assembly} with $\mathsf S=\Om_H$, $\Om'=\Om_\Theta$, $\alpha=\mu^\ast$,
+$\alpha'=\mu^\dagger$, $M=Q_P$, $M'=p^\dagger_P$, and $\gamma$ an optimal coupling of $\mu^\ast,\mu^\dagger$
+($\int\norm{u-u'}^2\gamma=E^2$). The assembled joints are $\Pi^\leftarrow=\mu^\ast\otimes Q_P$ and, by the
+second equality of \eqref{eq:pivot}, $\Pi^\dagger$ (up to the coordinate swap). As in Step~1,
+$W_2(Q_P(\cdot\mid u),p^\dagger_P(\cdot\mid u'))\le\varepsilon_P+L_P^\dagger\norm{u-u'}$, whence
+$W_2(\Pi^\leftarrow,\Pi^\dagger)^2\le E^2+(\varepsilon_P+L_P^\dagger E)^2$ and, monotone in $E$ with
+\eqref{eq:muEbound},
+\begin{equation}\label{eq:rP}
+  W_2(\Pi^\leftarrow,\Pi^\dagger)\ \le\ \varepsilon_P+(1+L_P^\dagger)E\ \le\ \varepsilon_P+(1+L_P^\dagger)r_H\ =:\ r_P .
+\end{equation}
+
+\emph{Step 3 (assemble).} By the triangle inequality, \eqref{eq:rH}, \eqref{eq:rP}, and $A=2+L_P^\dagger$,
+\[
+  \varepsilon_{\mathrm{inc}}=W_2(\Pi^\rightarrow,\Pi^\leftarrow)\le r_H+r_P
+  =(2+L_P^\dagger)\,r_H+\varepsilon_P
+  =A\,\varepsilon_H+\varepsilon_P+A\,(1+L_H^\dagger)\,D .
+\]
+Substituting $D\le(L_P\varepsilon_H+\varepsilon_P)/(1-\kappa)$ and collecting the $\varepsilon_H,\varepsilon_P$
+coefficients gives $\varepsilon_{\mathrm{inc}}\le C_H\varepsilon_H+C_P\varepsilon_P$ with $C_H,C_P$ as
+stated, and hence $\le C(\varepsilon_H+\varepsilon_P)$. If $\varepsilon_H=\varepsilon_P=0$ then $D=0$ by
+Theorem~\ref{thm:B}, so $r_H=r_P=0$ and $\varepsilon_{\mathrm{inc}}=0$.
+\end{proof}
+
+\begin{remark}[Reading the constant]
+\label{rem:incconst}
+The constant inflates through the single factor $1/(1-\kappa)$ as the contraction weakens
+($\kappa\uparrow1$), and grows with the \emph{true}-conditional roughness $L_H^\dagger,L_P^\dagger$ and
+the learned backward-Lipschitz constant $L_P$; it does \emph{not} depend on the injection scales
+$\sigma_H,\sigma_P$ or the dimension directly (contrast the TV constant $\varepsilon$ of
+Remark~\ref{rem:scope}). This makes precise the sense of Remark~\ref{rem:nodouble}: the computable
+$\varepsilon_{\mathrm{inc}}$ is a genuine \emph{shadow} of the uncomputable approximation defects
+$\varepsilon_H,\varepsilon_P$---up to a factor controlled entirely by the contraction and by regularity,
+never independent of them---so monitoring $\varepsilon_{\mathrm{inc}}$ across, e.g., noise scales lower-
+and upper-bounds progress toward compatibility. The reverse inequality
+$\varepsilon_{\mathrm{inc}}\gtrsim(\varepsilon_H+\varepsilon_P)$ need \emph{not} hold: a model can be
+self-consistent ($\varepsilon_{\mathrm{inc}}=0$, a genuine joint) yet far from the truth, which is why
+$\varepsilon_{\mathrm{inc}}$ certifies compatibility (Proposition~\ref{prop:inc}) but not accuracy---the
+latter is the separate content of Theorem~\ref{thm:B}.
 \end{remark}
 
 \begin{remark}[Where the distortion defect lives; the $\sigma$ decomposition]

@@ -212,6 +212,10 @@ results/
 *.pdf
 *.png
 
+# ...but keep committed paper figures (deliverables that let the paper compile as-is)
+!prob_models/paper/jmlr/figures/
+!prob_models/paper/jmlr/figures/*.pdf
+
 # Tests
 tests/
 
