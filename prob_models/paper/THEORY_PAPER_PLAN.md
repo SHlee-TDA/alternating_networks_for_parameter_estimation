@@ -92,8 +92,9 @@
       compatibility를 pivot으로, 참 조건부 W₂-Lipschitz(L_H†,L_P†) 가정 신설.)
 - [x] T2-2. approximate-MCMC 포지셔닝 절(§7) + bib 확충 → `jmlr/main.tex`. (perturbed-MCMC vs 우리
       대상·ε_inc 차별화 3축 + 정직성 표 Table:einc; bib 17종.)
-- [~] T2-3. 수치 예시 E-a/b/c **설계 완료** → `T2-3_NUMERICS_DESIGN.md`(E-a/b closed-form Bures W_2,
-      E-c grid+collapse; Track E B7/B3 공유 매핑). §8 산문 반영. 남음: 구현·plot(Track E와 공유).
+- [x] T2-3. 수치 예시 E-a/b/c **설계+구현+plot 완료** → `jmlr/numerics/`(NumPy/SciPy). E-a κ=ρ²=0.640·
+      exactness 1e-10, E-b Thm B·incbound 전 δ 성립·MC-Bures 밀착, E-c coverage 0.95·along-ridge
+      1.19 vs 0.000·ε_inc 0.008. 그림 3종 §8 embed. Track E와 독립 수행(sliced_w2만 `_metrics.py` 공유).
 - [~] T2-4. `theory_notes.tex` → `jmlr/main.tex` 조립: 정리 본문·증명 이식(Thm A/rate/B/Prop inc/
       Thm incbound full proof; 표준 예비지식 인용 축약), 표기 통일(bold θ,u), 노테이션 표 Table:notation,
       **intro·discussion 산문 작성 완료**. 정적 검사 통과. 남음: T2-5 제목, 최종 다듬기(preliminaries §2-3

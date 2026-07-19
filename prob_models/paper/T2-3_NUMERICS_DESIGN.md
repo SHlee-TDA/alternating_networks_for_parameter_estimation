@@ -141,3 +141,9 @@ Track E runs these on the real OGTT model; T2-3 runs the controlled toys. Estima
 ### Log
 - 2026-07-14 — 최초 설계. E-a/b closed-form(Bures W_2), E-c grid reference+collapse contrast.
   Track E B7/B3와 공유 매핑. 다음: §8 산문 반영 + 구현(Track E와 공유).
+- 2026-07-19 — **구현 완료** (`jmlr/numerics/`: `_w2.py`, `e_a_rate.py`, `e_b_bounds.py`,
+  `e_c_ridge.py`, `README.md`; NumPy/SciPy only, vision_task env). 결과: E-a κ=ρ²=0.640, W_2 감쇠
+  기울기=log κ 정확, exactness 1e-10. E-b Thm B·incbound 전 δ 성립, ε_inc/ε_P∈[0.035,0.039], MC-Bures가
+  closed-form에 밀착. E-c coverage HPD95=0.95, ε_inc=0.008, along-ridge std stoch 1.19 vs det 0.000.
+  그림 3종 `jmlr/figures/num_E{a,b,c}_*.pdf`, main.tex §8에 embed. sliced_w2는 Track E `_metrics.py`와
+  동일 추정기(비가우시안 실모델에서 재사용). Track E와 독립적으로 수행됨.

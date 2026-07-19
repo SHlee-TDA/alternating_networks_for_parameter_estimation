@@ -18,6 +18,7 @@
 \usepackage{bm}
 \usepackage{booktabs}
 \usepackage{array}
+\usepackage{graphicx}
 \usepackage[round,authoryear]{natbib}
 \usepackage{hyperref}
 
@@ -645,33 +646,68 @@ approximation defects, never a substitute for the steering bound.}
 Three controlled experiments show the constants are real and the bounds meaningful. The first two are
 linear-Gaussian, so the true posterior, $\kappa$, the defects $\varepsilon_H,\varepsilon_P$, and
 $\einc$ are all available in closed form (Wasserstein distances between Gaussians via the Bures
-formula); a Monte-Carlo run confirms them and demonstrates single-run estimability of $\einc$.
+formula); a Monte-Carlo run confirms them and demonstrates single-run estimability of $\einc$. All code
+is NumPy/SciPy and reproduces in seconds; details in the supplementary notes.
 
 \paragraph{(E-a) Linear-Gaussian, compatible.}
 A genuine bivariate Gaussian $(\bu,\bth)\sim\Normal(\bm0,\Sigma)$ with correlation $\rho$ supplies the
 truth, and the learned conditionals are set equal to the true ones ($\varepsilon_H=\varepsilon_P=0$).
 The condition-Lipschitz constants give $\kappa=L_HL_P=\rho^2$---the classical bivariate-Gaussian Gibbs
-autocorrelation, an independent check---and choosing unequal marginal scales makes one individual
-$L>1$ while $\kappa<1$, illustrating Remark~\ref{rem:noises}. \emph{Validates:} the geometric rate
-$\kappa^n$ (Theorem~\ref{thm:rate}) via the exact AR(1) $\bth$-chain, and exact recovery
-$\nu^\ast=\nu^\dagger$ (Theorem~\ref{thm:B}).
+autocorrelation, an independent check---and unequal marginal scales make one individual $L>1$ while
+$\kappa<1$, illustrating Remark~\ref{rem:noises}. Figure~\ref{fig:Ea} confirms both claims: at
+$\rho=0.8$ ($L_H=1.60>1$, $L_P=0.40$, $\kappa=0.640$) the exact AR(1) $\bth$-chain's $W_2$ to
+stationarity decays geometrically at slope exactly $\log\kappa$, saturating the rate bound of
+Theorem~\ref{thm:rate}, and the stationary law matches $\nu^\dagger$ to $10^{-10}$ (Theorem~\ref{thm:B}
+exactness). The Monte-Carlo estimate tracks the closed form down to its finite-sample floor.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.62\linewidth]{figures/num_Ea_rate.pdf}
+\caption{\textbf{E-a.} Geometric convergence at rate $\kappa=\rho^2=0.640$; closed-form $W_2$ (blue)
+saturates the Theorem~\ref{thm:rate} bound (red), and $\nu^\ast=\nu^\dagger$ exactly.}
+\label{fig:Ea}
+\end{figure}
 
 \paragraph{(E-b) Controlled incompatibility.}
-Perturbing one conditional's slope by $\delta$ (keeping $\varepsilon_H=0$, dialing
+Perturbing the $P$-conditional slope by $\delta$ (keeping $\varepsilon_H=0$, dialing
 $\varepsilon_P=\delta U$ on the box of radius $U$) makes the pair incompatible while keeping the chain
-Gaussian. \emph{Validates:} that the steering bound $\varepsilon_P/(1-\kappa)$ upper-bounds the true
-$W_2(\nu^\ast,\nu^\dagger)$ for all $\delta$ (Theorem~\ref{thm:B}); that the closed-form $\einc(\delta)$
-stays below $C(\delta)\,\varepsilon_P(\delta)$ and co-vanishes with, and tracks, $\varepsilon_P$
-(Theorem~\ref{thm:incbound}); and that $\einc$ estimated from a single run matches the closed form.
+Gaussian. Figure~\ref{fig:Eb} shows both bounds hold across $\delta\in[0,0.18]$: the steering bound
+$\varepsilon_P/(1-\kappa_\delta)$ dominates the true $W_2(\nu^\ast_\delta,\nu^\dagger)$
+(Theorem~\ref{thm:B}), and the incompatibility bound $C_P\varepsilon_P$ dominates the closed-form
+$\einc$ (Theorem~\ref{thm:incbound}), with $\einc/\varepsilon_P\in[0.035,0.039]$ bounded (so $\einc$
+tracks $\varepsilon_P$) and $\einc(0)=0$ (compatible). A single-run empirical-covariance estimate of
+$\einc$ matches the closed form ($0.109$ vs $0.105$ at $\delta=0.18$); the general nonparametric
+sliced-$W_2$ estimator (used on the real model in the companion application) lower-bounds it, above its
+$\delta{=}0$ resolution floor.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.98\linewidth]{figures/num_Eb_bounds.pdf}
+\caption{\textbf{E-b.} Both theoretical bounds (red dashed) hold for every incompatibility level
+$\delta$; the computable $\einc$ (blue) tracks $\varepsilon_P$ and vanishes with it. Panel B overlays a
+single-run empirical-covariance Bures estimate (green) and the general sliced-$W_2$ lower bound (purple)
+with its null floor.}
+\label{fig:Eb}
+\end{figure}
 
 \paragraph{(E-c) Non-identifiable toy.}
 A product-degenerate forward map $\bu=a\cdot b$ (parameters $\bth=(a,b)$) yields a hyperbolic-ridge
-posterior---the pure-mathematics reduction of the application's $S_I\!\cdot\!\sigma$ fiber. With learned
-$=$ true conditionals, the experiment isolates non-identifiability. \emph{Validates:} collapse-free
-support recovery (the stochastic dual sweep covers the ridge to width $O(\sigma_H+\sigma_P)$,
-Remark~\ref{rem:edist}) against a deterministic ping-pong that collapses to a point;
-$\einc\approx0$ certifies compatibility on the ridge (Proposition~\ref{prop:inc}); and a $2$-D grid
-supplies the reference posterior. Full design in the companion notes.
+posterior $\{ab=x_{\mathrm{obs}}\}$---the pure-mathematics reduction of the application's
+$S_I\!\cdot\!\sigma$ fiber. With learned $=$ true conditionals the experiment isolates
+non-identifiability. Figure~\ref{fig:Ec} shows the stochastic dual sweep covers the ridge (HPD$95$
+coverage $0.95$, sliced-$W_2$ to the grid reference $0.046$) with along-ridge spread $1.19$, while a
+deterministic mean-map ping-pong collapses to a single point (along-ridge spread $0.000$); the monitored
+$\einc=0.008\approx0$ certifies compatibility on the ridge (Proposition~\ref{prop:inc}). This is the
+distributional analogue of the regression-to-mean collapse that motivates the whole construction.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.98\linewidth]{figures/num_Ec_ridge.pdf}
+\caption{\textbf{E-c.} Left: the stochastic sweep (blue) covers the non-identifiable ridge $ab=1$ while
+the deterministic ping-pong (red $\times$) collapses to a point. Right: along-ridge coordinate---broad
+under the sampler, degenerate under the deterministic map.}
+\label{fig:Ec}
+\end{figure}
 
 % =====================================================================
 \section{Discussion and limitations}

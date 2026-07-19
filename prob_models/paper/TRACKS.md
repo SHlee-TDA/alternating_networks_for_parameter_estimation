@@ -300,3 +300,8 @@ figure 재생성이 필요하면 experiments/regen_figure3.py·fig1_teaser.py·p
   교정**: "noise = necessary condition for Doeblin minorization" → sufficient(+by-construction).
   (Rem:noise: 상수 디코더 δ_c도 minorization 만족 → necessary 아님. noise는 *절대연속* minorization에만
   necessary.) "breaking ergodicity" → 점질량 붕괴/ TV-uniform ergodicity 실패로 정밀화 권고.
+- 2026-07-19 — [Track T] **T2-3 구현 완료**(`jmlr/numerics/`). Track E가 main 병합됨을 확인, T2-3은
+  Track E와 독립(합성 toy, 학습 불필요)이라 착수. E-a/b/c 전부 이론 검증(κ=ρ²=0.640, Thm B·incbound 전
+  δ 성립, coverage 0.95, along-ridge 1.19 vs 0.000, ε_inc 0.008). 그림 3종 main.tex §8 embed(+graphicx).
+  `.gitignore`에 jmlr/figures/*.pdf negation 추가. 정적 검사 통과. **주의: 이 브랜치는 b20c3aa 분기라
+  main(8e57250, Track E/W 병합됨)보다 뒤처짐 → push/PR 전 rebase 필요**(TRACKS.md 양쪽 수정 충돌 가능).
