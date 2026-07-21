@@ -27,11 +27,11 @@ class Config:
     # --------------------------------------------------------------------------
     # 1. System & Environment
     # --------------------------------------------------------------------------
-    SYSTEM_NAME: str = 'sir' # 'lotka_volterra', 'sir', 'nc_sir', 'ogtt_simul'
-    EXPERIMENT_NAME: str = 'run_002'
+    SYSTEM_NAME: str = 'ogtt_simul' # 'lotka_volterra', 'sir', 'nc_sir', 'ogtt_simul'
+    EXPERIMENT_NAME: str = 'no_spec'
     SEED: int = 42
     DEVICE: str = "cuda" if torch.cuda.is_available() else "cpu"
-    RESULTS_DIR: str = 'experiments/compare_baseline/results'
+    RESULTS_DIR: str = 'experiments/abalation_study/'
     RUN_BASELINE: bool = False  # Whether to run the single-network baseline for comparison
     # --------------------------------------------------------------------------
     # 2. Data Generation and Data Loading
@@ -52,10 +52,10 @@ class Config:
     # --------------------------------------------------------------------------
     # 3. Trainig Hyperparameters
     # --------------------------------------------------------------------------
-    EPOCHS: int = 10000
+    EPOCHS: int = 1000
     LEARNING_RATE: float = 1e-3
     WEIGHT_DECAY: float = 0.0
-    USE_EARLY_STOPPING: bool = True
+    USE_EARLY_STOPPING: bool = False
     EARLY_STOPPING_PATIENCE: int = 200
     EARLY_STOPPING_MIN_DELTA: float = 1e-6
     
@@ -68,6 +68,7 @@ class Config:
     ])
     
     ITERATIONS: int = 10              # Number of iterations for parameter estimation during inference
+    RECURRENT_ITER: int = 2           # Unroll depth (BPTT steps) for the recurrent training loss
     
     # --------------------------------------------------------------------------
     # 4. Model Architecture
@@ -83,8 +84,8 @@ class Config:
         }
     })
     
-    USE_SPECTRAL_NORM: bool = True    # Whether to apply Spectral Normalization in models
-    
+    USE_SPECTRAL_NORM: bool = False    # Whether to apply Spectral Normalization in models
+    PLOT_PHASE_EVOLUTION: bool = True
     # --------------------------------------------------------------------------
     # 5. Experiment Scenarios
     # --------------------------------------------------------------------------

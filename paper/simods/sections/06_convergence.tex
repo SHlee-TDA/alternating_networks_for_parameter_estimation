@@ -1,0 +1,131 @@
+%6.1 iteration을 (\theta^{(k+1)} = T(\theta^{(k)})) 형태의 연산자로 정리
+%6.2 (T)의 Lipschitz bound를 (H_\phi, P_\psi)의 Lipschitz 상수로 상계
+%6.3 spectral normalization이 이를 어떻게 보장하는지(정리/조건)
+%6.4 Theorem: unique fixed point + exponential convergence
+%6.5 Corollary: K=10 고정이 충분한 이유(오차 bound로 연결 가능)
+
+\section{Theory 1: Convergence}
+\label{sec:convergence}
+
+In this section we analyze the iteration operator
+$\theta^{(k+1)} = \mathcal{T}(\theta^{(k)};\mathbf{x}_\mathrm{obs})$
+introduced in \ref{sec:method}.
+The introduction of the iteration raises a critical theoretical questions:
+
+\emph{Convergence: Does this iteration process stably converge to a unique fixed point?}
+\emph{Sensitivity: Is it sensitive to the initial guess $\theta^{(0)}$?}
+
+In this section, we prove that by enforcing strict Lipschitz bounds on two neural networks $H_\phi$ and $P_\psi$, the composite operator $\mathcal{T}$ becomes a global contraction mapping, guaranteeing exponential convergence to a unique fixed point $\theta^*$ from any arbitrary initialization.
+
+\subsection{Preliminaries: contraction mappings and Banach's theorem}
+\label{subsec:banach}
+
+Let $(\Theta,\|\cdot\|_2)$ be a complete metric space.
+\footnote{In practice, $\Theta$ is taken as a closed subset of $\mathbb{R}^p$ in normalized coordinates.}
+A map $\mathcal{T}:\Theta\to\Theta$ is a \textit{contraction} if there exists $K\in[0,1)$ such that
+
+\begin{equation}
+\label{eq:contraction-def}
+    \lVert \mathcal{T}(\theta_a)-\mathcal{T}(\theta_b)\|_2 \le K\|\theta_a-\theta_b\rVert_2,
+    \qquad \forall\,\theta_a,\theta_b\in\Theta.
+\end{equation}
+
+By \emph{Banach's fixed-point theorem}, a contraction has a unique fixed point $\theta^*$ and the iteration
+$\theta^{(k+1)}=\mathcal{T}(\theta^{(k)})$ converges to $\theta^*$ for any initialization. 
+Moreover, the convergence is geometric:
+
+\begin{equation}
+\label{eq:geom-rate}
+    \|\theta^{(k)}-\theta^*\|_2 \le K^k\|\theta^{(0)}-\theta^*\|_2.
+\end{equation}
+
+\subsection{A Sufficient Condition for Contractivity of $\mathcal{T}$}
+\label{subsec:contractivity}
+
+Recall that our update operator is the composition:
+
+\begin{equation}
+\label{eq:T-repeat}
+    \mathcal{T}(\theta;\mathbf{x}_\mathrm{obs}) = P_\psi\big(\mathbf{x}_\mathrm{obs}, H_\phi(\mathbf{x}_\mathrm{obs},\theta)\big).
+\end{equation}
+
+We provide a simple sufficient condition for \eqref{eq:contraction-def} in terms of Lipschitz constants of the two networks.
+
+\begin{assumption}[Lipschitz continuity of the learned maps]
+\label{ass:lipschitz}
+    For each fixed input $\mathbf{x}_\mathrm{obs}$, the hidden-state estimator $H_\phi$ is Lipschitz in $\theta$:
+    there exists $\mathrm{Lip}_H\ge0$ such that
+    $$
+    \lVert H_\phi(\mathbf{x}_\mathrm{obs},\theta_a)-H_\phi(\mathbf{x}_\mathrm{obs},\theta_b)\rVert_2 \le 
+    \mathrm{Lip}_H\|\theta_a-\theta_b\|_2,
+    \qquad \forall\,\theta_a,\theta_b\in\Theta.
+    $$
+    Moreover, the parameter estimator $P_\psi$ is Lipschitz in its hidden-state input:
+    there exists $\mathrm{Lip}_P\ge0$ such that for all $\mathbf{z}_a,\mathbf{z}_b$ in the range of $H_\phi(\mathbf{x}_\mathrm{obs},\cdot)$,
+    $$
+    \lVert P_\psi(\mathbf{x}_\mathrm{obs},\mathbf{z}_a)-P_\psi(\mathbf{x}_\mathrm{obs},\mathbf{z}_b)\|_2 \le \mathrm{Lip}_P\|\mathbf{z}_a-\mathbf{z}_b\|_2.
+    $$
+\end{assumption}
+
+\begin{theorem}[Contractivity of the Iterative Operator]
+\label{thm:contraction}
+    Under Assumption~\ref{ass:lipschitz}, the update operator $\mathcal{T}(\cdot;\mathbf{x}_\mathrm{obs})$ is Lipschitz with constant at most $\mathrm{Lip}_\mathcal{T}:=\mathrm{Lip}_P\mathrm{Lip}_H$:
+    $$
+    \|T(\theta_a;\mathbf{x}_\mathrm{obs})-T(\theta_b;\mathbf{x}_\mathrm{obs})\|_2 \le \mathrm{Lip}_P\mathrm{Lip}_H \|\theta_a-\theta_b\|_2,
+    \qquad \forall\,\theta_a,\theta_b\in\Theta.
+    $$
+    In particular, if $\mathrm{Lip}_P\mathrm{Lip}_H<1$, then $\mathcal{T}(\cdot;\mathbf{x}_\mathrm{obs})$ is a contraction on $(\Theta,\|\cdot\|_2)$ and hence has a unique fixed point
+    $\theta^*(\mathbf{x}_\mathrm{obs})$.
+    Moreover, for any initialization $\theta^{(0)}\in\Theta$, the iteration $\theta^{(k+1)}=\mathcal{T}(\theta^{(k)};\mathbf{x}_\mathrm{obs})$ converges to
+    $\theta^*(\mathbf{x}_\mathrm{obs})$ and satisfies the geometric rate bound \eqref{eq:geom-rate} with $\mathrm{Lip}_\mathcal{T}$.
+\end{theorem}
+
+\begin{proof}
+    Fix $\mathbf{x}_\mathrm{obs}$ and let $\theta_a,\theta_b\in\Theta$.
+    By \eqref{eq:T-repeat} and the Lipschitz property of $P_\psi$ in its second argument,
+    \begin{align*}
+        \lVert \mathcal{T}(\theta_a;\mathbf{x}_\mathrm{obs})-\mathcal{T}(\theta_b;\mathbf{x}_\mathrm{obs})\rVert_2
+    &=
+    \lVert P_\psi(\mathbf{x}_\mathrm{obs},H_\phi(\mathbf{x}_\mathrm{obs},\theta_a)) - P_\psi(\mathbf{x}_\mathrm{obs},H_\phi(\mathbf{x}_\mathrm{obs},\theta_b))\rVert_2
+    \\
+    &\le
+    \mathrm{Lip}_P\lVert H_\phi(\mathbf{x}_\mathrm{obs},\theta_a)-H_\phi(\mathbf{x}_\mathrm{obs},\theta_b)\rVert_2.
+    \end{align*}
+    
+    Applying the Lipschitz property of $H_\phi$ in $\theta$ yields
+    $$
+    \|\mathcal{T}(\theta_a;\mathbf{x}_\mathrm{obs})-\mathcal{T}(\theta_b;\mathbf{x}_\mathrm{obs})\|_2 \le \mathrm{Lip}_P\mathrm{Lip}_H\|\theta_a-\theta_b\|_2.
+    $$
+    Since $\mathrm{Lip}_\mathcal{T}=\mathrm{Lip}_P\mathrm{Lip}_H<1$, then $\mathcal{T}(\cdot;\mathbf{x}_\mathrm{obs})$ is a contraction and the remaining claims follow from Banach's fixed-point theorem.
+\end{proof}
+
+\subsection{Enforcing Lipschitz bounds via spectral normalization}
+\label{subsec:sn}
+
+Assumption~\ref{ass:lipschitz} can be promoted in practice by controlling the operator norms of the linear layers.
+For a linear map $x\mapsto Wx$, its $\ell_2$-Lipschitz constant equals the spectral norm $\|W\|_2$.
+Spectral normalization rescales each weight matrix $W$ by an estimate of $\|W\|_2$ so that the resulting layer has a prescribed operator-norm bound,
+typically close to~$1$.
+This idea was popularized in the deep learning literature as a training-stabilization technique. \cite{miyato2018spectralnormalizationgenerativeadversarial}
+
+For a feed-forward network composed of linear layers and pointwise nonlinearities with Lipschitz constant at most~$1$ (e.g., $\tanh$),
+one obtains a simple upper bound on the network's Lipschitz constant by multiplying the spectral norms of the weight matrices.
+Consequently, by applying spectral normalization layerwise (and leaving a small margin for strict inequality),
+we can ensure $\mathrm{Lip}_H$ and $\mathrm{Lip}_P$ are bounded and achieve $\mathrm{Lip}_P\mathrm{Lip}_H<1$.
+Further implementation details are provided in the supplementary material.
+
+
+Section~\ref{subsec:exp-convergence} verifies this empirically: without spectral normalization the
+measured composite Lipschitz constant exceeds one and the iteration fails to contract, whereas across a
+range of margins that keep $\mathrm{Lip}_\mathcal{T}<1$ the iteration converges as predicted.
+
+\subsection{Implications for the number of inference steps}
+\label{subsec:Ksteps}
+
+Theorem~\ref{thm:contraction} yields a direct justification for using a small, fixed number of inference steps.
+If $\mathcal{T}(\cdot;\mathbf{x}_\mathrm{obs})$ is a contraction with constant $K<1$, then after $k$ iterations,
+$$
+\lVert\theta^{(k)}-\theta^*(\mathbf{x}_\mathrm{obs})\rVert_2 \le K^k\lVert\theta^{(0)}-\theta^*(\mathbf{x}_\mathrm{obs})\rVert_2,
+$$
+so the error decreases exponentially in $k$.
+This explains why in practice a small number of iterations (e.g., $K=10$) suffices, and why often $1$--$2$ iterations already yield a stable estimate.

@@ -1,0 +1,73 @@
+\section{Problem Formulation}
+\label{sec:problem}
+
+In this section, we formally define the problem of parameter estimation for dynamical systems under \emph{partial and sparse observation} settings. 
+Let $\mathbf{x}(t)\in\mathbb{R}^d$ denote the full state of the dynamical system and $\theta\in\Theta\subset\mathbb{R}^p$ the unknown parameter vector.
+The underlying dynamics are governed by the ordinary differential equation (ODE)
+\begin{equation}
+\label{eq:ode}
+    \dot{\mathbf{x}}(t)=f(\mathbf{x}(t),\theta),\qquad t\in[0,T],
+\end{equation}
+where $f:\mathbb{R}^d\times\Theta\to\mathbb{R}^d$ is a known, sufficiently smooth vector field.
+The classical parameter estimation problem seeks to infer the unknown parameter $\theta$ given the continuous trajectory of the full state $\mathbf{x}(t)$~\cite{tarantola2005inverse}. 
+In practical applications, however, obtaining such complete observations is rarely feasible.
+The following subsections define the specific constraints of realistic observations and formulates the resulting inverse problem.
+
+\subsection{Partial and Sparse Observation Setting}
+\label{subsec:obsmodel}
+
+We consider a \emph{partial observation} setting, in which only a subset of the state variables is observable.
+We decompose the full state $\mathbf{x}(t)$ into an \emph{observed} state $x_{\mathrm{obs}}(t)\in\mathbb{R}^{d_{\mathrm{obs}}}$ and a
+\emph{unobserved} state $x_{\mathrm{hid}}(t)\in\mathbb{R}^{d_{\mathrm{hid}}}$, such that $d_{\mathrm{obs}}+d_{\mathrm{hid}}=d$.
+We refer to this unobserved state as the \emph{hidden state} to emphasize its role as an essential latent feature that must be explicitly reconstructed to infer unknown parameter $\theta$.
+Without loss of generality, the state vector can be partitioned as $\mathbf{x}(t) = \left[x_\mathrm{obs}(t)^\top , x_\mathrm{hid}(t)^\top\right]^\top$.
+To formalize this limitation, we define a non-injective map $h:\mathbb{R}^d \to \mathbb{R}^{d_{obs}}$ acting as a coordinate projection:
+
+\begin{equation}
+\label{eq:h-projection}
+    x_{\mathrm{obs}}(t)=h(\mathbf{x}(t)).
+\end{equation}
+
+
+
+The data are further constrained by \emph{sparse sampling} at discrete times.
+We assume a uniform sampling scheme over the time interval $[0, T]$ with a fixed step size $\Delta t$:
+
+\begin{equation}
+\label{eq:sampling-times}
+    0=t_0<t_1<\cdots<t_{N}=T,
+\end{equation}
+
+where $N\Delta t = T$.
+The term \emph{sparse} specifically denotes scenarios where $(N+1)$ is extremely small relative to the intrinsic time scale of the dynamics.
+Consequently, the partial and sparse time-series data collected from the system is denoted as the set of discrete observations $\left\{x_\mathrm{obs}(t_i)\right\}_{i=0}^{N}$.
+
+Since our estimators are modeled as multi-layer perceptrons (MLPs), the discrete sampled trajectories must be flattened into 1D vectors.
+We write the flattened observation vector $\mathbf{x}_\mathrm{obs} \in \mathbb{R}^{(N+1)
+\times d_\mathrm{obs}}$ and the hidden state vector $\mathbf{x}_\mathrm{hid} \in \mathbb{R}^{(N+1) \times d_\mathrm{hid}}$ by concatenating the state vectors at each sampling time:
+
+\begin{align}
+    \mathbf{x}_{\mathrm{obs}}&
+    :=[x_{\mathrm{obs}}(t_0)^\top,\ldots,x_{\mathrm{obs}}(t_{N})^\top]^\top
+,
+\\
+    \mathbf{x}_{\mathrm{hid}}&
+    :=[x_{\mathrm{hid}}(t_0)^\top,\ldots,x_{\mathrm{hid}}(t_{N})^\top]^\top.
+\end{align}
+
+Estimating the unknown parameter vector $\theta$ from the partial and sparse observations $\mathbf{x}_\mathrm{obs}$ constitutes an inverse problem involving unobserved state trajectories. 
+Since the hidden state $\mathbf{x}_\mathrm{hid}$ is unmeasured yet continuously coupled with the observed dynamics through the governing ODE, traditional joint optimization over both states and parameters frequently leads to highly non-convex and ill-conditioned objective landscapes. 
+This computational difficulty is significantly amplified in sparse sampling regimes, where classical solvers are highly sensitive to initialization and prone to getting trapped in local minima or diverging. 
+To alleviate these numerical challenges, a structured inference framework that systematically decouples the state reconstruction and parameter estimation tasks is required.
+
+\begin{remark}[Why sparsity is essential]
+Given the \emph{continuous} partial observation $x_\mathrm{obs}(t)$ for all $t\in[0,T]$, classical theory offers
+recovery guarantees: Takens' embedding theorem and the Hermann--Krener observability rank condition
+(Section~\ref{sec:identifiability}) certify, under genericity assumptions, that the full state and the
+parameters can in principle be reconstructed from the observed component and its time derivatives.
+These guarantees rely on access to high-order temporal information (derivatives, or equivalently a dense
+time series). Under the sparse sampling of \eqref{eq:sampling-times}, that information is unavailable,
+since derivatives cannot be reliably estimated from a handful of points. The guarantees then no longer
+apply, and the problem may become practically, or even structurally, non-identifiable. This is the
+regime we study, and it is what makes the inverse problem genuinely hard.
+\end{remark}

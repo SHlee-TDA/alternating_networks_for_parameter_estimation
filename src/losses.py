@@ -62,7 +62,7 @@ class RecurrentLoss(BaseLoss):
     """
     def __init__(self, hidden_net, param_net, config, iter=2, gamma=1.0):
         super(RecurrentLoss, self).__init__(hidden_net, param_net, config)
-        self.iter = iter # Number of recurrent steps
+        self.iter = int(getattr(config, 'RECURRENT_ITER', iter)) # Number of recurrent steps
         self.gamma = gamma # Discount factor
         
     def forward(self, x_true, y_true, p_true):

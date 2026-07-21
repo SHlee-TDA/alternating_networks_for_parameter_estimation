@@ -23,6 +23,7 @@ from src.data_loader import DataGenerator, setup_dataloaders
 from src.models import HiddenVarPredictor, ParameterEstimator, SingleNetworkBaseline
 from src.trainer import Trainer
 from src.infer import run_evaluation_phase  
+from src.analyzer import BaseAnalyzer
 from tools.exp_tools import ExperimentLogger, set_seed, get_system_class
 
 
@@ -113,9 +114,16 @@ def run_experiment_pipeline(global_config):
             ).to(device)
         
         # Phase 2:Training
+        analyzer = BaseAnalyzer(
+            hidden_net=hidden_net, param_net=param_net, 
+            normalizer=normalizer, config=run_config, 
+            system=system, history=None
+        )
+        
         trainer = Trainer(
             train_l, val_l, run_config,
-            hidden_net=hidden_net, param_net=param_net, baseline_net=baseline_net
+            hidden_net=hidden_net, param_net=param_net, baseline_net=baseline_net,
+            analyzer=analyzer
         )
         
         if getattr(run_config, 'RUN_BASELINE', False):

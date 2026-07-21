@@ -80,7 +80,7 @@ class HiddenVarPredictor(nn.Module):
         
         layers = []
         input_dim = flat_x_dim + num_params
-        spectral_scale = 0.99
+        spectral_scale = model_config.get('spectral_scale', 0.99)
         
         for hidden_dim in hidden_dims:
             linear = nn.Linear(input_dim, hidden_dim)
@@ -128,7 +128,7 @@ class ParameterEstimator(nn.Module):
 
         input_dim = flat_x_dim + flat_y_dim
         layers = []
-        spectral_scale = 0.99
+        spectral_scale = model_config.get('spectral_scale', 0.99)
 
         for hidden_dim in hidden_dims:
             linear = nn.Linear(input_dim, hidden_dim)

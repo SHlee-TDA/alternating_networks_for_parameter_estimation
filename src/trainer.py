@@ -25,10 +25,12 @@ class Trainer:
                  train_loader, val_loader, 
                  config,
                  hidden_net=None, param_net=None,
-                 baseline_net=None):
+                 baseline_net=None,
+                 analyzer=None):
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.config = config
+        self.analyzer = analyzer
         
         # Setup results directory
         self.results_path = os.path.join(config.RESULTS_DIR, config.SYSTEM_NAME, config.EXPERIMENT_NAME)
@@ -84,6 +86,18 @@ class Trainer:
         best_val_loss = np.inf
         patience_counter = 0
         
+        # Optional: Prepare fixed samples for phase portrait visualization
+        fixed_x_sample = None
+        fixed_p_target = None
+        if getattr(self.config, 'PLOT_PHASE_EVOLUTION', False) and not getattr(self.config, 'RUN_BASELINE', False):
+            if self.analyzer is not None:
+                x_val, _, p_val = next(iter(self.train_loader))
+                fixed_x_sample = x_val[0:1].to(self.config.DEVICE)  # shape: (1, ...)
+                fixed_p_target = self.analyzer.normalizer.denormalize_params(p_val)[0].cpu().numpy() # shape: (param_dim,)
+            else:
+                print("Warning: PLOT_PHASE_EVOLUTION is True, but analyzer is not provided.")
+        
+        
         for epoch in range(self.config.EPOCHS):
             if getattr(self.config, 'RUN_BASELINE', False):
                 self.baseline_net.train()
@@ -135,6 +149,25 @@ class Trainer:
             if epoch % 1000 == 0 or epoch == self.config.EPOCHS - 1:
                 print(f"Epoch {epoch+1:04d} | Train: {history['train_total_loss'][-1]:.4f} | Val: {history['val_total_loss'][-1]:.4f}")
             
+            # Optional: Phase Portrait Visualization
+            total_eps = self.config.EPOCHS
+            percentiles = [0, 25, 50, 75, 100]
+            target_eps = []
+            for p in percentiles:
+                ep = int((total_eps - 1) * (p / 100))
+                target_eps.append(ep)
+
+            if getattr(self.config, 'PLOT_PHASE_EVOLUTION', False) and not getattr(self.config, 'RUN_BASELINE', False):
+                if epoch in target_eps:
+                    if self.analyzer is not None and fixed_x_sample is not None:
+                        self.hidden_net.eval()
+                        self.param_net.eval()
+                        
+                        self.analyzer.plot_phase_portraits(fixed_x_sample, fixed_p_target, epoch=epoch)
+                        
+                        self.hidden_net.train()
+                        self.param_net.train()
+                        
             # Early Stopping Logic
             if self.config.USE_EARLY_STOPPING:
                 current_val_loss = history['val_total_loss'][-1]

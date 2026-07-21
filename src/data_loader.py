@@ -384,7 +384,12 @@ def setup_dataloaders(exp_config, sim_data_tuple, system, global_config):
     # Scales data to a stable range (e.g., [-1, 1]) for neural networks.
     # ---------------------------------------------------------
     use_log = (global_config.SYSTEM_NAME == 'ogtt_simul')
-    use_normalization = (global_config.SYSTEM_NAME == 'ogtt_simul')
+    # Normalize inputs and parameters for ALL systems (not just OGTT): SIR/LV were previously
+    # fed raw physical states/params, which (a) left large-magnitude inputs unconditioned and
+    # (b) let the ParameterEstimator's output Tanh saturate for LV params near 1.0. Min-max to
+    # [-1,1] (log only for OGTT) with the existing 10% p_bounds margin keeps targets inside the
+    # Tanh linear range. (Fixes the documented SIR/LV Tanh-cap bug.)
+    use_normalization = True
     
     # Check if we are loading a previously saved experiment
     loaded_scales = getattr(global_config, 'NORMALIZER_STATE_SCALES', None)

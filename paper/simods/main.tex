@@ -1,0 +1,131 @@
+% SIAM Article Template
+% `nohypdvips` lets the document compile with XeTeX/tectonic (the class otherwise loads the
+% dvips-only hypdvips package); it is harmless under pdfLaTeX, where that branch is not taken.
+\documentclass[review,onefignum,onetabnum,nohypdvips]{siamonline250211}
+% Information that is shared between the article and the supplement
+% (title and author information, macros, packages, etc.) goes into
+% ex_shared.tex. If there is no supplement, this file can be included
+% directly.
+
+\input{ex_shared}
+
+% Optional PDF information
+\ifpdf
+\hypersetup{
+  pdftitle={An Iterative Network for Parameter Estimation in Nonlinear Dynamical Systems from Sparse and Partial Observations},
+  pdfauthor={Seong-heon Lee, Dongjin Lee, Jiaxi Gu, and Jae-Hun Jung}
+}
+\fi
+
+% The next statement enables references to information in the
+% supplement. See the xr-hyperref package for details.
+
+\externaldocument[][nocite]{ex_supplement}
+
+% FundRef data to be entered by SIAM
+%<funding-group specific-use="FundRef">
+%<award-group>
+%<funding-source>
+%<named-content content-type="funder-name"> 
+%</named-content> 
+%<named-content content-type="funder-identifier"> 
+%</named-content>
+%</funding-source>
+%<award-id> </award-id>
+%</award-group>
+%</funding-group>
+
+\begin{document}
+
+\maketitle
+
+% REQUIRED
+\begin{abstract}
+Estimating parameters of nonlinear dynamical systems from sparse and partial observations is a
+severely ill-posed inverse problem. A natural and appealing strategy is to \emph{decouple} it: learn
+one network that reconstructs the unobserved (hidden) state from the observations and a current
+parameter guess, and another that updates the parameter from the observations and the reconstructed
+state, then iterate the composition to a fixed point. We study this decoupled fixed-point estimator
+and give a complete characterization of what it can and cannot do. On the positive side, enforcing
+Lipschitz bounds (e.g., by spectral normalization) makes the update a contraction, so the iteration
+converges to a unique fixed point from any initialization at a geometric rate. On the limiting side,
+we show that convergence does not deliver correctness, and that the limitation is structural rather
+than a training artifact. Because the fixed point is a deterministic function of the observation, it
+cannot beat the conditional-mean estimator---reconstructing the hidden state confers no information
+advantage at inference, since the reconstructed state is itself a function of the observation---and a
+plain direct regressor typically reaches this ceiling more closely. Under non-identifiability the
+conditional mean is moreover displaced strictly off the manifold of parameters consistent with the
+observation, so the squared-loss estimate is not even physically admissible. We predict the
+identifiability of three benchmark systems (SIR, Lotka--Volterra, OGTT) a priori via a Hermann--Krener
+observability analysis and confirm each prediction empirically. The results delineate a fundamental
+ceiling for deterministic decoupled point estimation and motivate lifting inference from point
+estimates to distributions.
+\end{abstract}
+
+% REQUIRED
+\begin{keywords}
+dynamical systems,
+partial observation,
+inverse problems,
+parameter estimation,
+non-identifiability,
+machine learning,
+neural networks
+\end{keywords}
+
+% REQUIRED
+\begin{MSCcodes}
+
+\end{MSCcodes}
+
+\section{Introduction}
+
+% Section 1: Introduction
+%\input{sections/01_introduction}
+\input{sections/intro}
+% Section 2: Related Works
+%\input{sections/02_related_works}
+
+% Sect0ion 3: Problem Formulation
+\input{sections/03_problem_formulation}
+
+%\input{sections/benchmarks}
+% Section 4:
+%\input{sections/04_feasibility}
+
+% Section 5:
+\input{sections/05_method}
+
+% Section 6:
+\input{sections/06_convergence}
+
+% Section 7 (Correctness & statistical limitation; includes off-fiber sharpening):
+\input{sections/correctness}
+%\input{sections/08_correctness}
+
+% Section 8 (Feasibility: identifiability / observability -- organizing principle for the experiments):
+\input{sections/04_feasibility}
+
+% Section 9 (Experiments):
+\input{sections/09_experiments}
+
+% Section 10 (Discussion: positioning vs other point estimators; motivation for distributional inference):
+\input{sections/11_discussion}
+
+
+
+%\section{Conclusions}
+%\label{sec:conclusions}
+
+\appendix
+%\section{An example appendix}
+%\input{appendix/implementation}
+%\input{appendix/training}
+\input{appendix/observability}
+\section*{Acknowledgments}
+
+
+\bibliographystyle{siamplain}
+\bibliography{references}
+
+\end{document}

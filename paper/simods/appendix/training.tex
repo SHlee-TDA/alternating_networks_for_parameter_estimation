@@ -1,0 +1,59 @@
+\section{Implementation details: training protocol}
+\label{app:impl-train}
+\subsection{Hyperparameters and implementation settings}
+\label{app:hyperparams}
+
+\begin{table}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt} % 열 간격 줄이기
+\renewcommand{\arraystretch}{1.05}
+\caption{Hyperparameters used in the experiments. Values are highlighted for easy modification.}
+\label{tab:hyperparams}
+\begin{tabular}{p{0.18\linewidth} p{0.36\linewidth} p{0.38\linewidth}}
+\hline
+\textbf{Category} & \textbf{Setting} & \textbf{Value} \\
+\hline
+System & System / seed / device & \HP{ogtt\_simul}, \HP{42}, \HP{CUDA if available} \\
+Data & \#samples / split / batch & \HP{10000}, \HP{0.2}, \HP{512} \\
+SDE data & Aug. factor / diffusion scale & \HP{30}, \HP{1.27} \\
+Training & Epochs / lr / wd & \HP{10000}, \HP{$10^{-4}$}, \HP{$10^{-4}$} \\
+Training & Early stopping (pat., min-$\Delta$) & \HP{200}, \HP{$10^{-6}$} \\
+Training & LR schedule & \HP{Plateau: factor 0.9, pat. 20, min lr $10^{-8}$} \\
+Training & Grad clip & \HP{$\|g\|\le 1.0$} \\
+Features & Derivative / method & \HP{on}, \HP{spline} \\
+Loss & Components & \HP{sup. + rec. (w=1,1)} \\
+Inference & Iterations & \HP{10} \\
+Model & Hidden dims / activation & \HP{[64,64,64]}, \HP{SiLU} \\
+Regularize & Spectral norm / power iters & \HP{on}, \HP{5} \\
+\hline
+\end{tabular}
+\end{table}
+\noindent\textbf{Note.}
+All parameter-learning and convergence analysis are performed in normalized parameter coordinates.
+Reported parameter estimates are denormalized to physical units for evaluation.
+
+This appendix summarizes training and inference hyperparameters used in our experiments.
+
+\subsection{Data and batching}
+We generate \HPNumSamples\ trajectories for training, with a test split of \HPTestSplit.
+Mini-batch training uses batch size \HPBatchSize.
+
+\subsection{Optimization}
+We train for up to \HPEpochs\ epochs using AdamW with learning rate \HPLR\ and weight decay \HPWeightDecay.
+We apply gradient clipping with maximum norm $1.0$.
+
+Early stopping is enabled (\HPEarlyStop) with patience \HPEarlyPat\ and minimum improvement threshold \HPEarlyDelta.
+A ReduceLROnPlateau scheduler is used as described in the codebase.
+
+\subsection{Loss configuration}
+Unless otherwise stated, we use the composite objective with components \HPLossCfg.
+The recurrent component corresponds to an unrolled training objective (see Section~\ref{sec:loss-design} for discussion, if included).
+
+\subsection{Model architecture and regularization}
+Both networks use hidden dimensions \HPHiddenDims\ and activation \HPAct.
+Spectral normalization is enabled (\HPSN) and applied to all linear layers.
+
+\subsection{Derivative features and inference iteration}
+Derivative features are used (\HPUseDeriv) and computed at inference by the \HPDerivMethod\ method.
+The inference iteration uses \HPIter\ fixed steps.

@@ -1,0 +1,57 @@
+\section{Implementation details: OGTT normalization}
+\label{app:impl}
+
+This appendix documents preprocessing used in the OGTT experiments.
+SIR and Lotka--Volterra experiments use raw simulated values without additional normalization.
+
+\subsection{Dataset-level state normalization}
+\label{app:state-norm}
+
+To improve numerical stability, we normalize observed and hidden state values by dataset-level scale factors computed from the training set.
+Let $\{x_{\mathrm{obs}}^{(m)}(t_i)\}$ and $\{x_{\mathrm{hid}}^{(m)}(t_i)\}$ denote simulated OGTT training samples at sampling times.
+We define
+\begin{equation}
+\label{eq:app-state-scales}
+s_{\mathrm{obs}} := 1.2\cdot \mathrm{Quantile}_{0.999}\!\left(\,|x_{\mathrm{obs}}|\,\right),\qquad
+s_{\mathrm{hid}} := 1.2\cdot \mathrm{Quantile}_{0.999}\!\left(\,|x_{\mathrm{hid}}|\,\right),
+\end{equation}
+where each quantile is taken over all training trajectories and sampling times (and absolute value is applied elementwise).
+
+We normalize the inputs to the neural networks by
+\begin{equation}
+\label{eq:app-state-norm}
+x_{\mathrm{obs}}^{\mathrm{norm}}(t_i)=\frac{x_{\mathrm{obs}}(t_i)}{s_{\mathrm{obs}}},\qquad
+x_{\mathrm{hid}}^{\mathrm{norm}}(t_i)=\frac{x_{\mathrm{hid}}(t_i)}{s_{\mathrm{hid}}}.
+\end{equation}
+When derivative features are used, we apply the same scaling to preserve derivative information up to a global factor:
+\begin{equation}
+\label{eq:app-deriv-norm}
+\widehat{\dot{x}}_{\mathrm{obs}}^{\mathrm{norm}}(t_i)=\frac{\widehat{\dot{x}}_{\mathrm{obs}}(t_i)}{s_{\mathrm{obs}}}.
+\end{equation}
+
+\subsection{Parameter normalization and log-transform}
+\label{app:param-norm}
+
+For OGTT parameters we use a log transform prior to min--max scaling.
+Given a physical parameter vector $\theta\in\mathbb{R}_+^p$, define $\varphi(\theta)=\log(\theta+\varepsilon)$ for a small $\varepsilon>0$.
+We use $\varepsilon=10^{-9}$ in the log transform.
+Let $\theta_{\min},\theta_{\max}\in\mathbb{R}^p$ be dataset-derived bounds computed from the training set with a $20\%$ margin:
+\begin{equation}
+\label{eq:app-param-bounds}
+\theta_{\min} := \theta_{\min,\mathrm{data}}/1.2,\qquad
+\theta_{\max} := 1.2\,\theta_{\max,\mathrm{data}}.
+\end{equation}
+We map parameters to $[-1,1]^p$ via
+\begin{equation}
+\label{eq:app-param-norm}
+\theta^{\mathrm{norm}}
+= 2\,\frac{\varphi(\theta)-\varphi(\theta_{\min})}{\varphi(\theta_{\max})-\varphi(\theta_{\min})}-1.
+\end{equation}
+At inference, predicted parameters are denormalized back to physical units by inverting \eqref{eq:app-param-norm} and then applying
+$\varphi^{-1}(\cdot)=\exp(\cdot)$.
+
+\subsection{Practical notes}
+\label{app:practical-notes}
+
+In our implementation, the scale factors $(s_{\mathrm{obs}},s_{\mathrm{hid}})$ and bounds $(\theta_{\min},\theta_{\max})$ are computed once from the training set and
+then reused across training and inference to avoid time-dependent rescaling.
