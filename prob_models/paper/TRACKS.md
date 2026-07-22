@@ -305,3 +305,10 @@ figure 재생성이 필요하면 experiments/regen_figure3.py·fig1_teaser.py·p
   δ 성립, coverage 0.95, along-ridge 1.19 vs 0.000, ε_inc 0.008). 그림 3종 main.tex §8 embed(+graphicx).
   `.gitignore`에 jmlr/figures/*.pdf negation 추가. 정적 검사 통과. **주의: 이 브랜치는 b20c3aa 분기라
   main(8e57250, Track E/W 병합됨)보다 뒤처짐 → push/PR 전 rebase 필요**(TRACKS.md 양쪽 수정 충돌 가능).
+- 2026-07-19(2) — [Track T] main으로 rebase 완료(TRACKS.md 로그 충돌 1건, 시간순 병합으로 해결) →
+  push → PR #4 merge 완료(main `97dad95`). 이어서 **T2-4 마무리 + T2-5 동시 진행**: (1) §3에 N1–N4
+  노이즈 4종 taxonomy 문단 신설(N1→rate, N2→ε_H/ε_P, N3/N4→spread·minorization·커플링 상쇄, Rem:noises
+  연결). (2) §9 discussion에 Track E 실측 연결 문단(κ 0.406→0.709 N1-off, ε_inc≈0.029, autocorr 0.012;
+  bib `adcvae-application` 신설로 응용논문 상호인용 완성). (3) T2-5: 제목 후보 6개 제시, **사용자가
+  현재 초안 유지 결정**. (4) 부수 수정: `iclr2026_conference.bib`의 `adcvae-theory` 제목이 확정 제목과
+  달랐던 것(옛 후보 문구) 동기화. 정적 검사 통과(bibitem 전부 인용됨, env·ref/label 정합).

@@ -95,12 +95,16 @@
 - [x] T2-3. 수치 예시 E-a/b/c **설계+구현+plot 완료** → `jmlr/numerics/`(NumPy/SciPy). E-a κ=ρ²=0.640·
       exactness 1e-10, E-b Thm B·incbound 전 δ 성립·MC-Bures 밀착, E-c coverage 0.95·along-ridge
       1.19 vs 0.000·ε_inc 0.008. 그림 3종 §8 embed. Track E와 독립 수행(sliced_w2만 `_metrics.py` 공유).
-- [~] T2-4. `theory_notes.tex` → `jmlr/main.tex` 조립: 정리 본문·증명 이식(Thm A/rate/B/Prop inc/
+- [x] T2-4. `theory_notes.tex` → `jmlr/main.tex` 조립: 정리 본문·증명 이식(Thm A/rate/B/Prop inc/
       Thm incbound full proof; 표준 예비지식 인용 축약), 표기 통일(bold θ,u), 노테이션 표 Table:notation,
-      **intro·discussion 산문 작성 완료**. 정적 검사 통과. 남음: T2-5 제목, 최종 다듬기(preliminaries §2-3
-      추가 축약 여지).
-- [ ] T2-5. 제목 확정(후보: *"Convergence and Consistency of Amortized Pseudo-Gibbs Samplers with
-      Learned Conditionals"*, *"Ergodicity and Steering of Alternating Denoising Samplers"*).
+      intro·discussion 산문, **§3에 N1–N4 노이즈 4종 taxonomy 문단 추가**(Rem:noises 연결),
+      **§9 discussion에 Track E 실측값 연결 문단**(κ 0.406→0.709 N1 ablation, ε_inc≈0.029, autocorr
+      0.012; bib `adcvae-application` 신설, 응용논문 상호인용 완성). preliminaries(Fact:std)는 이미
+      인용 축약된 상태로 판단, 추가 절삭 안 함. 정적 검사 통과(bibitem 전부 인용됨).
+- [x] T2-5. 제목 확정. 6개 후보 제시(differentiator-first/고전 스타일/비호환성 전면화/현재안) →
+      **사용자가 현재 초안 유지 결정**: *"Convergence, Consistency, and a Computable Compatibility
+      Certificate for Amortized Pseudo-Gibbs Samplers with Learned Conditionals"*. 응용논문 bib의
+      `adcvae-theory` 제목을 이 확정 제목과 동기화(기존엔 축약된 옛 후보 제목이 박혀 있었음).
 
 ### 로그
 - 2026-07-13 — 최초 작성. JMLR 1순위 확정. standalone 3-공백(ε_inc 상수·approx-MCMC 포지셔닝·

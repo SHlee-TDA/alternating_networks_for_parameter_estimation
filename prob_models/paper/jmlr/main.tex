@@ -267,6 +267,20 @@ $\bth\mapsto\int Q_P(A_{\bu'}\mid\bu')\,Q_H(d\bu'\mid\bth)=T((\bu,\bth),A)$ is m
 $T((\bu,\bth),\cdot)$ is a probability measure.
 \end{proof}
 
+\paragraph{The four noise classes.}
+The training and sampling pipeline involves four distinct noise sources, and the analysis assigns each
+a separate role; conflating them is what produces the apparent ``contraction vs.\ collapse'' paradox.
+\emph{(N1) Condition noise}: noise added to the \emph{conditioning} input during training. By the
+noise-equals-Tikhonov identity \citep{bishop1995} it penalizes the condition-Jacobian of each decoder,
+promoting small $L_H,L_P$---it acts on the \emph{rate} (Section~\ref{sec:rate}).
+\emph{(N2) Target noise}: noise added to the training targets; it shapes the learned conditionals
+themselves and therefore enters the analysis only through the approximation defects
+$\varepsilon_H,\varepsilon_P$ (Section~\ref{sec:steering}).
+\emph{(N3) The CVAE latent} $\bm z$ and \emph{(N4) the inference-time injection noise} $\sigma\bm\xi$:
+these set the \emph{spread} of each conditional---N4 keeps the kernel nondegenerate and powers the
+minorization (Section~\ref{sec:existence})---and both \emph{cancel} in every contraction coupling
+below, so neither enters $\kappa$. Remark~\ref{rem:noises} completes the argument.
+
 % =====================================================================
 \section{Existence and uniform ergodicity (Theorem A)}
 \label{sec:existence}
@@ -721,7 +735,14 @@ $\kappa=L_HL_P<1$ (Assumption~\ref{ass:lip}), which training \emph{encourages} b
 \citep{bishop1995}, promoting small $L_H,L_P$, and one can treat $\kappa$ as a free constant and
 support $\kappa<1$ empirically through autocorrelation decay and the monitored $\einc$. We regard this
 as an honest assumption rather than a theorem, and phrase every rate/steering statement conditionally
-on it.
+on it. Beyond the controlled examples of Section~\ref{sec:numerics}, the hypothesis and the diagnostics
+it motivates are also borne out on the trained application model: an ablation isolating N1 (condition
+noise) reports $\kappa$ rising from $0.406\pm0.00$ to $0.709\pm0.04$ when condition noise is removed
+(as $\kappa\uparrow1$ predicts), the full model's self-consistency defect sits at
+$\einc\approx0.029\pm0.00$, and the pseudo-Gibbs chain's lag-$1$ autocorrelation is $0.012$ (fast
+mixing, consistent with $\kappa<1$) \citep{adcvae-application}. These are measurements on a real,
+non-Gaussian trained model, not a restatement of the theorem, and the point is only that $\kappa<1$ and
+small $\einc$ are not merely closed-form artifacts of Section~\ref{sec:numerics}.
 
 \paragraph{The $\sigma$-floor.} The injection noise $\sigma_H,\sigma_P>0$ is doubly load-bearing: it
 supplies the minorization of Theorem~\ref{thm:A} and prevents mode collapse, yet it also smooths each
@@ -751,6 +772,12 @@ error, are open.
 
 % =====================================================================
 \begin{thebibliography}{99}
+
+\bibitem[Anonymous(2026)]{adcvae-application}
+Anonymous.
+Probabilistic decoupling for nonlinear inverse problems: overcoming model collapse in
+unidentifiable systems.
+\emph{Companion application manuscript, under review}, 2026.
 
 \bibitem[Arnold et al.(1999)]{arnold1999}
 B.~C. Arnold, E.~Castillo, and J.~M. Sarabia.
