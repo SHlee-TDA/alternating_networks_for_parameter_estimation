@@ -14,7 +14,7 @@
 % Optional PDF information
 \ifpdf
 \hypersetup{
-  pdftitle={An Iterative Network for Parameter Estimation in Nonlinear Dynamical Systems from Sparse and Partial Observations},
+  pdftitle={Convergence Without Correctness: Limits of Contractive Fixed-Point Parameter Estimation from Sparse Partial Observations},
   pdfauthor={Seong-heon Lee, Dongjin Lee, Jiaxi Gu, and Jae-Hun Jung}
 }
 \fi
@@ -66,7 +66,13 @@ conditional mean lies off it, but a reparameterization that straightens the fibe
 product degeneracy) keeps it on. We diagnose the (local) identifiability of three benchmark systems
 a priori --- SIR and Lotka--Volterra by Hermann--Krener Lie-derivative rank calculations, and OGTT by a
 sampled-sensitivity analysis (on the data-generating initial-condition manifold) with a scaling-symmetry
-ablation --- and corroborate the predictions empirically. The results delineate a fundamental ceiling for deterministic decoupled point
+ablation --- and corroborate the predictions empirically. Finally, a controlled test-time perturbation
+experiment shows that the contraction which stabilizes the iteration also flattens its response to input
+noise: the direct regressor is more accurate on clean data but degrades and leaves the admissible set under
+perturbation, whereas the contractive estimator stays bounded at a higher error floor --- a
+stability--accuracy trade-off, not a robustness gain, since a constant prior-mean predictor is more stable
+still and less accurate. Throughout, contractivity resolves the dynamics of the estimator, not the ambiguity
+of the inverse problem. The results delineate a fundamental ceiling for deterministic decoupled point
 estimation and motivate lifting inference from point estimates to distributions.
 \end{abstract}
 

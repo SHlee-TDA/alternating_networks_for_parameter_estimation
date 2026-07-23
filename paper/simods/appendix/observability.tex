@@ -138,11 +138,18 @@ def restricted_jacobian(simulate_G, xi, times, rtol=1e-4, atol=1e-6):
 Here \texttt{col\_scale}$_k=|\xi_k|$, so $J$ is the \emph{log-relative} Jacobian $D_\xi\mathcal{G}\,\operatorname{diag}(\xi)$
 (columns $\partial G/\partial\log\xi_k$; glucose in raw mg/dL); this is a scale-invariant relative-coordinate
 diagnostic, distinct from the network training coordinate (Appendix~\ref{app:repro-norm}). We evaluate at the
-nominal point $G_0=91$~mg/dL, $\xi=(I_0,S_I,\sigma)=(6,0.5,0.5)$, check stability across
-\texttt{rtol}$\in[10^{-5},10^{-3}]$, and use rank tolerance $10^{-3}\varsigma_{\max}$. At the five-point grid
-$J$ is $5\times3$ (its first row is zero since $G(t_0)=G_0$ is fixed) and yields
-$\varsigma\approx(73,0.16,0.073)$ (condition number $\approx10^3$): locally full column rank $3$ but severely
-ill-conditioned. Under the constant-HGP ablation the third singular value drops to $\approx5\times10^{-5}$ and
+nominal point $G_0=91$~mg/dL, $\xi=(I_0,S_I,\sigma)=(6,0.5,0.5)$, and check stability across
+\texttt{rtol}$\in[10^{-5},10^{-3}]$. We report two rank notions, since the reported $\varsigma_3$ is of the
+same order as a naive $10^{-3}\varsigma_{\max}$ cutoff. \emph{(i) Algebraic rank}: under a machine-precision
+tolerance $\tau_{\mathrm{alg}}=\max(m,n)\,\epsilon_{\mathrm{mach}}\,\varsigma_{\max}$ (here
+$\approx5\times2.2\times10^{-16}\times73\approx8\times10^{-14}$) the step-size-stable $\varsigma_3$ is nonzero,
+so $J$ has algebraic rank $3$. \emph{(ii) Practical effective rank}: at the deliberately coarser
+relative-resolution threshold $10^{-3}\varsigma_{\max}\approx0.073$, the effective rank is borderline and may be
+read as $2$ or $3$ depending on the evaluation point. At the five-point grid $J$ is $5\times3$ (its first row is
+zero since $G(t_0)=G_0$ is fixed) and yields $\varsigma\approx(72.6,0.155,0.073)$ (ratios
+$\varsigma_2/\varsigma_1\approx2.1\times10^{-3}$, $\varsigma_3/\varsigma_1\approx1.0\times10^{-3}$; condition
+number $\approx10^3$): locally full \emph{algebraic} column rank $3$ but severely ill-conditioned, i.e.\ full
+rank yet practically borderline rather than structurally rank-deficient. Under the constant-HGP ablation the third singular value drops to $\approx5\times10^{-5}$ and
 its right singular vector coincides exactly with the scaling tangent $\hat t=(+1,-1,+1)/\sqrt3$ ($|\cos|=1.00$),
 so the analytic rank is $\le2$. We make no claim about the continuous-time Hermann--Krener rank of the ambient
 six-dimensional state; the finite five-point Jacobian ($\operatorname{rank}\le5$) cannot certify it.

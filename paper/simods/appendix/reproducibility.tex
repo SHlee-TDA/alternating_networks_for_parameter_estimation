@@ -88,7 +88,7 @@ $10\%$ margin; for OGTT this is applied after a $\log$ transform (so the multipl
 structure becomes additive), while SIR and LV use the plain min--max. Denormalization inverts these maps.
 The fixed-point iteration is initialized at $\theta^{(0)}$, the geometric mean of the training parameters.
 
-\subsection{Network architecture and matched-capacity baseline}
+\subsection{Network architecture and matched-branch direct baseline}
 \label{app:repro-arch}
 
 Both $H_\phi$ and $P_\psi$ are multilayer perceptrons with hidden widths $[256,256,256]$ and SiLU
@@ -100,12 +100,16 @@ $\Theta$ into $\Theta$ (Section~\ref{subsec:exp-convergence}). Weights use ortho
 Parameter counts (spectral-normalized): for OGTT, $|\phi|=134{,}917$ and $|\psi|=134{,}914$
 ($\approx2.70\times10^5$ total); SIR $\approx2.69\times10^5$; Lotka--Volterra $\approx2.76\times10^5$.
 
-The \emph{matched-capacity direct baseline} (\texttt{SingleNetworkBaseline}) maps $\mathbf{x}_\mathrm{obs}
+The \emph{matched-branch direct baseline} (\texttt{SingleNetworkBaseline}) maps $\mathbf{x}_\mathrm{obs}
 \mapsto\theta$ through the \emph{same} MLP backbone --- identical hidden widths $[256,256,256]$, SiLU
 activations, spectral normalization, initialization, optimizer, and data split --- as a single network
-($\approx1.33$--$1.35\times10^5$ parameters, i.e.\ one branch of the operator). ``Matched capacity'' thus
-means an identical per-network architecture and training recipe, isolating the effect of the decoupled
-reconstruction structure rather than of raw parameter count.
+($\approx1.33$--$1.35\times10^5$ parameters, i.e.\ one branch of the operator). This baseline therefore has
+the \emph{same per-network hidden widths} as each branch of the operator, but is \emph{not} matched in total
+parameter count: the decoupled operator uses two such networks ($H_\phi$ and $P_\psi$) and hence roughly twice
+the parameters. The comparison thus isolates the effect of the decoupled reconstruction structure at equal
+per-network width, and if anything gives the operator a capacity advantage rather than a handicap. One
+architectural asymmetry matters downstream: $P_\psi$ ends in a $\tanh$ that bounds the operator's parameter
+output to $\Theta$, whereas the direct baseline has an unbounded linear output head.
 
 \subsection{Training and inference hyperparameters}
 \label{app:repro-train}
@@ -143,6 +147,48 @@ that the qualitative conclusions (the on/off-fiber behavior and the individual-c
 seed-stable. The certified contraction constant and the test-set-wide residual/error statistics of
 Section~\ref{subsec:exp-convergence} are computed from the saved checkpoint of the main OGTT run.
 
+\subsection{Test-time perturbation stress test}
+\label{app:repro-noise}
+
+This appendix collects the full sweep behind Section~\ref{subsec:exp-noise}. The protocol is fixed before
+evaluation: independent additive Gaussian noise $x'_{ij}=x_{ij}+\alpha s_j\epsilon_{ij}$ on each observed
+channel, $s_j$ the clean training-set channel standard deviation, $\alpha\in\{0,0.005,0.01,0.02,0.05,0.10\}$,
+injected in physical units and re-normalized with the clean-training map; $30$ noise replicates per clean
+test trajectory; the identical perturbed observations fed to all three estimators; a single training seed
+($42$), since retraining is compute-bound. The failure rate counts a prediction as failed if any coordinate
+is non-finite, non-positive, or outside the training-parameter support $[\min,\max]$; success-conditioned
+errors are always reported with the failure rate, and no failed sample is dropped from the counts. Metrics
+use per-point quantities: the per-point product $S_I\sigma$ and its signed/absolute error (a per-bin mean of
+on-fiber predictions would itself be off-fiber by Jensen, so we avoid it).
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{figures/exp/noise_sir_lv_2x2.pdf}
+\caption{Test-time noise response for SIR (top) and Lotka--Volterra (bottom): absolute error, degradation,
+displacement, and failure rate versus $\alpha$. The same ordering as OGTT (Figure~\ref{fig:noise-ogtt})
+holds: the direct regressor is most accurate when clean but degrades and violates support under noise, the
+iterative operator is flat at a higher floor, and the prior mean is flat and inaccurate. For LV the direct
+regressor already fails on $6\%$ of clean test samples --- a reflection of the exact prey-only ambiguity of
+Section~\ref{subsec:exp-lv}, which places part of the fiber outside the training support even before noise.}
+\label{fig:noise-sir-lv}
+\end{figure}
+
+\paragraph{Bias/variance decomposition.} For each clean test trajectory we average the log-coordinate
+prediction over the $30$ replicates, $\bar z_i=\tfrac1R\sum_r\log\hat\theta(x_i^{(r)})$, and split the
+error into $\mathrm{bias}^2_i=\|\bar z_i-\log\theta_i\|^2$ and noise variance
+$\tfrac1R\sum_r\|\log\hat\theta(x_i^{(r)})-\bar z_i\|^2$ (finite subset). At $\alpha=0.10$ the iterative
+operator is almost pure bias (SIR/OGTT/LV squared bias $0.94/0.54/0.13$, noise variance
+$1.3{\times}10^{-3}/1.0{\times}10^{-3}/1.4{\times}10^{-4}$), whereas the direct regressor's variance
+dominates ($2.1/29/0.23$) on a smaller bias ($0.24/1.2/0.05$). The flat degradation curve of the iterative
+estimator is therefore a low-variance, high-bias signature, not preserved information. The raw per-replicate
+aggregates are saved as \path{results/det_meanlocus/noise_stress_test.csv}.
+
+\paragraph{Scope.} We ran only the pre-registered primary family (independent additive observation noise).
+Secondary families (trajectory-level calibration shift, sampling-time jitter, quantization, and
+singular-direction perturbations) are deliberately left to future work; the primary sweep already answers
+the stated question --- how the two point estimators trade clean accuracy against perturbation sensitivity ---
+and we stop rather than expand the noise model until an ordering emerges.
+
 \subsection{Code and scripts}
 \label{app:repro-code}
 
@@ -153,6 +199,8 @@ commit that reproduces every reported number. The experiments of this pass are r
 scripts under \path{experiments/det_meanlocus/}:
 \path{condmean_locus_fig.py} (conditional-mean locus, Figure~\ref{fig:ogtt-condmean}),
 \path{ogtt_observability.py} (full- vs constant-HGP sampled sensitivity, Figure~\ref{fig:ogtt_hgp}),
-\path{certify_contraction.py} (contraction certification), and
-\path{coord_mse_ablation.py} (physical- vs log-coordinate MSE ablation, Figure~\ref{fig:ogtt-coord}).
+\path{certify_contraction.py} (contraction certification),
+\path{coord_mse_ablation.py} (physical- vs log-coordinate MSE ablation, Figure~\ref{fig:ogtt-coord}), and
+\path{noise_stress_test.py} together with \path{noise_report.py} (the test-time perturbation sweep,
+Table~\ref{tab:noise} and Figures~\ref{fig:noise-ogtt}--\ref{fig:noise-sir-lv}).
 Model training uses \path{run_paper_exp.py} with the settings of Table~\ref{tab:hyperparams}.

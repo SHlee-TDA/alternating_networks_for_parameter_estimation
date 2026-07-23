@@ -1,10 +1,10 @@
 \contentsline {remark}{{Remark}{2.1}{Why sparsity is essential}}{5}{theorem.9}%
 \contentsline {assumption}{{Assumption}{4.1}{Lipschitz continuity of the learned maps}}{10}{theorem.41}%
 \contentsline {theorem}{{Theorem}{4.2}{Contractivity of the Iterative Operator}}{10}{theorem.42}%
-\contentsline {proof}{{Proof}{1}{}}{10}{proof.43}%
+\contentsline {proof}{{Proof}{1}{}}{11}{proof.43}%
 \contentsline {definition}{{Definition}{5.1}{One-Step Residual}}{12}{theorem.50}%
-\contentsline {lemma}{{Lemma}{5.2}{Fixed-Point Error Bound}}{12}{theorem.52}%
-\contentsline {proof}{{Proof}{2}{}}{12}{proof.54}%
+\contentsline {lemma}{{Lemma}{5.2}{Fixed-Point Error Bound}}{13}{theorem.52}%
+\contentsline {proof}{{Proof}{2}{}}{13}{proof.54}%
 \contentsline {theorem}{{Theorem}{5.3}{Contraction--ambiguity incompatibility}}{13}{theorem.56}%
 \contentsline {proof}{{Proof}{3}{}}{13}{proof.60}%
 \contentsline {proposition}{{Proposition}{5.4}{Conditional-mean ceiling}}{14}{theorem.62}%
@@ -16,10 +16,10 @@
 \contentsline {theorem}{{Theorem}{5.8}{Conditional-mean operator: residual and error are exact}}{16}{theorem.71}%
 \contentsline {proof}{{Proof}{6}{}}{16}{proof.73}%
 \contentsline {corollary}{{Corollary}{5.9}{Regression-to-the-mean sandwich}}{16}{theorem.74}%
-\contentsline {assumption}{{Assumption}{5.10}{Fiber model}}{16}{theorem.77}%
+\contentsline {assumption}{{Assumption}{5.10}{Fiber model}}{17}{theorem.77}%
 \contentsline {proposition}{{Proposition}{5.11}{Conditional mean off a curved fiber}}{17}{theorem.78}%
 \contentsline {proof}{{Proof}{7}{}}{17}{proof.79}%
 \contentsline {corollary}{{Corollary}{5.12}{Product degeneracy under physical-coordinate MSE}}{17}{theorem.80}%
-\contentsline {proof}{{Proof}{8}{}}{17}{proof.81}%
-\contentsline {remark}{{Remark}{5.13}{The off-fiber displacement is a property of the loss coordinate}}{17}{theorem.82}%
+\contentsline {proof}{{Proof}{8}{}}{18}{proof.81}%
+\contentsline {remark}{{Remark}{5.13}{The off-fiber displacement is a property of the loss coordinate}}{18}{theorem.82}%
 \contentsline {remark}{{Remark}{5.14}{Two sources of the fixed-point error}}{18}{theorem.83}%

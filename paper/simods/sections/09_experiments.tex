@@ -8,8 +8,10 @@ ecological Lotka--Volterra model (observability matrix rank-deficient in one par
 and the physiological OGTT glucose--insulin model (weakly identifiable, with only the product
 $mDI=S_I\sigma$ well determined from glucose~\cite{ha2025disposition}). For each system we train the two networks $H_\phi,P_\psi$
 by teacher forcing and compare the converged fixed point $\theta^*(\mathbf{x}_\mathrm{obs})$ against a
-\emph{direct-regression baseline} --- a single network $x_\mathrm{obs}\mapsto\theta$ of matched
-capacity trained by MSE on the identical data split. The comparison is diagnostic rather than
+\emph{direct-regression baseline} --- a single network $x_\mathrm{obs}\mapsto\theta$ with the \emph{same
+per-network hidden widths} as one branch of the operator (matched branch architecture, though not matched in
+total parameter count, since the operator uses two such networks; Appendix~\ref{app:repro-arch}), trained by
+MSE on the identical data split. The comparison is diagnostic rather than
 competitive: because both estimators minimize a squared loss, both are driven toward the conditional
 mean (Proposition~\ref{prop:optimal_predictor}). A single finite-capacity, single-seed regressor is
 not the exact conditional mean, so the baseline serves as an \emph{empirical upper benchmark} on the
@@ -326,8 +328,97 @@ and the fixed-point error, consistent with Lemma~\ref{lem:error_bound}.}
 \label{fig:ogtt-phase}
 \end{figure}
 
-\paragraph{A note on distribution shift} On real clinical OGTT measurements (out of the synthetic
-training distribution), the direct baseline's predictions diverge under denormalization, whereas the
-iterative estimator's strongly biased output remains bounded. We record this as an observation about
-the two estimators' behavior under distribution shift; a robustness claim is beyond the scope of the
-present, characterization-focused study.
+\subsection{Test-time perturbations reveal a stability--accuracy trade-off}
+\label{subsec:exp-noise}
+The experiments so far are noiseless: both the training and the test observations are exact ODE
+solutions, isolating the structural and operator terms of the error from any measurement effect. The
+sampled-conditioning analysis of Section~\ref{subsec:ident-ogtt} predicts that this exactness flatters
+the well-conditioned directions and hides the weak one, which should surface only once the observations
+are perturbed. We therefore run a controlled \emph{test-time perturbation} diagnostic. It is not an
+identifiability theorem and makes no clinical-noise claim; it is an empirical probe of how the same
+regularization that stabilizes the learned iteration reshapes its response to finite input perturbations.
+
+\paragraph{Protocol (pre-registered).} All estimators are the \emph{fixed, noiselessly trained}
+checkpoints from the preceding subsections; no retraining, model selection, or tuning uses any perturbed
+data, and normalization statistics are those of the clean training set. For each observed channel $j$ we
+add independent Gaussian noise in physical units, $x'_{ij}=x_{ij}+\alpha\,s_j\,\epsilon_{ij}$ with
+$\epsilon_{ij}\sim\mathcal N(0,1)$ and $s_j$ the clean training-set standard deviation of that channel,
+then re-normalize with the clean-training map (a pure linear scaling for the observed states, so the
+injection is exact). The level $\alpha\in\{0,0.005,0.01,0.02,0.05,0.10\}$ is fixed before evaluation; all
+estimators receive the \emph{same} perturbed observations. We compare three estimators on identical test
+samples and noise draws: the iterative operator, the matched-branch direct regressor, and a
+\emph{prior-mean predictor} equal to the training-parameter mean in the loss coordinate (geometric mean
+for the log-trained OGTT, arithmetic mean otherwise), which is maximally insensitive to noise by
+construction and thus separates ``stable'' from ``informative''. Results are aggregated over $30$ noise
+replicates per clean test trajectory; a single training seed is used, as retraining is compute-bound
+(Appendix~\ref{app:repro-train}). We report, on the finite-and-positive subset, the median
+log-parameter error $\tilde e_{\log}=\operatorname{median}\|\log\hat\theta-\log\theta\|_2$, the mean
+coordinate-wise NRMSE, the OGTT product error $|\widehat{S_I\sigma}-S_I\sigma|$, the median displacement
+$D(\alpha)=\operatorname{median}\|\log\hat\theta(x')-\log\hat\theta(x)\|_2$ from the clean prediction, and
+a failure rate (out-of-support, non-finite, or positivity violation, with support the training-parameter
+range); failed samples are never silently dropped. Table~\ref{tab:noise} and
+Figure~\ref{fig:noise-ogtt} summarize the run; the full sweep, the bias/variance decomposition, and the
+SIR and Lotka--Volterra panels are in Appendix~\ref{app:repro-noise}.
+
+\input{sections/noise_table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.86\linewidth]{figures/exp/noise_ogtt_2x2.pdf}
+\caption{OGTT test-time noise response. \emph{(Top left)} absolute error $\tilde e_{\log}$: the direct
+regressor is most accurate on clean data but crosses the flat prior-mean line near $\alpha\approx0.02$ and
+keeps rising, while the iterative estimator stays flat at a higher floor. \emph{(Top right)} clean-to-noisy
+degradation; \emph{(bottom left)} prediction displacement; \emph{(bottom right)} failure rate. Only the
+unbounded direct regressor degrades; the $\tanh$-bounded iterative operator and the constant prior mean do
+not. Lower is better throughout.}
+\label{fig:noise-ogtt}
+\end{figure}
+
+\paragraph{A consistent ordering, and its interpretation.} On clean observations the direct regressor is
+the most accurate estimator on every system ($\tilde e_{\log}=0.106,0.219,0.162$ for SIR, OGTT, LV, versus
+$0.522,0.495,0.337$ for the iterative operator), consistent with the reconstruction-detour cost of
+Proposition~\ref{prop:ceiling}. As $\alpha$ increases this ordering reverses: the direct error grows
+roughly linearly and overtakes the iterative estimator near $\alpha\approx0.02$--$0.05$, reaching
+$\tilde e_{\log}=1.03,3.06,0.37$ at $\alpha=0.10$, while the iterative error is essentially unchanged
+($0.524,0.496,0.338$; NRMSE constant to three digits). The mechanism is not subtle: the direct head is an
+unbounded linear map, so perturbations push a growing fraction of its predictions outside the training
+support --- the failure rate climbs to $0.47,0.47,0.57$ at $\alpha=0.10$, and for the $\exp$-denormalized
+OGTT coordinate a few predictions overflow, inflating the mean NRMSE to $\sim\!10^{6}$ (an outlier effect,
+which is exactly why we report the median $\tilde e_{\log}$ and the failure rate alongside it). The
+iterative operator, whose parameter head is $\tanh$-bounded into $\Theta$, never violates support and its
+predictions barely move ($D\le0.026$ at $\alpha=0.10$, versus $D=1.0,3.0,0.29$ for the direct regressor).
+A log-coordinate bias/variance decomposition (Appendix~\ref{app:repro-noise}) confirms the reading: the
+iterative error is almost pure bias (noise-induced variance $\approx10^{-3}$), whereas the direct error is
+bias-dominated when clean but becomes variance-dominated under noise (OGTT noise variance rising from $0$
+to $29$).
+
+This is a \emph{stability--accuracy trade-off}, not a robustness victory. The decisive control is the
+prior-mean predictor: it is perfectly insensitive to noise ($D\equiv0$, zero failures) yet has the largest
+error on every system. The iterative operator is more accurate than this constant on clean data
+($\tilde e_{\log}=0.495$ vs.\ $0.796$ for OGTT), so its stability carries some genuine information --- but
+the margin is modest (for OGTT it is roughly a third of the way from the constant to the direct
+regressor's clean error), and its low sensitivity is inherited in part from the same bias and contraction
+that raise its error floor. We therefore read the flat degradation curve as low sensitivity coexisting with
+a high bias floor, and report absolute accuracy and perturbation sensitivity jointly
+(Figure~\ref{fig:noise-plane}) rather than treating either alone as evidence of better inference.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.62\linewidth]{figures/exp/noise_stability_plane.pdf}
+\caption{Stability--accuracy plane: clean absolute error (lower is more accurate) versus perturbation
+sensitivity $D$ at $\alpha=0.10$ (lower is more stable). The direct regressor occupies the accurate-but-
+sensitive corner, the prior mean the stable-but-inaccurate corner, and the iterative operator an
+intermediate, stable-but-biased position. No estimator reaches the ideal lower-left; the axes trade off.}
+\label{fig:noise-plane}
+\end{figure}
+
+\paragraph{Perturbations ride the sloppy direction.} The OGTT run also corroborates the ill-conditioning
+geometry of Section~\ref{subsec:ident-ogtt} without any anisotropic construction. Under isotropic input
+noise the direct regressor's individual coordinates $S_I,\sigma$ degrade sharply, yet its estimate of the
+\emph{identifiable product} $S_I\sigma$ stays tight: the product error grows only from $0.003$ to $0.024$
+between $\alpha=0$ and $0.10$, roughly two orders of magnitude below the coordinate error. The induced
+prediction shift therefore lies predominantly along the weakly resolved fiber tangent while the stiff
+product combination is preserved --- the sampled-Jacobian conditioning made dynamic. We state this as a
+diagnostic consistent with the local sensitivity analysis, not as a proof of structural non-identifiability
+of the full-HGP generator.
+
