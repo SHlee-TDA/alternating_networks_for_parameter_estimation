@@ -1,0 +1,120 @@
+\section{Data and SDE-based Generation}
+\label{sec:data_sde}
+%ODE-only simulation vs NIH mismatch
+%drift=OGTT, diffusion=데이터 기반 → 생성 데이터 품질 및 성능 향상
+%단, 구조적 한계는 유지됨을 명확히
+
+\subsection{SDE-based data generation for OGTT}
+\label{subsec:sde}
+
+For OGTT, we found a non-negligible gap between deterministic simulations of the mechanistic ODE model and patient trajectories.
+We model this discrepancy by augmenting the ODE with a stochastic component and generate synthetic training data from a calibrated SDE.
+
+\subsubsection{From deterministic mismatch to a bias-corrected SDE}
+\label{subsubsec:sde-form}
+
+Let $X(t)=(G(t),I(t),N_5(t),N_6(t))$ denote the OGTT state variables and $\theta=(S_I,\sigma)$ the parameters.
+We take the OGTT ODE as the drift term and consider an SDE of the form
+\begin{equation}
+\label{eq:sde-form}
+dX_t = \bigl[f(X_t,\theta) + \mu_{\mathrm{bias}}(t)\bigr]\,dt + \Sigma_{\mathrm{diff}}(t)\,dW_t,
+\end{equation}
+where $W_t$ is a Wiener process.
+Here, $\mu_{\mathrm{bias}}(t)$ is a time-dependent drift correction accounting for systematic model bias,
+and $\Sigma_{\mathrm{diff}}(t)$ is a time-dependent diffusion term capturing stochastic variability.
+This formulation was motivated by the empirical observation that deterministic residuals are not mean-zero, suggesting a drift mismatch rather than purely random noise.
+
+\begin{figure}[t]
+    \centering
+    % \includegraphics[width=0.95\linewidth]{figures/sde_effect_visualization.png}
+    \fbox{\parbox{0.95\linewidth}{\vspace{2.6cm}\centering
+    \textit{Placeholder: ODE vs SDE ensemble vs NIH trajectories (OGTT).}\vspace{2.6cm}}}
+    \caption{OGTT trajectories: deterministic ODE versus calibrated SDE ensemble.
+    The dashed curve shows the deterministic ODE simulation, and the black curve shows a representative NIH trajectory.
+    While the mean of the SDE ensemble remains close to the ODE trajectory, the stochastic spread induced by the diffusion term produces a band
+    that more realistically covers the variability observed in the NIH data.}
+    \label{fig:sde-effect}
+\end{figure}
+
+\subsubsection{Calibration: diffusion from increment statistics (quadratic variation)}
+\label{subsubsec:sde-diffusion}
+
+A key point in calibrating \eqref{eq:sde-form} is that the diffusion term represents uncertainty in \emph{increments} rather than accumulated state residuals.
+Using the variance of state residuals $\mathrm{Var}(Y_{\mathrm{real}}(t)-Y_{\mathrm{sim}}(t))$ leads to a dimensional inconsistency and can
+overestimate diffusion, producing unrealistically large random-walk behavior.
+
+Instead, we estimate diffusion from increment residuals over each observation interval.
+Let $t_0<\cdots<t_{N-1}$ be the OGTT sampling times and define increments $\Delta Y_i := Y(t_{i+1})-Y(t_i)$.
+Denoting the increment residual by $\Delta R_i := \Delta Y^{\mathrm{real}}_i - \Delta Y^{\mathrm{sim}}_i$,
+the quadratic-variation relation suggests
+\begin{equation}
+\label{eq:diffusion-increment}
+\mathrm{Var}(\Delta R_i)\approx \sigma_Y(t_i)^2\,\Delta t_i,
+\qquad
+\sigma_Y(t_i) \approx \sqrt{\frac{\mathrm{Var}(\Delta R_i)}{\Delta t_i}},
+\qquad Y\in\{G,I\},
+\end{equation}
+with $\Delta t_i:=t_{i+1}-t_i$.
+In practice, we compute interval-wise $\sigma_G(t_i)$ and $\sigma_I(t_i)$ after robust outlier removal.
+
+\subsubsection{Calibration: drift bias from mean increment residuals}
+\label{subsubsec:sde-bias}
+
+To correct systematic mismatch, we estimate a drift-bias term from the mean increment residual:
+\begin{equation}
+\label{eq:drift-bias}
+\mu_{\mathrm{bias},Y}(t_i) \approx \frac{\mathbb{E}[\Delta R_i]}{\Delta t_i},
+\qquad Y\in\{G,I\}.
+\end{equation}
+Empirically, the mean increment residual is not negligible across time intervals, supporting the use of a drift correction in \eqref{eq:sde-form}.
+
+\subsubsection{Estimated drift and diffusion parameters}
+\label{subsubsec:sde-estimates}
+
+Figure~\ref{fig:sde-dist-analysis} visualizes the interval-wise increment statistics used to calibrate $\mu_{\mathrm{bias}}(t)$ and $\sigma_Y(t)$
+for glucose and insulin.
+Table~\ref{tab:sde-calib} reports the corresponding numerical estimates (computed on the training subset).
+
+\begin{figure}[t]
+    \centering
+    % \includegraphics[width=0.95\linewidth]{figures/sde_distribution_analysis.png}
+    \fbox{\parbox{0.95\linewidth}{\vspace{2.6cm}\centering
+    \textit{Placeholder: increment-residual distribution and state-dependence analysis (OGTT).}\vspace{2.6cm}}}
+    \caption{Time-wise distributional calibration for OGTT SDE generation.
+    For each observation interval, we analyze the distribution of increment residuals $\Delta R$,
+    potential state dependence, and variability range, supporting the increment-based calibration in
+    \eqref{eq:diffusion-increment}--\eqref{eq:drift-bias}.}
+    \label{fig:sde-dist-analysis}
+\end{figure}
+
+\begin{table}[t]
+\centering
+\caption{Calibrated drift and diffusion statistics for OGTT SDE generation (train set only, $n=415$).
+Values are estimated interval-wise from increment residuals; see \eqref{eq:diffusion-increment}--\eqref{eq:drift-bias}.}
+\label{tab:sde-calib}
+\begin{tabular}{rcccc}
+\hline
+$t$ (min) & $\mu_G(t)$ & $\sigma_G(t)$ & $\mu_I(t)$ & $\sigma_I(t)$ \\
+\hline
+0   & $-0.5638$ & $2.8235$ & $-0.1771$ & $4.5862$ \\
+30  & $0.5693$  & $4.1121$ & $-0.1012$ & $6.7049$ \\
+60  & $0.0438$  & $3.4084$ & $0.3671$  & $6.6500$ \\
+90  & $0.0284$  & $3.2451$ & $0.3701$  & $5.6393$ \\
+120 & $0.0284$  & $3.2451$ & $0.3701$  & $5.6393$ \\
+\hline
+\end{tabular}
+\end{table}
+
+For convenience, the entry at $t=120$ repeats the last interval estimate.
+We additionally enforce physical clamping bounds based on NIH maxima:
+$G_{\max}=506.4$ and $I_{\max}=788.64$.
+
+\subsubsection{Simulation procedure}
+\label{subsubsec:sde-sim}
+
+We simulate \eqref{eq:sde-form} using an Euler--Maruyama scheme on a fine time grid, followed by subsampling to the OGTT observation times.
+The calibrated time-dependent coefficients in Table~\ref{tab:sde-calib} are treated as piecewise-constant over each observation interval.
+Implementation details are provided in the accompanying codebase.
+
+Finally, we emphasize that the SDE-based data generation improves realism of training data by capturing variability around the deterministic drift.
+However, it does not resolve structural limitations of glucose-only parameter recovery, which are analyzed in Section~\ref{sec:correctness}.

@@ -1,0 +1,38 @@
+% ===== Hyperparameter highlighting (draft mode) =====
+\newif\ifhpcolor
+\hpcolortrue % draft: true, final submission: false
+
+\ifhpcolor
+  \usepackage{xcolor}
+  \newcommand{\HP}[1]{\textcolor{blue}{#1}}
+\else
+  \newcommand{\HP}[1]{#1}
+\fi
+
+% ---------- Hyperparameter value macros ----------
+\newcommand{\HPSys}{\HP{ogtt\_simul}}
+\newcommand{\HPSeed}{\HP{42}}
+\newcommand{\HPNumSamples}{\HP{10000}}
+\newcommand{\HPAugFactor}{\HP{30}}
+\newcommand{\HPTestSplit}{\HP{0.2}}
+\newcommand{\HPBatchSize}{\HP{512}}
+
+\newcommand{\HPEpochs}{\HP{10000}}
+\newcommand{\HPLR}{\HP{1e-4}}
+\newcommand{\HPWeightDecay}{\HP{1e-4}}
+\newcommand{\HPEarlyStop}{\HP{True}}
+\newcommand{\HPEarlyPat}{\HP{200}}
+\newcommand{\HPEarlyDelta}{\HP{1e-6}}
+
+\newcommand{\HPUseDeriv}{\HP{True}}
+\newcommand{\HPDerivMethod}{\HP{spline}}
+\newcommand{\HPIter}{\HP{10}}
+
+\newcommand{\HPLossCfg}{\HP{supervised + recurrent (equal weights)}}
+
+\newcommand{\HPHiddenDims}{\HP{[64,64,64]}}
+\newcommand{\HPAct}{\HP{SiLU}}
+\newcommand{\HPSN}{\HP{True}}
+
+\newcommand{\HPSDEBias}{\HP{1.0}}
+\newcommand{\HPSDEDiff}{\HP{1.27}}

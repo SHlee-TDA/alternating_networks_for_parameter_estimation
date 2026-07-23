@@ -1,0 +1,31 @@
+% Paragraph 1 : Issue
+Estimating the governing parameters of nonlinear dynamical systems from time-series observations is a fundamental inverse problem with broad applications in epidemiology, ecology, and physiology. % TODO: citation (fundamental inverse problems) 
+In many practical settings, however, observations are severely constrained: they are often \emph{partial} (only a subset of the state variables is measurable) and \emph{sparse} (a relatively small number of time points are observed). 
+These physical constraints render the inverse mapping from observations to parameters highly ill-posed and, in certain regimes, structurally non-identifiable. 
+When key states remain hidden, resolving these unobserved latent trajectories simultaneously with the system parameters formulates a joint optimization problem.
+This coupling inherently creates a highly non-convex loss landscape, drastically amplifying the computational and theoretical difficulty.
+
+% Paragraph 2 : Limitations of existing methods
+Traditional approaches combine mechanistic numerical integration with optimization techniques, such as nonlinear least squares (NLLS) or sampling based method (MCMC). % TODO: citation (NLLS/MCMC textbooks)
+While mathematically principled, these per-instance optimizations incur significant computational costs and are highly sensitive to initial conditions; 
+they frequently fall into local minima or diverge when applied to sparse measurements of complex oscillatory or non-autonomous systems.
+
+% Paragraph 3 : Propose our solution
+To address these limitations, we propose a novel parameter estimation framework structured as a contractive fixed-point iteration. 
+We first decouple the joint inverse problem into two conditional tasks: a hidden-state estimator infers the latent trajectory given partial observations and a parameter guess, while a parameter estimator updates the parameter vector given the observations and the inferred hidden state. 
+Inference is then performed by alternating updates between these two trained neural networks. However, simply coupling two neural networks offers no theoretical guarantee of stability; the alternating sequence could easily oscillate or diverge. 
+To overcome this, we enforce Lipschitz bounds on both networks via spectral normalization. 
+This rigorous structural constraint guarantees that their composition forms a contraction mapping, ensuring that the inference iteration converges exponentially to a unique fixed point from any initialization.
+
+% Paragraph 4 : Results
+We demonstrate the effectiveness of this framework through extensive numerical evaluations on epidemiological (SIR), ecological (Lotka-Volterra), and physiological (OGTT) models. 
+Our results show that the proposed fixed-point architecture robustly recovers parameters from sparse and partial data in regimes where traditional joint optimization fails. 
+To provide a deeper understanding of these empirical outcomes, we utilize the Hermann-Krener nonlinear observability framework~\cite{hermann2003nonlinear} as an analytical tool. 
+This theoretical grounding allows us to explicitly characterize identifiable regimes and provides a principled explanation for phenomena such as regression-to-mean (model collapse) encountered in structurally unidentifiable scenarios.
+
+%\textbf{Contributions.} The main contributions of this paper are threefold:
+%\begin{itemize}
+%    \item We introduce a decoupled fixed-point iteration architecture that enables stable parameter inference from sparse and partial observations.
+%    \item We provide a rigorous mathematical guarantee that the proposed iterative update acts as a contraction mapping, ensuring exponential convergence to a unique fixed point.
+%    \item We empirically validate the framework on multiple nonlinear systems and provide a theoretical analysis of structural identifiability to clarify the boundaries of reliable parameter recovery.
+%\end{itemize}

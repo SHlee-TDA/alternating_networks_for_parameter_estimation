@@ -9,8 +9,19 @@ import seaborn as sns
 from scipy.stats import pearsonr
 import warnings
 
+from src.models import ExcludeLambda
+
 plt.style.use('seaborn-v0_8-whitegrid')
 sns.set_palette("deep")
+
+# Display names (LaTeX) for parameters, used in figure titles/axes.
+PARAM_DISPLAY = {
+    'si': r'$S_I$', 'sigma': r'$\sigma$',
+    'beta': r'$\beta$', 'gamma': r'$\gamma$',
+    'alpha': r'$\alpha$', 'delta': r'$\delta$',
+}
+def _disp(name):
+    return PARAM_DISPLAY.get(name, name)
 
 class BaseAnalyzer:
     """
@@ -107,11 +118,20 @@ class BaseAnalyzer:
     # ==========================================
 
     def _get_model_spectral_norms(self, model):
-        """Measures the spectral norm of each linear layer in the model."""
+        """
+        Measures the effective per-layer Lipschitz factor of each Linear layer, INCLUDING
+        the ExcludeLambda output-scaling module that immediately follows each hidden layer
+        (see models.py). The raw spectral_norm-wrapped weight has ||W||_2 ~ 1 by construction;
+        the actual contraction strength is controlled by ExcludeLambda's `scale` (from
+        model_config['spectral_scale']), applied to every Linear layer EXCEPT the final output
+        layer (which has no margin). Previously this hardcoded a local 0.99 fudge factor here,
+        completely ignoring the real ExcludeLambda scale actually used in the forward pass —
+        so the printed "Total Lipschitz Product" was disconnected from model_config['spectral_scale']
+        and could silently report <1 even when the true composed operator was not contractive.
+        """
         norms, indices = [], []
         linear_idx = 1
-        scale_factor = 0.99
-        
+
         try:
             # Trigger Hook to update effective weights (dummy forward)
             container = model.network if hasattr(model, 'network') else model.net
@@ -122,14 +142,22 @@ class BaseAnalyzer:
         except Exception as e:
             print(f"  -> [Warning] Dummy forward failed for SN analysis: {e}")
 
-        for layer in model.modules():
+        container = model.network if hasattr(model, 'network') else model.net
+        modules = list(container)
+        n_linear = sum(1 for m in modules if isinstance(m, torch.nn.Linear))
+        for i, layer in enumerate(modules):
             if isinstance(layer, torch.nn.Linear):
-                weight = layer.weight 
+                weight = layer.weight
                 norm = torch.linalg.norm(weight, ord=2).item()
-                norms.append(scale_factor * norm)
+                is_output_layer = (linear_idx == n_linear)
+                # ExcludeLambda (if present) is the module immediately following this Linear.
+                scale = 1.0
+                if not is_output_layer and i + 1 < len(modules) and isinstance(modules[i + 1], ExcludeLambda):
+                    scale = modules[i + 1].scale
+                norms.append(scale * norm)
                 indices.append(linear_idx)
                 linear_idx += 1
-                
+
         return {'indices': indices, 'norms': norms}
 
     def analyze_spectral_norms(self):
@@ -180,12 +208,13 @@ class BaseAnalyzer:
     # 3. Phase Portraits (Restored)
     # ==========================================
 
-    def plot_phase_portraits(self, x_sample, p_target):
+    def plot_phase_portraits(self, x_sample, p_target, epoch=None):
         """
         Visualizes the alternating fixed-point dynamics in parameter space.
         Args:
             x_sample (Tensor): A single normalized observed trajectory (1, Dim).
             p_target (np.array): Ground truth parameters corresponding to x_sample.
+            epoch (int, optional): Current training epoch to append to filename.
         """
         num_params = len(self.system.param_names)
         if num_params < 2: return
@@ -196,8 +225,13 @@ class BaseAnalyzer:
         
         for i, (p1, p2) in enumerate(combos):
             self._plot_single_portrait(axes.flatten()[i], x_sample, p_target, (p1, p2))
-            
-        plt.savefig(os.path.join(self.results_path, 'phase_portraits.pdf'), dpi=150)
+        
+        if epoch is not None:
+            filename = f'phase_portraits_epoch_{epoch:04d}.pdf'
+        else:
+            filename = 'phase_portraits.pdf'
+        
+        plt.savefig(os.path.join(self.results_path, filename), dpi=150)
         plt.close(fig)
 
     def _plot_single_portrait(self, ax, x_observed, p_target, p_dims):
@@ -251,10 +285,31 @@ class BaseAnalyzer:
             ax.plot(traj_np[:, p1_idx], traj_np[:, p2_idx], 'k-o', linewidth=1.5, markersize=3, alpha=0.6)
             ax.plot(traj_np[-1, p1_idx], traj_np[-1, p2_idx], 'r*', markersize=10, zorder=11)
 
-        ax.set_xlabel(name1)
-        ax.set_ylabel(name2)
-        ax.set_title(f"Dynamics: {name1} vs {name2}")
+        ax.set_xlabel(_disp(name1))
+        ax.set_ylabel(_disp(name2))
+        ax.set_title(f"Fixed-point dynamics: {_disp(name1)} vs {_disp(name2)}")
         ax.grid(True, alpha=0.3)
+        
+        p_true_tensor = torch.tensor(p_target, dtype=torch.float32).unsqueeze(0).to(self.config.DEVICE)
+        p_true_norm = self.normalizer.normalize_params(p_true_tensor)
+
+        with torch.no_grad():
+            # Compute one-step residual (epsilon) in normalized space.
+            y_true_hat = self.H_phi(x_observed, p_true_norm)
+            p_next_norm_true = self.P_psi(x_observed, y_true_hat)
+            residual = torch.norm(p_next_norm_true - p_true_norm).item()  
+            
+            # Compute distance to fixed point in normalized space.
+            p_hat = p_true_norm.clone() 
+            for _ in range(self.config.ITERATIONS):
+                p_hat = self.P_psi(x_observed, self.H_phi(x_observed, p_hat))
+            
+            distance = torch.norm(p_hat - p_true_norm).item() 
+
+        textstr = f"$\\epsilon$ (norm): {residual:.4f}\n$||\\theta^* - \\theta^{{true}}||_2$ (norm): {distance:.4f}"
+        props = dict(boxstyle='round', facecolor='white', alpha=0.9, edgecolor='lightgray')
+        ax.text(0.95, 0.95, textstr, transform=ax.transAxes, fontsize=11, 
+                verticalalignment='top', horizontalalignment='right', bbox=props, zorder=20)
         
     def plot_scatter_comparison(self, true_vals_list, ours_vals_list, base_vals_list, metrics_dict, param_keys, param_titles=None, prefix="sim"):
         """
@@ -291,12 +346,16 @@ class BaseAnalyzer:
             ax.plot([min_v, max_v], [min_v, max_v], 'k--', lw=2, label='Ideal')
             
             b_mets, o_mets = metrics_dict[p_key]['Baseline'], metrics_dict[p_key]['Ours']
-            b_text = f'RMSE: {b_mets["RMSE"]:.4f}\nr: {b_mets["Pearson_r"]:.4f}' if not np.isnan(b_mets["RMSE"]) else 'N/A'
-            o_text = f'RMSE: {o_mets["RMSE"]:.4f}\nr: {o_mets["Pearson_r"]:.4f}' if not np.isnan(o_mets["RMSE"]) else 'N/A'
-            
-            textstr = '\n'.join((r'$\bf{Baseline}$', b_text, '', r'$\bf{Ours}$', o_text))
-            props = dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='lightgray')
-            ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=10, verticalalignment='top', bbox=props)
+            # Only show a metrics box for models that were actually run (omit N/A entries).
+            lines = []
+            if not is_dummy_ours and not np.isnan(o_mets["RMSE"]):
+                lines += [r'$\bf{Ours}$', f'RMSE: {o_mets["RMSE"]:.4f}\nr: {o_mets["Pearson_r"]:.4f}']
+            if not is_dummy_base and not np.isnan(b_mets["RMSE"]):
+                if lines: lines += ['']
+                lines += [r'$\bf{Baseline}$', f'RMSE: {b_mets["RMSE"]:.4f}\nr: {b_mets["Pearson_r"]:.4f}']
+            if lines:
+                props = dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='lightgray')
+                ax.text(0.05, 0.95, '\n'.join(lines), transform=ax.transAxes, fontsize=10, verticalalignment='top', bbox=props)
 
             ax.set_title(param_titles[i], fontsize=14, pad=15)
             ax.set_xlabel('True Value'); ax.set_ylabel('Predicted Value')
@@ -433,7 +492,8 @@ class LotkaVolterraAnalyzer(BaseAnalyzer):
         o_vals = [p_ours[:, i] for i in range(p_ours.shape[1])]
         b_vals = [p_base[:, i] for i in range(p_base.shape[1])]
         
-        self.plot_scatter_comparison(t_vals, o_vals, b_vals, metrics_dict, self.system.param_names, prefix="lv")
+        self.plot_scatter_comparison(t_vals, o_vals, b_vals, metrics_dict, self.system.param_names,
+                                     param_titles=[_disp(n) for n in self.system.param_names], prefix="lv")
         self._plot_lv_trajectories_and_phase(p_true, p_ours, p_base)
 
     def _plot_lv_trajectories_and_phase(self, p_true, p_ours, p_base):
@@ -545,12 +605,20 @@ class OgttSimulAnalyzer(BaseAnalyzer):
         if valid_ours: sns.kdeplot(np.log10(si_ours * sigma_ours), ax=ax2, color='steelblue', linewidth=2, label='Log($K_{ours}$)')
         ax2.set_title("2. Product Consistency (Stiff Direction)", fontsize=14, fontweight='bold'); ax2.legend(); ax2.grid(True, alpha=0.2)
         
+        # Panel 3: BOTH individual coordinates (S_I and sigma) are along the sloppy fiber
+        # direction and are equally unrecovered -- we show both rather than singling out one.
         ax3 = fig.add_subplot(133)
-        if valid_base: ax3.scatter(np.log10(si_true), np.log10(si_base), c='crimson', alpha=0.4, s=15, marker='x', label='Baseline')
-        if valid_ours: ax3.scatter(np.log10(si_true), np.log10(si_ours), c='steelblue', alpha=0.5, s=15, edgecolors='white', lw=0.5, label='Ours')
-        min_log, max_log = np.log10(si_true).min(), np.log10(si_true).max()
-        ax3.plot([min_log, max_log], [min_log, max_log], 'k--', lw=2, label='Ideal (y=x)')
-        ax3.set_title("3. $S_I$ Prediction (Sloppy Direction)", fontsize=14, fontweight='bold'); ax3.legend(); ax3.grid(True, alpha=0.2)
+        who = 'Ours' if valid_ours else 'Baseline'
+        si_pred = si_ours if valid_ours else si_base
+        sigma_pred = sigma_ours if valid_ours else sigma_base
+        ax3.scatter(np.log10(si_true), np.log10(si_pred),
+                    c='steelblue', alpha=0.5, s=15, edgecolors='white', lw=0.4, label=f'$S_I$ ({who})')
+        ax3.scatter(np.log10(sigma_true), np.log10(sigma_pred),
+                    c='darkorange', alpha=0.5, s=15, edgecolors='white', lw=0.4, label=f'$\\sigma$ ({who})')
+        allv = np.concatenate([np.log10(si_true), np.log10(sigma_true)])
+        ax3.plot([allv.min(), allv.max()], [allv.min(), allv.max()], 'k--', lw=2, label='Ideal (y=x)')
+        ax3.set_xlabel('True (log)'); ax3.set_ylabel('Predicted (log)')
+        ax3.set_title("3. Individual coordinates $S_I,\\sigma$ (both weakly recovered)", fontsize=14, fontweight='bold'); ax3.legend(); ax3.grid(True, alpha=0.2)
         
         plt.tight_layout(); plt.savefig(os.path.join(self.results_path, f'{prefix}_symmetric_collapse.pdf'), dpi=300); plt.close()
 
