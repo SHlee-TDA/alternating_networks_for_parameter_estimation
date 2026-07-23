@@ -13,7 +13,14 @@ Following Hermann and Krener, we construct the observability map $\Phi(\mathbf{z
     \Phi(\mathbf{z}) = \begin{bmatrix} \tilde{h}(\mathbf{z}) \\ L_{F} \tilde{h}(\mathbf{z}) \\ \vdots \\ L_{F}^{m-1} \tilde{h}(\mathbf{z}) \end{bmatrix},
 \end{equation}
 where $L_F \tilde{h}(\mathbf{z}) = \nabla_{\mathbf{z}} \tilde{h}(\mathbf{z}) \cdot F(\mathbf{z})$. 
-The local observability matrix is defined as the Jacobian $\mathbf{O}(\mathbf{z}) := \nabla_{\mathbf{z}} \Phi(\mathbf{z})$. If $\mathbf{O}(\mathbf{z})$ has full rank $m$, the system satisfies the observability rank condition, meaning the observation map is locally a diffeomorphism, and the full augmented state $\mathbf{z}$ (including parameters $\theta$) can be uniquely reconstructed from the observations.
+The local observability matrix is defined as the Jacobian $\mathbf{O}(\mathbf{z}) := \nabla_{\mathbf{z}} \Phi(\mathbf{z})$. If $\mathbf{O}(\mathbf{z})$ has full column rank $m$ at a generic $\mathbf{z}$, the system satisfies the observability rank condition: the map $\Phi$ is then a local immersion (an inverse-function argument on any square submap with nonvanishing minor recovers $\mathbf{z}$ locally), so the augmented state $\mathbf{z}$ --- including $\theta$ --- is \emph{locally weakly observable}, i.e.\ locally identifiable at generic states. This is a local, generic statement; it does not by itself assert global uniqueness.
+
+Two cautions frame how we use this criterion. First, the Hermann--Krener rank condition is a statement about the \emph{continuous-time, exact} output $h(\mathbf{x}(t))$ and its derivatives $L_F^k\tilde h$: it certifies \emph{local weak observability} in an idealized information limit and is silent about how much of that information survives finite, noisy, sparse sampling. To make the practical question precise we introduce the \emph{sampled observation map}
+\begin{equation}
+\label{eq:sampled-map}
+\mathcal{G}(\mathbf{z}_0)=\big(h(\mathbf{x}(t_0)),\,h(\mathbf{x}(t_1)),\,\ldots,\,h(\mathbf{x}(t_N))\big),
+\end{equation}
+whose Jacobian $\nabla_{\mathbf{z}_0}\mathcal{G}$ we analyze by its rank \emph{and its conditioning} (singular-value spectrum) at the actual sampling grid. A system can be locally observable in the sense of $\mathbf{O}(\mathbf{z})$ yet have a sampled Jacobian $\nabla_{\mathbf{z}_0}\mathcal{G}$ so ill-conditioned that its inverse is unusable at any realistic noise or precision level --- \emph{practically} non-identifiable, even though it is not exactly rank-deficient. Second, full rank guarantees local reconstructability of the state, not a well-conditioned inverse; the gap between the two is exactly the ill-conditioning we quantify below. We therefore treat continuous-time observability and sparse-sampling conditioning as two distinct diagnostics, and corroborate both against the empirical direct-regression recovery of Section~\ref{sec:experiments}.
 
 \subsection{SIR: Exact Observability via Lie Derivatives}
 For the SIR compartmental model of epidemic dynamics~\cite{kermack1927contribution}, the recovered population $R$ is strictly determined by the conservation law ($N = S+I+R$). Thus, the effective augmented state is $\mathbf{z} = [S, I, \beta, \gamma]^\top \in \mathbb{R}^4$. Under the partial observation setting, only the susceptible population is observed, yielding $\tilde{h}(\mathbf{z}) = S$. 
@@ -23,7 +30,7 @@ We explicitly construct the $4 \times 4$ observability matrix by computing the s
     \nabla_{\mathbf{z}} L_{F}^0 \tilde{h}(\mathbf{z}) &= [1, 0, 0, 0], \\
     \nabla_{\mathbf{z}} L_{F}^1 \tilde{h}(\mathbf{z}) &= \left[-\frac{\beta I}{N}, -\frac{\beta S}{N}, -\frac{SI}{N}, 0\right].
 \end{align}
-Continuing this process up to $L_F^3 \tilde{h}(\mathbf{z})$ systematically embeds the nonlinear interactions of $S, I, \beta$, and $\gamma$ into the rows of $\mathbf{O}(\mathbf{z})$. Evaluating the determinant of the resulting matrix confirms that $\text{rank } \mathbf{O}(\mathbf{z}) = 4$ for generic states $\mathbf{z}$. This direct algebraic calculation rigorously proves that the SIR system is structurally identifiable from $S(t)$ alone. The complete step-by-step derivation of the observability matrix is provided in Appendix \ref{app:obs-sir}.
+Continuing this process up to $L_F^3 \tilde{h}(\mathbf{z})$ systematically embeds the nonlinear interactions of $S, I, \beta$, and $\gamma$ into the rows of $\mathbf{O}(\mathbf{z})$. Evaluating the determinant of the resulting matrix confirms that $\text{rank } \mathbf{O}(\mathbf{z}) = 4$ for generic states $\mathbf{z}$ (the closed-form determinant is $\det\mathbf{O}_S=I^3S^4\beta^4/N^5$; Appendix~\ref{app:obs-sir}). By the rank condition this makes the SIR system \emph{locally weakly observable} --- the parameters are locally identifiable at generic states --- from $S(t)$ alone. The complete step-by-step derivation of the observability matrix is provided in Appendix \ref{app:obs-sir}.
 
 \subsection{Lotka-Volterra: Unidentifiability via Symbolic Arithmetic}
 For the Lotka--Volterra predator--prey system~\cite{lotka1925elements,volterra1927fluctuations}, the augmented state expands to dimension $m = 6$, given by $\mathbf{z} = [x, y, \alpha, \beta, \delta, \gamma]^\top$. The observation function isolates the prey population, $\tilde{h}(\mathbf{z}) = x$.
@@ -32,7 +39,12 @@ Constructing the corresponding $6 \times 6$ observability matrix $\mathbf{O}(\ma
 \begin{equation}
     \text{rank } \mathbf{O}(\mathbf{z}) = 5 < 6.
 \end{equation}
-Because the algebraic rank is strictly less than the dimension of the augmented state space, the system is not locally observable from prey-only observations. As illustrated in Figure \ref{fig:lv_unidentifiable}, this rank deficiency implies the existence of distinct combinations of hidden predator trajectories and interaction parameters that map to the exact same prey trajectory $\mathbf{x}_{obs}(t)$. The SymPy code utilized for this exact algebraic derivation is included in Appendix \ref{app:obs-lv}.
+Because the algebraic rank is strictly less than the dimension of the augmented state space, the system is not locally observable from prey-only observations. The deficient direction is an explicit one-parameter scaling symmetry of the prey channel: since $\dot x=\alpha x-\beta x y$ depends on $y$ only through $\beta y$, the joint rescaling
+\begin{equation}
+\label{eq:lv-symmetry}
+y(t)\mapsto c\,y(t),\qquad y_0\mapsto c\,y_0,\qquad \beta\mapsto\beta/c
+\end{equation}
+leaves $x(t)$ unchanged (Figure~\ref{fig:lv_unidentifiable}). The null direction is therefore the \emph{joint} $(y_0,\beta)$ scaling, not $\beta$ alone; $\beta$ is recovered up to the unknown hidden initial predator $y_0$. In our experiments $y_0$ is a randomized hidden nuisance, so marginalizing over it is what collapses the recovery of $\beta$ specifically --- if $y_0$ were known, $\beta$ would be identifiable. The SymPy code for the rank derivation is in Appendix \ref{app:obs-lv}.
 
 \begin{figure}[htbp]
   \centering
@@ -47,40 +59,54 @@ Because the algebraic rank is strictly less than the dimension of the augmented 
   \label{fig:lv_unidentifiable}
 \end{figure}
 
-\subsection{OGTT: Jacobian Approximation and Theoretical Observability}
+\subsection{OGTT: Sampled-Sensitivity Rank and Conditioning}
 \label{subsec:ident-ogtt}
-For the OGTT (oral glucose tolerance test) glucose--insulin minimal model~\cite{ha2025disposition}, the augmented state is
+For the OGTT (oral glucose tolerance test) glucose--insulin ISS model~\cite{ha2024iss,ha2025disposition}, the full augmented state $\mathbf{z}=[G,I,N_5,N_6,S_I,\sigma]^\top$ is six-dimensional, but deriving its Hermann--Krener matrix symbolically is intractable and we do not attempt it. Instead we analyze the identifiability that the \emph{actual} sparse record supports. The observed record is glucose at the five-point grid $t\in\{0,30,60,90,120\}$; the generator draws $G_0,I_0,S_I,\sigma$ and slaves the incretin initial states to the steady state $(N_{5,0},N_{6,0})=\mathrm{SS}(G_0,\sigma)$ (Appendix~\ref{app:repro-systems}). Since $G_0=G(t_0)$ is directly observed, the quantities a glucose-only record can determine are the hidden initial insulin $I_0$ and the parameters, i.e.\ the free-variable manifold
 \begin{equation*}
-\mathbf{z} = [G, I, N_5, N_6, S_I, \sigma]^\top \in \mathbb{R}^6, \qquad \mathbf{x}_{obs} = \tilde{h}(\mathbf{z}) = G .
+\xi=(I_0,S_I,\sigma)\in\mathbb{R}^3, \qquad \mathcal{G}(\xi)=\big(G(t_0),\ldots,G(t_4)\big)\in\mathbb{R}^5 .
 \end{equation*}
-Due to the high dimensionality and nested recurrences in the vector field, deriving $\mathbf{O}(\mathbf{z})$ even via symbolic computation is intractable.
+We study the \emph{log-relative} sampled-sensitivity Jacobian $\mathbf{J}=\nabla_\xi\mathcal{G}\,\operatorname{diag}(\xi)\in\mathbb{R}^{5\times3}$ (columns $\partial G/\partial\log\xi_k$, glucose in mg/dL), evaluated at the nominal point $G_0=91$~mg/dL, $\xi=(I_0,S_I,\sigma)=(6,0.5,0.5)$ by step-size-stable central differences (Appendix~\ref{app:obs-ogtt}). This is a scale-invariant \emph{relative}-coordinate diagnostic, distinct from the network training coordinate of Appendix~\ref{app:repro-norm}; it has at most $\min(5,3)=3$ singular values, and since $G(t_0)=G_0$ is fixed the first row is identically zero (four informative rows). We write $\varsigma$ for singular values to avoid collision with $\sigma$.
 
-Instead, we employ a Jacobian-based numerical approximation. The Taylor expansion of the observation $\mathbf{x}_{obs}(t)$ near $t=0$ can be expressed using Lie derivatives:
+At the five-point grid the SVD gives $\varsigma\approx(73,\,0.16,\,0.073)$ (condition number $\approx10^3$; Figure~\ref{fig:ogtt_sensitivity}, left). Glucose is nearly equally sensitive to $S_I$ and $\sigma$ individually (log-relative column norms $\approx51$ each) with almost identical temporal profiles (Figure~\ref{fig:ogtt_sensitivity}, right), while it barely responds to the initial insulin $I_0$ (column norm $\approx0.08$); consequently only the product-like combination is strongly determined ($\varsigma_1\approx73$) and the two remaining singular values are $\sim\!10^3$ smaller. Thus $\mathbf{J}$ is locally full column rank $3$ --- the record supports \emph{local} identifiability of $(I_0,S_I,\sigma)$ --- but severely ill-conditioned. Over $40$ prior draws the smallest singular value has median $0.053$ (IQR $[0.040,0.11]$) and the condition number median $1.4\times10^3$ (IQR $[7.6\times10^2,1.9\times10^3]$), so this is representative of the generator, not a single-point artifact. We make no claim about the continuous-time Hermann--Krener rank of the ambient six-dimensional state, which the finite five-point Jacobian ($\operatorname{rank}\le5$) cannot certify in any case.
+
+This local full rank hinges on a \emph{weak} effect. The full ISS model has hepatic glucose production depending on insulin sensitivity, $\mathrm{HGP}=\mathrm{HGP}(S_I,I)$ (Section~\ref{subsec:exp-ogtt}). Were $\mathrm{HGP}$ independent of $S_I$, the glucose equation would be invariant under the exact one-parameter scaling
 \begin{equation}
-    \mathbf{x}_{obs}(t) = L_{F}^0 \tilde{h}(\mathbf{z}(0)) + t L_{F}^1 \tilde{h}(\mathbf{z}(0)) + \frac{t^2}{2!} L_{F}^2 \tilde{h}(\mathbf{z}(0)) + \dots
+\label{eq:scaling-symmetry}
+I\mapsto cI,\quad (N_5,N_6)\mapsto c(N_5,N_6),\quad \sigma\mapsto c\sigma,\quad S_I\mapsto S_I/c,
 \end{equation}
-Taking the gradient with respect to the initial augmented state $\mathbf{z}(0)$ and truncating at dimension $d=6$, the Jacobian $\mathbf{J} = \nabla_{\mathbf{z}(0)} \mathbf{x}_{obs}(\mathbf{t})$ evaluated at $T \ge 6$ discrete time points factors into:
-\begin{equation}
-    \mathbf{J} \approx \underbrace{\begin{bmatrix} 1 & t_1 & \dots & \frac{t_1^{d-1}}{(d-1)!} \\ \vdots & \vdots & \ddots & \vdots \\ 1 & t_T & \dots & \frac{t_T^{d-1}}{(d-1)!} \end{bmatrix}}_{\mathbf{T}} \underbrace{\begin{bmatrix} \nabla_{\mathbf{z}} L_{F}^0 \tilde{h}(\mathbf{z}(0)) \\ \vdots \\ \nabla_{\mathbf{z}} L_{F}^{d-1} \tilde{h}(\mathbf{z}(0)) \end{bmatrix}}_{\mathbf{O}(\mathbf{z}(0))}.
-\end{equation}
-Since the Vandermonde matrix $\mathbf{T}$ has full column rank for distinct time points, $\text{rank}(\mathbf{J}) = \text{rank}(\mathbf{O}(\mathbf{z}))$. We estimate $\text{rank}(\mathbf{J})$ using finite differences and Singular Value Decomposition (SVD), carefully normalizing the scale of each variable. 
+which on the restricted manifold reads $(I_0,S_I,\sigma)\mapsto(cI_0,S_I/c,c\sigma)$ (the slaved $N_{5,0},N_{6,0}$ scale by $c$ automatically, since $\mathrm{SS}(G_0,c\sigma)=c\,\mathrm{SS}(G_0,\sigma)$; Appendix~\ref{app:obs-ogtt-sym}). It leaves the observed $G(t)$ unchanged, contributing an exact null direction along the log-relative tangent $\hat t=(+1,-1,+1)/\sqrt3$ and leaving only the product $S_I\sigma$ identifiable. We verify that $\hat t$ is indeed the operative direction rather than reading it off the singular \emph{values}: under constant HGP the smallest right singular vector of $\mathbf{J}$ coincides with $\hat t$ ($|\cos|=1.00$) at the numerical floor, so the analytic rank is $\le2$. The full $S_I$-dependence of $\mathrm{HGP}$ breaks the symmetry only slightly: the sensitivity along $\hat t$ rises from $\|\mathbf{J}\hat t\|\approx1\times10^{-4}$ (constant, numerical floor) to $\approx0.48$ (full), restoring rank $3$ but leaving the product-orthogonal direction $\sim\!10^3$ below the leading sensitivity. At the sparse glucose grid this weak direction is effectively unresolvable, leaving an approximate constant-$S_I\sigma$ ridge.
 
-The SVD yields six strictly positive singular values ($\varsigma_1 \approx 1.2\times 10^{2} \dots \varsigma_6 \approx 1.5\times 10^{-3}$; Figure~\ref{fig:ogtt_sensitivity}, left), all well above machine zero (we write $\varsigma$ for singular values to avoid collision with the parameter $\sigma$). This confirms that $\text{rank}(\mathbf{O}) = 6$. Theoretically, under idealized conditions with sufficient time steps and high-order derivative information, the OGTT system is structurally identifiable from glucose alone.
-
-\subsection{Bridging Theory and Practice: The Ill-Conditioning of OGTT}
-While theoretically identifiable, the SVD spectrum reveals a critical practical challenge. The singular values span roughly five orders of magnitude, indicating that the Jacobian $\mathbf{J}$ is severely ill-conditioned.
+\subsection{Sampled Local Rank versus Sparse-Sampling Conditioning}
+The restricted Jacobian is locally full rank at the grid, but its conditioning tells the practical story. The three singular values span $\sim\!10^3$ and the product-orthogonal direction sits $\sim\!10^3$ below the leading sensitivity, so it is severely ill-conditioned and therefore expected to be highly sensitive to measurement noise. Our data are noiseless, so this is a statement about \emph{conditioning}, not a proven identifiability threshold at a specific clinical precision: the model is locally identifiable in exact arithmetic but is expected to be \emph{practically} non-identifiable under finite precision, along the approximate constant-$S_I\sigma$ ridge.
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.92\textwidth]{figures/ogtt_illcond.pdf}
-  %\framebox{\parbox{0.8\textwidth}{\centering
-  %  \vspace{3cm}
-  %  \textbf{} \\
-  %  \small\textit{(Left) Singular value spectrum showing steep decay. (Right) Normalized sensitivity dynamics of $S_I$ and $\sigma$ over time.}
-  %  \vspace{3cm}
-  %}}
-  \caption{Ill-conditioning and parameter sensitivity in the OGTT model. (Left) The singular values of the Jacobian decay rapidly, indicating practical unidentifiability despite theoretical full rank. (Right) The temporal sensitivity of glucose to $S_I$ and $\sigma$. Early dynamics ($<30$ min) are dominated by $S_I$, while later dynamics entangle the effects of both parameters.}
+  \caption{Restricted sampled sensitivity of the OGTT model. \emph{(Left)} The three singular values of the
+  $5\times3$ Jacobian $\nabla_\xi\mathcal{G}$, $\xi=(I_0,S_I,\sigma)$, at the five-point grid: locally full rank
+  $3$ but spanning $\sim\!10^3$ (ill-conditioned). \emph{(Right)} The temporal sensitivity of glucose to
+  $S_I$ and $\sigma$ is nearly identical throughout the window --- the two parameters act on glucose almost
+  interchangeably, so only their stiff combination is well determined.}
   \label{fig:ogtt_sensitivity}
 \end{figure}
 
-This ill-conditioning manifests temporally. As shown in Figure \ref{fig:ogtt_sensitivity} (Right), the sensitivity of glucose to insulin sensitivity ($\partial G / \partial S_I$) rises first, becoming strongest within the first $30$--$40$ minutes. The influence of $\beta$-cell function ($\partial G / \partial \sigma$) instead builds up more slowly, along a sigmoid-like profile. In the later stages, the two sensitivities become comparable and the coupled influence of both parameters dictates the glucose trajectory. Under a uniform 30-minute sampling grid without continuous flow information, the neural network struggles to disentangle these intertwined sensitivities. This translates the theoretically full-rank system into a practically unidentifiable regime, severely limiting the precise joint recovery of $(S_I, \sigma)$ and paving the way for the regression-to-mean phenomenon.
+This ill-conditioning is temporal: the sensitivities $\partial G/\partial S_I$ and $\partial G/\partial\sigma$ (Figure~\ref{fig:ogtt_sensitivity}, right) nearly coincide over the whole OGTT window, so under a uniform 30-minute grid the two parameters are almost indistinguishable from glucose. This severely limits joint recovery of $(S_I,\sigma)$ and drives the regression-to-mean phenomenon along the product ridge.
+
+\paragraph{The weak direction is only the HGP symmetry-breaking} To confirm that the third direction is generated \emph{solely} by the weak $S_I$-dependence of hepatic glucose production, we compare the full ISS model against a \emph{constant-HGP} ablation (HGP frozen independent of $S_I$ and $I$), on the same restricted manifold, with central differences verified stable across step sizes $10^{-3}$--$10^{-5}$ (Figure~\ref{fig:ogtt_hgp}). Three consistent signatures emerge. \emph{(i)} The pointwise symmetry generator $I\,\partial_I\mathrm{HGP}-S_I\,\partial_{S_I}\mathrm{HGP}$ equals $-1.21\times10^{-2}$ for the full model and \emph{exactly} $0$ for constant HGP. \emph{(ii)} Under the finite scaling $(I_0,S_I,\sigma)\mapsto(cI_0,S_I/c,c\sigma)$, the constant-HGP glucose trajectory is invariant to within the numerical integration/finite-difference tolerance ($\max_t|\Delta G|/\max_t|G|\approx2\times10^{-10}$ for $c\in[1.25,2]$), whereas the full model changes by $0.15$--$0.66\%$ --- the exact scaling symmetry~\eqref{eq:scaling-symmetry} is present in the ablation and only weakly broken in the full model. \emph{(iii)} Correspondingly, the sensitivity along the scaling tangent collapses from $\|\mathbf{J}\hat t\|\approx0.48$ (full) to the numerical floor $\approx1\times10^{-4}$ (constant), and under constant HGP the smallest right singular vector coincides with $\hat t$ exactly ($|\cos|=1.00$); for the full model $\|\mathbf{J}\hat t\|$ \emph{grows} with sampling density (Figure~\ref{fig:ogtt_hgp}b). The product-orthogonal direction of the full model therefore rides entirely on a sub-percent HGP-mediated signal that a sparse, finite-precision glucose grid cannot resolve.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{figures/exp/ogtt_hgp_ablation.pdf}
+  \caption{Full ISS-HGP versus constant-HGP ablation of the restricted OGTT sampled Jacobian
+  $\mathbf{J}=\nabla_\xi\mathcal{G}\operatorname{diag}(\xi)$, $\xi=(I_0,S_I,\sigma)$ (central differences,
+  step-size stable). \emph{(a)} Three-value spectrum at the five-point grid: the smallest singular value
+  drops from $\varsigma_3\approx0.073$ (full, numerically rank $3$) to $\approx5\times10^{-5}$ (constant HGP,
+  analytic rank $\le2$; a third value at the numerical floor). \emph{(b)} Sensitivity $\|\mathbf{J}\hat t\|$
+  along the scaling tangent $\hat t=(+1,-1,+1)/\sqrt3$ versus number of glucose samples: for the full model
+  it grows with density, while for constant HGP it stays at the numerical floor (exact null). \emph{(c)}
+  Glucose invariance under the scaling symmetry~\eqref{eq:scaling-symmetry}: constant-HGP glucose is
+  invariant to within numerical tolerance (exact symmetry), whereas the full model breaks it by a
+  sub-percent, $c$-dependent amount --- the origin of the weak, ill-conditioned product-orthogonal
+  direction.}
+  \label{fig:ogtt_hgp}
+\end{figure}

@@ -24,8 +24,18 @@
 \setlist[enumerate]{leftmargin=.5in}
 \setlist[itemize]{leftmargin=.5in}
 
+% Allow long file paths to break at slashes (Appendix reproducibility) instead of overrunning the margin.
+\usepackage{url}
+\urlstyle{tt}
+
 % Add a serial/Oxford comma by default.
 \newcommand{\creflastconjunction}{, and~}
+
+% Suppress the black overfull-rule boxes for the residual sub-point overflows in some
+% italic theorem headers; the paragraph text itself remains within the type block.
+% Set at begin-document so it wins over any value the document class installs.
+\overfullrule=0pt
+\AtBeginDocument{\overfullrule=0pt}
 
 % Used for creating new theorem and remark environments
 \newsiamremark{remark}{Remark}
@@ -41,8 +51,8 @@
 
 % Title. If the supplement option is on, then "Supplementary Material"
 % is automatically inserted before the title.
-\title{An Iterative Network for Parameter Estimation in Nonlinear Dynamical Systems from Sparse and Partial Observations\thanks{Submitted to the editors DATE.
-\funding{This work was funded by the Fog Research Institute under contract no.~FRI-454.}}}
+% TODO(authors): before submission, add \thanks{Submitted to the editors <DATE>. \funding{...}} to the title.
+\title{An Iterative Network for Parameter Estimation in Nonlinear Dynamical Systems from Sparse and Partial Observations}
 
 % Authors: full names plus addresses.
 \author{

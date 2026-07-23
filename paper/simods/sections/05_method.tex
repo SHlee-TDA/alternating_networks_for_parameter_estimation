@@ -20,7 +20,7 @@ Estimating the full state $\mathbf{x}$ requires the parameter $\theta$ to resolv
     \includegraphics[width=0.8\linewidth]{figures/motive_fig.pdf}
     \caption{Illustration of the forward mapping and the inherent circular dependency in the inverse problem. 
     The forward process generates the full state via an ODE integrator, followed by a non-injective projection $h$ that yields the partial observation $\mathbf{x}_{\text{obs}}$.
-    A naive direct mapping (red dashed arrow) frequently fails due to incomplete information. 
+    A direct estimator (red dashed arrow) maps the observation to the parameter without forming the hidden state.
     Inverting this process step-by-step requires resolving a circular dependency: estimating the parameter $\theta$ requires the hidden state $\mathbf{x}_{\text{hid}}$ (left green arrow), while recovering $\mathbf{x}_{\text{hid}}$ necessitates prior knowledge of $\theta$ (right green arrow).}
     \label{fig:motive}
 \end{figure}
@@ -34,7 +34,7 @@ During inference, they are coupled to form a fixed-point iteration operator, con
 \begin{equation}
     \hat\theta^{(k+1)}=\mathcal{T}(\hat\theta^{(k)};\mathbf{x}_\mathrm{obs}) := P_\psi(\mathbf{x}_\mathrm{obs},H_\phi(\mathbf{x}_\mathrm{obs},\hat\theta^{(k)})).
 \end{equation}
-By alternating between the hidden state and parameter updates, the estimate converges to a physically consistent fixed-point $\theta^*$ that resolves the circular dependency.
+By alternating between the hidden state and parameter updates, the estimate converges to a network-consistent fixed point $\theta^*$ that resolves the circular dependency (whether this network-consistent point is also observation-consistent is the subject of Section~\ref{sec:correctness}).
 The remainder of this section details the data representation, the iteration operator $\mathcal{T}$, and the training and inference algorithms.
 
 % figure 위치가 필요한 기호들이 나오기 전에 있어서 약간 이해하기가 곤란한 듯.
@@ -67,7 +67,7 @@ The first mapping is the hidden-state estimator $H_\phi$, which solves a full st
         (\mathbf{x}_\mathrm{obs},\theta) \mapsto \hat{\mathbf{x}}_{\mathrm{hid}}.
 \end{equation}
 This mapping takes the observation $\mathbf{x}_\mathrm{obs}$ and a specific parameter guess $\theta$ as inputs to estimate the corresponding hidden state $\hat{\mathbf{x}}_{\mathrm{hid}}$.
-By conditioning on $\theta$, $H_\phi$ structurally resolves the non-injectivity of the projection $h$, estimating a full state trajectory $\mathbf{x}=[\mathbf{x}_\mathrm{obs}, \hat{\mathbf{x}}_\mathrm{hid}]^\top$ governed by the underlying dynamics.
+Conditioning on $\theta$ supplies $H_\phi$ with side information that the projection $h$ discards, so that it can estimate a full state trajectory $\mathbf{x}=[\mathbf{x}_\mathrm{obs}, \hat{\mathbf{x}}_\mathrm{hid}]^\top$ consistent with the underlying dynamics; we emphasize that this addresses the non-injectivity of $h$ only relative to the supplied guess, and does not by itself resolve the non-identifiability of $\theta$ from $\mathbf{x}_\mathrm{obs}$ (Section~\ref{sec:correctness}).
 
 The second mapping is the parameter estimator $P_\psi$, which solves a parameter estimation task from the full-state:
 \begin{equation}
@@ -140,7 +140,7 @@ This teacher-forced protocol \emph{targets} an operator that preserves the groun
 \begin{equation*}
 \mathcal{T}(\theta^\mathrm{true}; \mathbf{x}_{\mathrm{obs}}) \approx \theta^\mathrm{true}.
 \end{equation*}
-Whether the resulting fixed point actually coincides with the ground truth is a separate question, which we take up in Section~\ref{sec:correctness}: there we show that the fixed point is bounded by the conditional mean and, under non-identifiability, is displaced off the physical solution manifold, so this target is in general not met.
+Whether the resulting fixed point actually coincides with the ground truth is a separate question, which we take up in Section~\ref{sec:correctness}: there we show that this target is in general unreachable under observational ambiguity, that the fixed point is bounded by the conditional mean, and that under non-identifiability the conditional mean is displaced off the solution fiber.
 
 \subsection{Coupled Inference via Fixed-Point Iteration}
 \label{subsec:inference}
@@ -153,7 +153,7 @@ Starting from an initial parameter guess $\hat{\theta}^{(0)}$, we sequentially a
 \caption{Fixed-step iterative inference for parameter estimation}
 \label{alg:inference}
 \begin{algorithmic}[1]
-    \REQUIRE observed samples $\mathbf{x}_\mathrm{obs}=[x_{\mathrm{obs}}(t_0),\ldots,x_{\mathrm{obs}}(t_{N-1})]^\top$; 
+    \REQUIRE observed samples $\mathbf{x}_\mathrm{obs}=[x_{\mathrm{obs}}(t_0),\ldots,x_{\mathrm{obs}}(t_{N})]^\top$ ($N+1$ times);
     trained networks $H_\phi,P_\psi$; 
     number of iterations $K$
     %\STATE form $\tilde{\mathbf{x}}_{\mathrm{obs}}=\mathrm{vec}(\tilde{x}_{\mathrm{obs},0},\ldots,\tilde{x}_{\mathrm{obs},N-1})$

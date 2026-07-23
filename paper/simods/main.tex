@@ -1,7 +1,9 @@
 % SIAM Article Template
 % `nohypdvips` lets the document compile with XeTeX/tectonic (the class otherwise loads the
 % dvips-only hypdvips package); it is harmless under pdfLaTeX, where that branch is not taken.
-\documentclass[review,onefignum,onetabnum,nohypdvips]{siamonline250211}
+% `review` (line numbers + "for review purposes only" watermark) removed for the arXiv/preprint build;
+% authors: re-add `review,` as the first option when preparing the SIAM submission.
+\documentclass[onefignum,onetabnum,nohypdvips]{siamonline250211}
 % Information that is shared between the article and the supplement
 % (title and author information, macros, packages, etc.) goes into
 % ex_shared.tex. If there is no supplement, this file can be included
@@ -46,20 +48,26 @@ severely ill-posed inverse problem. A natural and appealing strategy is to \emph
 one network that reconstructs the unobserved (hidden) state from the observations and a current
 parameter guess, and another that updates the parameter from the observations and the reconstructed
 state, then iterate the composition to a fixed point. We study this decoupled fixed-point estimator
-and give a complete characterization of what it can and cannot do. On the positive side, enforcing
+and characterize what it can and cannot do. On the positive side, enforcing
 Lipschitz bounds (e.g., by spectral normalization) makes the update a contraction, so the iteration
 converges to a unique fixed point from any initialization at a geometric rate. On the limiting side,
 we show that convergence does not deliver correctness, and that the limitation is structural rather
-than a training artifact. Because the fixed point is a deterministic function of the observation, it
-cannot beat the conditional-mean estimator---reconstructing the hidden state confers no information
-advantage at inference, since the reconstructed state is itself a function of the observation---and a
-plain direct regressor typically reaches this ceiling more closely. Under non-identifiability the
-conditional mean is moreover displaced strictly off the manifold of parameters consistent with the
-observation, so the squared-loss estimate is not even physically admissible. We predict the
-identifiability of three benchmark systems (SIR, Lotka--Volterra, OGTT) a priori via a Hermann--Krener
-observability analysis and confirm each prediction empirically. The results delineate a fundamental
-ceiling for deterministic decoupled point estimation and motivate lifting inference from point
-estimates to distributions.
+than a training artifact. Our central negative result is an incompatibility: under observational
+ambiguity a strict contraction cannot preserve two distinct admissible ground truths as
+zero-residual fixed points, so the teacher-forced target and global contractivity are mutually
+exclusive on a non-identifiable fiber. Because the fixed point is a deterministic function of the
+observation, it cannot beat the conditional-mean estimator---reconstructing the hidden state confers
+no information advantage at inference, since the reconstructed state is itself a function of the
+observation---the Bayes performance ceiling under squared loss, which a plain direct regressor
+typically reaches more closely. We further show, via a variational argument, that the contraction
+minimizing the idealized one-step risk has the conditional mean as its fixed point; and that whether
+that estimate is observation-consistent depends on the loss coordinate --- for a curved fiber the
+conditional mean lies off it, but a reparameterization that straightens the fiber (logarithms for a
+product degeneracy) keeps it on. We diagnose the (local) identifiability of three benchmark systems
+a priori --- SIR and Lotka--Volterra by Hermann--Krener Lie-derivative rank calculations, and OGTT by a
+sampled-sensitivity analysis (on the data-generating initial-condition manifold) with a scaling-symmetry
+ablation --- and corroborate the predictions empirically. The results delineate a fundamental ceiling for deterministic decoupled point
+estimation and motivate lifting inference from point estimates to distributions.
 \end{abstract}
 
 % REQUIRED
@@ -75,7 +83,7 @@ neural networks
 
 % REQUIRED
 \begin{MSCcodes}
-
+62F10, 34A55, 93B07, 68T07, 37N25
 \end{MSCcodes}
 
 \section{Introduction}
@@ -122,7 +130,9 @@ neural networks
 %\input{appendix/implementation}
 %\input{appendix/training}
 \input{appendix/observability}
-\section*{Acknowledgments}
+\input{appendix/reproducibility}
+
+% \section*{Acknowledgments}  % TODO(authors): add acknowledgments before submission, or delete.
 
 
 \bibliographystyle{siamplain}

@@ -19,7 +19,7 @@ The following subsections define the specific constraints of realistic observati
 We consider a \emph{partial observation} setting, in which only a subset of the state variables is observable.
 We decompose the full state $\mathbf{x}(t)$ into an \emph{observed} state $x_{\mathrm{obs}}(t)\in\mathbb{R}^{d_{\mathrm{obs}}}$ and a
 \emph{unobserved} state $x_{\mathrm{hid}}(t)\in\mathbb{R}^{d_{\mathrm{hid}}}$, such that $d_{\mathrm{obs}}+d_{\mathrm{hid}}=d$.
-We refer to this unobserved state as the \emph{hidden state} to emphasize its role as an essential latent feature that must be explicitly reconstructed to infer unknown parameter $\theta$.
+We refer to this unobserved state as the \emph{hidden state}. Reconstructing it explicitly is a structural choice --- an inductive bias --- of the decoupled estimator we study, rather than a requirement for inferring the unknown parameter $\theta$; a direct estimator infers $\theta$ without forming it, and Section~\ref{sec:correctness} examines when this reconstruction actually helps.
 Without loss of generality, the state vector can be partitioned as $\mathbf{x}(t) = \left[x_\mathrm{obs}(t)^\top , x_\mathrm{hid}(t)^\top\right]^\top$.
 To formalize this limitation, we define a non-injective map $h:\mathbb{R}^d \to \mathbb{R}^{d_{obs}}$ acting as a coordinate projection:
 
@@ -62,7 +62,7 @@ To alleviate these numerical challenges, a structured inference framework that s
 
 \begin{remark}[Why sparsity is essential]
 Given the \emph{continuous} partial observation $x_\mathrm{obs}(t)$ for all $t\in[0,T]$, classical theory offers
-recovery guarantees: Takens' embedding theorem and the Hermann--Krener observability rank condition
+recovery guarantees: Takens' embedding theorem~\cite{takens1981detecting} and the Hermann--Krener observability rank condition~\cite{hermann1977nonlinear}
 (Section~\ref{sec:identifiability}) certify, under genericity assumptions, that the full state and the
 parameters can in principle be reconstructed from the observed component and its time derivatives.
 These guarantees rely on access to high-order temporal information (derivatives, or equivalently a dense

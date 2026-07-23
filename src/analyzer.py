@@ -14,6 +14,15 @@ from src.models import ExcludeLambda
 plt.style.use('seaborn-v0_8-whitegrid')
 sns.set_palette("deep")
 
+# Display names (LaTeX) for parameters, used in figure titles/axes.
+PARAM_DISPLAY = {
+    'si': r'$S_I$', 'sigma': r'$\sigma$',
+    'beta': r'$\beta$', 'gamma': r'$\gamma$',
+    'alpha': r'$\alpha$', 'delta': r'$\delta$',
+}
+def _disp(name):
+    return PARAM_DISPLAY.get(name, name)
+
 class BaseAnalyzer:
     """
     Encapsulates evaluation metrics and visualization routines.
@@ -276,9 +285,9 @@ class BaseAnalyzer:
             ax.plot(traj_np[:, p1_idx], traj_np[:, p2_idx], 'k-o', linewidth=1.5, markersize=3, alpha=0.6)
             ax.plot(traj_np[-1, p1_idx], traj_np[-1, p2_idx], 'r*', markersize=10, zorder=11)
 
-        ax.set_xlabel(name1)
-        ax.set_ylabel(name2)
-        ax.set_title(f"Dynamics: {name1} vs {name2}")
+        ax.set_xlabel(_disp(name1))
+        ax.set_ylabel(_disp(name2))
+        ax.set_title(f"Fixed-point dynamics: {_disp(name1)} vs {_disp(name2)}")
         ax.grid(True, alpha=0.3)
         
         p_true_tensor = torch.tensor(p_target, dtype=torch.float32).unsqueeze(0).to(self.config.DEVICE)
@@ -337,12 +346,16 @@ class BaseAnalyzer:
             ax.plot([min_v, max_v], [min_v, max_v], 'k--', lw=2, label='Ideal')
             
             b_mets, o_mets = metrics_dict[p_key]['Baseline'], metrics_dict[p_key]['Ours']
-            b_text = f'RMSE: {b_mets["RMSE"]:.4f}\nr: {b_mets["Pearson_r"]:.4f}' if not np.isnan(b_mets["RMSE"]) else 'N/A'
-            o_text = f'RMSE: {o_mets["RMSE"]:.4f}\nr: {o_mets["Pearson_r"]:.4f}' if not np.isnan(o_mets["RMSE"]) else 'N/A'
-            
-            textstr = '\n'.join((r'$\bf{Baseline}$', b_text, '', r'$\bf{Ours}$', o_text))
-            props = dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='lightgray')
-            ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=10, verticalalignment='top', bbox=props)
+            # Only show a metrics box for models that were actually run (omit N/A entries).
+            lines = []
+            if not is_dummy_ours and not np.isnan(o_mets["RMSE"]):
+                lines += [r'$\bf{Ours}$', f'RMSE: {o_mets["RMSE"]:.4f}\nr: {o_mets["Pearson_r"]:.4f}']
+            if not is_dummy_base and not np.isnan(b_mets["RMSE"]):
+                if lines: lines += ['']
+                lines += [r'$\bf{Baseline}$', f'RMSE: {b_mets["RMSE"]:.4f}\nr: {b_mets["Pearson_r"]:.4f}']
+            if lines:
+                props = dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='lightgray')
+                ax.text(0.05, 0.95, '\n'.join(lines), transform=ax.transAxes, fontsize=10, verticalalignment='top', bbox=props)
 
             ax.set_title(param_titles[i], fontsize=14, pad=15)
             ax.set_xlabel('True Value'); ax.set_ylabel('Predicted Value')
@@ -479,7 +492,8 @@ class LotkaVolterraAnalyzer(BaseAnalyzer):
         o_vals = [p_ours[:, i] for i in range(p_ours.shape[1])]
         b_vals = [p_base[:, i] for i in range(p_base.shape[1])]
         
-        self.plot_scatter_comparison(t_vals, o_vals, b_vals, metrics_dict, self.system.param_names, prefix="lv")
+        self.plot_scatter_comparison(t_vals, o_vals, b_vals, metrics_dict, self.system.param_names,
+                                     param_titles=[_disp(n) for n in self.system.param_names], prefix="lv")
         self._plot_lv_trajectories_and_phase(p_true, p_ours, p_base)
 
     def _plot_lv_trajectories_and_phase(self, p_true, p_ours, p_base):
@@ -604,7 +618,7 @@ class OgttSimulAnalyzer(BaseAnalyzer):
         allv = np.concatenate([np.log10(si_true), np.log10(sigma_true)])
         ax3.plot([allv.min(), allv.max()], [allv.min(), allv.max()], 'k--', lw=2, label='Ideal (y=x)')
         ax3.set_xlabel('True (log)'); ax3.set_ylabel('Predicted (log)')
-        ax3.set_title("3. Individual coordinates $S_I,\\sigma$ (both sloppy)", fontsize=14, fontweight='bold'); ax3.legend(); ax3.grid(True, alpha=0.2)
+        ax3.set_title("3. Individual coordinates $S_I,\\sigma$ (both weakly recovered)", fontsize=14, fontweight='bold'); ax3.legend(); ax3.grid(True, alpha=0.2)
         
         plt.tight_layout(); plt.savefig(os.path.join(self.results_path, f'{prefix}_symmetric_collapse.pdf'), dpi=300); plt.close()
 

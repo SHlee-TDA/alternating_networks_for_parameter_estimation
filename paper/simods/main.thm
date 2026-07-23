@@ -1,18 +1,25 @@
-\contentsline {remark}{{Remark}{2.1}{Why sparsity is essential}}{4}{theorem.9}%
-\contentsline {assumption}{{Assumption}{4.1}{Lipschitz continuity of the learned maps}}{9}{theorem.41}%
-\contentsline {theorem}{{Theorem}{4.2}{Contractivity of the Iterative Operator}}{9}{theorem.42}%
-\contentsline {proof}{{Proof}{1}{}}{9}{proof.43}%
-\contentsline {definition}{{Definition}{5.1}{One-Step Residual}}{10}{theorem.48}%
-\contentsline {lemma}{{Lemma}{5.2}{Fixed-Point Error Bound}}{11}{theorem.50}%
-\contentsline {proof}{{Proof}{2}{}}{11}{proof.52}%
-\contentsline {proposition}{{Proposition}{5.3}{Conditional-mean ceiling}}{11}{theorem.54}%
-\contentsline {proof}{{Proof}{3}{}}{12}{proof.55}%
-\contentsline {proposition}{{Proposition}{5.4}{Optimal Predictor under Squared-Loss}}{12}{theorem.57}%
-\contentsline {theorem}{{Theorem}{5.5}{Expected Residual and Conditional Variance}}{12}{theorem.59}%
-\contentsline {proof}{{Proof}{4}{}}{12}{proof.61}%
-\contentsline {corollary}{{Corollary}{5.6}{Regression-to-the-Mean and Error Lower Bound}}{13}{theorem.62}%
-\contentsline {proposition}{{Proposition}{5.7}{Conditional mean off a curved fiber}}{13}{theorem.66}%
-\contentsline {proof}{{Proof}{5}{}}{14}{proof.67}%
-\contentsline {corollary}{{Corollary}{5.8}{Product degeneracy and its quantitative bias}}{14}{theorem.68}%
-\contentsline {proof}{{Proof}{6}{}}{14}{proof.69}%
-\contentsline {remark}{{Remark}{5.9}{Two sources of the fixed-point error}}{14}{theorem.70}%
+\contentsline {remark}{{Remark}{2.1}{Why sparsity is essential}}{5}{theorem.9}%
+\contentsline {assumption}{{Assumption}{4.1}{Lipschitz continuity of the learned maps}}{10}{theorem.41}%
+\contentsline {theorem}{{Theorem}{4.2}{Contractivity of the Iterative Operator}}{10}{theorem.42}%
+\contentsline {proof}{{Proof}{1}{}}{10}{proof.43}%
+\contentsline {definition}{{Definition}{5.1}{One-Step Residual}}{12}{theorem.50}%
+\contentsline {lemma}{{Lemma}{5.2}{Fixed-Point Error Bound}}{12}{theorem.52}%
+\contentsline {proof}{{Proof}{2}{}}{12}{proof.54}%
+\contentsline {theorem}{{Theorem}{5.3}{Contraction--ambiguity incompatibility}}{13}{theorem.56}%
+\contentsline {proof}{{Proof}{3}{}}{13}{proof.60}%
+\contentsline {proposition}{{Proposition}{5.4}{Conditional-mean ceiling}}{14}{theorem.62}%
+\contentsline {proof}{{Proof}{4}{}}{14}{proof.63}%
+\contentsline {proposition}{{Proposition}{5.5}{Optimal predictor under squared loss}}{15}{theorem.65}%
+\contentsline {theorem}{{Theorem}{5.6}{Risk-optimal contraction and its fixed point}}{15}{theorem.67}%
+\contentsline {proof}{{Proof}{5}{}}{15}{proof.68}%
+\contentsline {remark}{{Remark}{5.7}{What is and is not optimized in training}}{15}{theorem.69}%
+\contentsline {theorem}{{Theorem}{5.8}{Conditional-mean operator: residual and error are exact}}{16}{theorem.71}%
+\contentsline {proof}{{Proof}{6}{}}{16}{proof.73}%
+\contentsline {corollary}{{Corollary}{5.9}{Regression-to-the-mean sandwich}}{16}{theorem.74}%
+\contentsline {assumption}{{Assumption}{5.10}{Fiber model}}{16}{theorem.77}%
+\contentsline {proposition}{{Proposition}{5.11}{Conditional mean off a curved fiber}}{17}{theorem.78}%
+\contentsline {proof}{{Proof}{7}{}}{17}{proof.79}%
+\contentsline {corollary}{{Corollary}{5.12}{Product degeneracy under physical-coordinate MSE}}{17}{theorem.80}%
+\contentsline {proof}{{Proof}{8}{}}{17}{proof.81}%
+\contentsline {remark}{{Remark}{5.13}{The off-fiber displacement is a property of the loss coordinate}}{17}{theorem.82}%
+\contentsline {remark}{{Remark}{5.14}{Two sources of the fixed-point error}}{18}{theorem.83}%

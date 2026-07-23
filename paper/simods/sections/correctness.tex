@@ -1,42 +1,100 @@
 \section{Theory 2: Correctness and Statistical Limitations}
 \label{sec:correctness}
 
-Theorem~\ref{thm:contraction} establishes that the iteration $\theta^{(k+1)} = \mathcal{T}(\theta^{(k)}; \mathbf{x}_\mathrm{obs})$ converges to a unique fixed point $\theta^*(\mathbf{x}_\mathrm{obs})$ from any initialization, but convergence says nothing about \emph{what} that fixed point is. This section characterizes it, and the conclusion is a characterization rather than a correctness guarantee. We establish three facts. First, because the fixed point is a deterministic function of $\mathbf{x}_\mathrm{obs}$, it cannot be more accurate than the conditional mean $\mathbb{E}[\theta\mid\mathbf{x}_\mathrm{obs}]$ --- the same information-theoretic ceiling faced by a plain direct regressor, which the iterative reconstruction of the hidden state does \emph{not} circumvent (Section~\ref{subsec:ceiling}). Second, the deviation of the fixed point from the conditional mean is controlled by a one-step residual, which we bound and decompose. Third, under non-identifiability the conditional-mean target is itself displaced off the physical solution manifold (Section~\ref{subsec:off_fiber}). The overall picture is that the decoupled fixed-point estimator is a stable, convergent procedure whose output is the (off-fiber) conditional mean, and whose decoupled structure buys no accuracy over direct regression --- a statement we make precise below and confirm empirically in Section~\ref{sec:experiments}.
+Theorem~\ref{thm:contraction} establishes that the iteration $\theta^{(k+1)} = \mathcal{T}(\theta^{(k)}; \mathbf{x}_\mathrm{obs})$ converges to a unique fixed point $\theta^*(\mathbf{x}_\mathrm{obs})$ from any initialization, but convergence says nothing about \emph{what} that fixed point is. This section characterizes it, and the conclusion is a characterization rather than a correctness guarantee. We establish four facts. First, contractivity and observational ambiguity are structurally \emph{incompatible}: a strict contraction cannot keep two distinct admissible parameters as zero-residual fixed points, so preserving the whole teacher-forced target is unreachable on a non-identifiable fiber (Section~\ref{subsec:incompat}). Second, because the fixed point is a deterministic function of $\mathbf{x}_\mathrm{obs}$, it cannot be more accurate than the conditional mean --- the Bayes performance ceiling under squared loss faced already by a plain direct regressor, which reconstructing the hidden state does \emph{not} circumvent (Section~\ref{subsec:ceiling}). Third, among all contractions the one that minimizes the idealized one-step risk has that conditional mean as its fixed point (Section~\ref{subsec:collapse}); we are careful to separate this idealized objective from the decoupled loss actually optimized in training. Fourth, whether that Bayes-optimal point is itself observation-consistent depends on the \emph{coordinate} in which the squared loss is taken: for a curved fiber the conditional mean lies off it, but a reparameterization that straightens the fiber --- logarithms for a product degeneracy --- keeps the conditional mean on the fiber (Section~\ref{subsec:off_fiber}). The overall picture is that the decoupled fixed-point estimator is a stable, convergent procedure whose accuracy is bounded by the conditional mean in the loss coordinate, and whose reconstruction of the hidden state confers no \emph{information-theoretic} advantage over an estimator based on the observation alone (in our experiments the finite-capacity direct baseline also performs better) --- statements we make precise below and examine empirically in Section~\ref{sec:experiments}.
+
+\paragraph{Loss coordinate.} The squared loss need not be taken in the physical parameter $\theta$: training minimizes MSE in a fixed, invertible \emph{network coordinate} $u=\tau(\theta)$ (in our OGTT pipeline $\tau$ is a componentwise logarithm; see Appendix~\ref{app:repro-norm}). All Bayes and fiber statements below hold in whatever coordinate carries the loss --- we write them in a generic coordinate and are explicit, where it matters, about which $\tau$ is in force. Throughout, we write $m(\mathbf{x}_\mathrm{obs}):=\mathbb{E}[\theta\mid\mathbf{x}_\mathrm{obs}]$ for the conditional mean of the coordinate under discussion and $V(\mathbf{x}_\mathrm{obs}):=\mathbb{E}\big[\|\theta-m(\mathbf{x}_\mathrm{obs})\|_2^2\mid\mathbf{x}_\mathrm{obs}\big]$ for the conditional variance, and use the elementary \emph{Bayes decomposition} of the squared risk. For any deterministic (measurable) estimator $g(\mathbf{x}_\mathrm{obs})$ with $\mathbb{E}\|\theta\|_2^2<\infty$,
+\begin{equation}
+\label{eq:bayes-decomp}
+\mathbb{E}\big\|g(\mathbf{x}_\mathrm{obs})-\theta\big\|_2^2
+=
+\underbrace{\mathbb{E}\,V(\mathbf{x}_\mathrm{obs})}_{\text{irreducible}}
++
+\underbrace{\mathbb{E}\big\|g(\mathbf{x}_\mathrm{obs})-m(\mathbf{x}_\mathrm{obs})\big\|_2^2}_{\text{estimator excess}},
+\end{equation}
+which follows by conditioning on $\mathbf{x}_\mathrm{obs}$ and expanding the square, the cross term vanishing because $m(\mathbf{x}_\mathrm{obs})$ is the conditional mean. Thus the conditional mean is the squared-risk minimizer, and $\mathbb{E}\,V$ is a floor obeyed by \emph{every} deterministic estimator; but \eqref{eq:bayes-decomp} does \emph{not} say that an arbitrary deterministic fixed point equals the conditional mean --- only that its excess risk over the floor is the squared distance to it.
 
 \subsection{The One-Step Residual and the Fixed-Point Error}
 
-To quantify the estimation error at the individual sample level, we define a metric measuring how well the learned operator preserves the true parameter.
+To quantify the estimation error at the individual-sample level, we define a metric measuring how well the learned operator preserves the true parameter.
 
 \begin{definition}[One-Step Residual]
 \label{def:one_step_residual}
-For a given observation $\mathbf{x}_\mathrm{obs}$ and its corresponding ground-truth parameter $\theta^{\mathrm{true}}=\theta^\mathrm{true}(\mathbf{x}_\mathrm{obs})$, the one-step residual of the iterative operator $\mathcal{T}(\cdot; \mathbf{x}_\mathrm{obs})$ evaluated at the ground truth is defined as:
+For a given observation $\mathbf{x}_\mathrm{obs}$ and an evaluation parameter $\theta$, the one-step residual of the iterative operator $\mathcal{T}(\cdot; \mathbf{x}_\mathrm{obs})$ is
 \begin{equation}
-    \varepsilon(\mathbf{x}_\mathrm{obs}) := \lVert \mathcal{T}(\theta^{\mathrm{true}}; \mathbf{x}_\mathrm{obs}) - \theta^{\mathrm{true}}\rVert_2.
+    \varepsilon(\mathbf{x}_\mathrm{obs},\theta) := \lVert \mathcal{T}(\theta; \mathbf{x}_\mathrm{obs}) - \theta\rVert_2 .
 \end{equation}
+For an observed sample pair $(\mathbf{x}_\mathrm{obs},\theta^{\mathrm{true}})$ drawn from the joint law --- note that under non-identifiability $\theta^{\mathrm{true}}$ is \emph{not} a function of $\mathbf{x}_\mathrm{obs}$, since one observation admits many truths --- we write $\varepsilon(\mathbf{x}_\mathrm{obs}):=\varepsilon(\mathbf{x}_\mathrm{obs},\theta^{\mathrm{true}})$.
 \end{definition}
 
-The one-step residual is a crucial quantity because it directly bounds the distance between the final converged fixed point and the ground-truth parameter.
+The one-step residual at the ground truth directly bounds the distance between the converged fixed point and the ground-truth parameter.
 
 \begin{lemma}[Fixed-Point Error Bound]
 \label{lem:error_bound}
 Suppose $\mathcal{T}(\cdot; \mathbf{x}_\mathrm{obs})$ is a contraction mapping with a Lipschitz constant $\mathrm{Lip}_\mathcal{T} < 1$, and let $\theta^*=\theta^*(\mathbf{x}_\mathrm{obs})$ be its unique fixed point.
-Then, the distance between the fixed point and the ground-truth parameter is strictly bounded by the one-step residual:
+Then the distance between the fixed point and the ground-truth parameter is bounded by the one-step residual:
 \begin{equation}
     \lVert\theta^* - \theta^{\mathrm{true}}\rVert_2 \le \frac{\varepsilon(\mathbf{x}_\mathrm{obs})}{1 - \mathrm{Lip}_\mathcal{T}}.
 \end{equation}
 \end{lemma}
 
 \begin{proof}
-By the triangle inequality and the contractivity of $\mathcal{T}(\cdot; \mathbf{x}_\mathrm{obs})$, we have:
+By the triangle inequality and the contractivity of $\mathcal{T}(\cdot; \mathbf{x}_\mathrm{obs})$,
 \begin{align*}
     \lVert \theta^* - \theta^{\mathrm{true}}\rVert_2 &= \lVert \mathcal{T}(\theta^\star; \mathbf{x}_\mathrm{obs}) - \theta^{\mathrm{true}}\rVert_2 \\
     &\le \lVert \mathcal{T}(\theta^*; \mathbf{x}_\mathrm{obs}) - \mathcal{T}(\theta^{\mathrm{true}}; \mathbf{x}_\mathrm{obs})\rVert_2 + \lVert \mathcal{T}(\theta^{\mathrm{true}}; \mathbf{x}_\mathrm{obs}) - \theta^{\mathrm{true}}\rVert_2 \\
     &\le \mathrm{Lip}_\mathcal{T} \|\theta^* - \theta^{\mathrm{true}}\|_2 + \varepsilon(\mathbf{x}_\mathrm{obs}).
 \end{align*}
-Rearranging the terms yields the desired bound.
+Rearranging yields the bound.
 \end{proof}
 
-Teacher forcing \emph{targets} $\varepsilon(\mathbf{x}_\mathrm{obs})=0$: during training, $H_\phi$ and $P_\psi$ are optimized on the true pairs so that $H_\phi(\mathbf{x}_\mathrm{obs}, \theta^\mathrm{true})\approx \mathbf{x}_\mathrm{hid}$ and $P_\psi(\mathbf{x}_\mathrm{obs}, \mathbf{x}_\mathrm{hid})\approx \theta^\mathrm{true}$, which would make $\mathcal{T}(\theta^{\mathrm{true}}; \mathbf{x}_\mathrm{obs})\approx\theta^{\mathrm{true}}$ and, by Lemma~\ref{lem:error_bound}, pin the fixed point to the ground truth. The remainder of this section shows that this ideal is generally \emph{unreachable}: the one-step residual $\varepsilon(\mathbf{x}_\mathrm{obs})$ is bounded away from zero, for a structural reason (Section~\ref{subsec:collapse}) and an approximation reason (Remark~\ref{rem:decomposition}), and even in the best case the fixed point can only reach the conditional mean, which we now show is the true ceiling.
+Teacher forcing \emph{targets} $\varepsilon(\mathbf{x}_\mathrm{obs})=0$: during training, $H_\phi$ and $P_\psi$ are optimized on the true pairs so that $H_\phi(\mathbf{x}_\mathrm{obs}, \theta^\mathrm{true})\approx \mathbf{x}_\mathrm{hid}$ and $P_\psi(\mathbf{x}_\mathrm{obs}, \mathbf{x}_\mathrm{hid})\approx \theta^\mathrm{true}$, which would make $\mathcal{T}(\theta^{\mathrm{true}}; \mathbf{x}_\mathrm{obs})\approx\theta^{\mathrm{true}}$ and, by Lemma~\ref{lem:error_bound}, pin the fixed point to the ground truth. The next subsection shows that this ideal is, under observational ambiguity, not merely hard to reach but structurally \emph{unreachable}.
+
+\subsection{Contraction and Ambiguity Are Incompatible}
+\label{subsec:incompat}
+
+The following is our central negative result. It is a purely geometric consequence of contractivity, independent of how the networks are trained: it lower-bounds the one-step residual by the distance to the operator's own fixed point, and hence forbids a strict contraction from preserving two distinct admissible parameters.
+
+\begin{theorem}[Contraction--ambiguity incompatibility]
+\label{thm:incompat}
+Fix $\mathbf{x}_\mathrm{obs}$ and suppose $\mathcal{T}(\cdot;\mathbf{x}_\mathrm{obs})$ is a $q$-contraction ($q:=\mathrm{Lip}_\mathcal{T}<1$) with unique fixed point $g(\mathbf{x}_\mathrm{obs})$. Then for every $\theta\in\Theta$,
+\begin{equation}
+\label{eq:incompat-residual}
+\varepsilon(\mathbf{x}_\mathrm{obs},\theta)\;\ge\;(1-q)\,\big\|\theta-g(\mathbf{x}_\mathrm{obs})\big\|_2 .
+\end{equation}
+Consequently, taking the conditional expectation over $\theta\mid\mathbf{x}_\mathrm{obs}$ and using \eqref{eq:bayes-decomp},
+\begin{equation}
+\label{eq:incompat-var}
+\mathbb{E}\big[\varepsilon(\mathbf{x}_\mathrm{obs},\theta)^2 \mid \mathbf{x}_\mathrm{obs}\big]
+\;\ge\;(1-q)^2\Big(V(\mathbf{x}_\mathrm{obs})+\big\|g(\mathbf{x}_\mathrm{obs})-m(\mathbf{x}_\mathrm{obs})\big\|_2^2\Big)
+\;\ge\;(1-q)^2\,V(\mathbf{x}_\mathrm{obs}).
+\end{equation}
+Moreover, for any two parameters $\theta_a\neq\theta_b$ consistent with the same observation,
+\begin{equation}
+\label{eq:incompat-pair}
+\varepsilon(\mathbf{x}_\mathrm{obs},\theta_a)+\varepsilon(\mathbf{x}_\mathrm{obs},\theta_b)\;\ge\;(1-q)\,\|\theta_a-\theta_b\|_2 .
+\end{equation}
+\end{theorem}
+
+\begin{proof}
+Write $g=g(\mathbf{x}_\mathrm{obs})$ and $\mathcal{T}=\mathcal{T}(\cdot;\mathbf{x}_\mathrm{obs})$. Since $\mathcal{T}(g)=g$, the reverse triangle inequality gives
+\[
+\varepsilon(\mathbf{x}_\mathrm{obs},\theta)=\|\mathcal{T}(\theta)-\theta\|_2
+\ge \|\theta-g\|_2 - \|\mathcal{T}(\theta)-g\|_2
+= \|\theta-g\|_2 - \|\mathcal{T}(\theta)-\mathcal{T}(g)\|_2
+\ge (1-q)\|\theta-g\|_2,
+\]
+which is \eqref{eq:incompat-residual}. Squaring and taking $\mathbb{E}[\,\cdot\mid\mathbf{x}_\mathrm{obs}]$, then applying the bias--variance identity $\mathbb{E}[\|\theta-g\|_2^2\mid\mathbf{x}_\mathrm{obs}]=V(\mathbf{x}_\mathrm{obs})+\|g-m(\mathbf{x}_\mathrm{obs})\|_2^2$ (a pointwise instance of \eqref{eq:bayes-decomp}), gives \eqref{eq:incompat-var}. For \eqref{eq:incompat-pair}, the triangle inequality and contractivity give
+\[
+\|\theta_a-\theta_b\|_2\le \|\theta_a-\mathcal{T}(\theta_a)\|_2+\|\mathcal{T}(\theta_a)-\mathcal{T}(\theta_b)\|_2+\|\mathcal{T}(\theta_b)-\theta_b\|_2
+\le \varepsilon_a + q\|\theta_a-\theta_b\|_2 + \varepsilon_b,
+\]
+with $\varepsilon_a:=\varepsilon(\mathbf{x}_\mathrm{obs},\theta_a)$, $\varepsilon_b:=\varepsilon(\mathbf{x}_\mathrm{obs},\theta_b)$; rearranging yields \eqref{eq:incompat-pair}.
+\end{proof}
+
+Theorem~\ref{thm:incompat} makes the tension explicit. A single observation with two admissible ground truths $\theta_a\neq\theta_b$ cannot have both as zero-residual points of a strict contraction: by \eqref{eq:incompat-pair} their residuals sum to at least $(1-q)\|\theta_a-\theta_b\|>0$. The teacher-forced ideal --- preserve \emph{every} admissible ground truth, $\varepsilon=0$ over the whole support --- is therefore incompatible with global strict contractivity on a non-identifiable fiber. The incompatibility is a \emph{population} statement: a finite random training set drawn from a continuous prior rarely contains the same $\mathbf{x}_\mathrm{obs}$ twice, so a network can interpolate nearby fiber observations at training time; the contradiction surfaces at the population/generalization level, where the operator must act on the whole fiber at once. The residual it must then leave behind is not a training imperfection but a structural floor: by \eqref{eq:incompat-var} the expected squared residual is bounded below by $(1-q)^2\,V(\mathbf{x}_\mathrm{obs})$, strictly positive exactly when the observation fails to identify $\theta$.
+
+Two \emph{complementary} floors follow, and it is worth keeping their logic straight. The residual floor above is a lower bound on $\mathbb{E}[\varepsilon^2\mid\mathbf{x}_\mathrm{obs}]$; Lemma~\ref{lem:error_bound}, by contrast, runs the other way --- it converts a \emph{measured} residual into an \emph{upper} certificate for a particular fixed-point error, and does not by itself lower-bound that error. The unavoidable lower bound on every deterministic fixed point comes independently from the Bayes decomposition (Proposition~\ref{prop:ceiling} below). Finally, the residual floor $(1-q)^2V$ shrinks as $q\uparrow1$ and vanishes in the limit --- but only at the price of arbitrarily slow convergence, and any \emph{fixed} strict margin $q<1$ keeps it positive; the fixed-point Bayes floor $\mathbb{E}\,V$ itself is independent of $q$.
 
 \subsection{The Conditional-Mean Ceiling: Reconstructing the Hidden State Adds No Information}
 \label{subsec:ceiling}
@@ -45,128 +103,159 @@ A natural intuition motivates the decoupled design: since different hidden state
 
 \begin{proposition}[Conditional-mean ceiling]
 \label{prop:ceiling}
-By uniqueness of the fixed point (Theorem~\ref{thm:contraction}), $\theta^*(\mathbf{x}_\mathrm{obs})$ is a deterministic (measurable) function of $\mathbf{x}_\mathrm{obs}$. Consequently:
+By uniqueness of the fixed point (Theorem~\ref{thm:contraction}), $\theta^*(\mathbf{x}_\mathrm{obs})$ is a deterministic function of $\mathbf{x}_\mathrm{obs}$; it is moreover measurable, since $\mathcal{T}$ is continuous in $(\mathbf{x}_\mathrm{obs},\theta)$ with a contraction constant uniform in $\mathbf{x}_\mathrm{obs}$, so $\theta^*(\mathbf{x}_\mathrm{obs})=\lim_k \mathcal{T}^{(k)}(\theta^{(0)};\mathbf{x}_\mathrm{obs})$ is a pointwise limit of continuous (hence measurable) maps. Consequently:
 \begin{enumerate}
 \item[(i)] the reconstructed hidden state at convergence, $H_\phi\big(\mathbf{x}_\mathrm{obs},\theta^*(\mathbf{x}_\mathrm{obs})\big)$, is also a function of $\mathbf{x}_\mathrm{obs}$, and hence carries no information about $\theta$ beyond what $\mathbf{x}_\mathrm{obs}$ already contains;
-\item[(ii)] the expected squared error is bounded below by the conditional variance,
+\item[(ii)] by the Bayes decomposition~\eqref{eq:bayes-decomp}, the expected squared error is bounded below by the expected conditional variance,
 \[
-\mathbb{E}\big\|\theta^*(\mathbf{x}_\mathrm{obs})-\theta\big\|_2^2 \;\ge\; \mathbb{E}\big[\operatorname{Var}(\theta\mid\mathbf{x}_\mathrm{obs})\big],
+\mathbb{E}\big\|\theta^*(\mathbf{x}_\mathrm{obs})-\theta\big\|_2^2 \;\ge\; \mathbb{E}\big[V(\mathbf{x}_\mathrm{obs})\big]
+= \mathbb{E}\big[\operatorname{Var}(\theta\mid\mathbf{x}_\mathrm{obs})\big],
 \]
-which is the same floor obeyed by \emph{any} estimator depending on $\mathbf{x}_\mathrm{obs}$ alone --- in particular by direct regression --- and is attained only by the conditional mean $\mathbb{E}[\theta\mid\mathbf{x}_\mathrm{obs}]$.
+the same Bayes floor obeyed by \emph{any} estimator depending on $\mathbf{x}_\mathrm{obs}$ alone --- in particular by direct regression --- and attained only by the conditional mean $m(\mathbf{x}_\mathrm{obs})$.
 \end{enumerate}
 \end{proposition}
 
 \begin{proof}
-Uniqueness makes $\theta^*=g(\mathbf{x}_\mathrm{obs})$ for a measurable $g$, giving (i) by composition. For (ii), any measurable $g$ satisfies $\mathbb{E}\|g(\mathbf{x}_\mathrm{obs})-\theta\|_2^2 = \mathbb{E}\|\mathbb{E}[\theta\mid\mathbf{x}_\mathrm{obs}]-\theta\|_2^2 + \mathbb{E}\|g(\mathbf{x}_\mathrm{obs})-\mathbb{E}[\theta\mid\mathbf{x}_\mathrm{obs}]\|_2^2 \ge \mathbb{E}[\operatorname{Var}(\theta\mid\mathbf{x}_\mathrm{obs})]$, with equality iff $g=\mathbb{E}[\theta\mid\mathbf{x}_\mathrm{obs}]$ almost surely.
+Uniqueness makes $\theta^*=g(\mathbf{x}_\mathrm{obs})$ for a measurable $g$, giving (i) by composition. Part (ii) is \eqref{eq:bayes-decomp} applied to $g=\theta^*$, discarding the nonnegative excess term, with equality iff $g=m$ almost surely.
 \end{proof}
 
 Proposition~\ref{prop:ceiling} identifies the fundamental ceiling. Teacher forcing exploits the \emph{true} hidden state during training, but that advantage does not transfer to inference, where the true hidden state is unavailable and its learned surrogate is a deterministic image of $\mathbf{x}_\mathrm{obs}$. The decoupled iteration therefore cannot beat the conditional mean, and --- as our experiments show (Section~\ref{sec:experiments}) --- a direct regressor typically \emph{reaches} that ceiling more closely, since it avoids the reconstruction detour that inflates $\varepsilon$. The value of the fixed-point construction thus lies in its convergence guarantee and in the self-consistent hidden trajectory it returns as a by-product, not in improved parameter accuracy.
 
-\subsection{Ambiguity under Non-Identifiability: Regression-to-the-Mean}
+\subsection{Which Contraction? A Variational Route to the Conditional-Mean Fixed Point}
 \label{subsec:collapse}
 
-The assumption that $\varepsilon(\mathbf{x}_\mathrm{obs})$ can be universally minimized to zero breaks down when evaluating the model over a statistical data distribution $p(\mathbf{x}_\mathrm{obs}, \theta)$ if the dynamical system exhibits non-identifiability. In such regimes, the inverse mapping is multi-valued, meaning a single observation $\mathbf{x}_\mathrm{obs}$ can be generated by multiple distinct parameter values.
+Theorem~\ref{thm:incompat} lower-bounds the residual of \emph{any} contraction; we now ask which contraction is best in the idealized sense of minimizing the expected one-step residual, and show that its fixed point is forced to be the conditional mean. This derives the conditional-mean collapse from an optimization principle rather than assuming it. We first recall the classical squared-loss fact for context.
 
-To formalize the behavior of our neural estimators under this one-to-many mapping, we recall a fundamental result from statistical machine learning theory \cite{hastie2009elements}. 
-When a machine learning model is trained using the Mean Squared Error (MSE) objective, it is mathematically constrained in how it handles target ambiguity. 
-Rather than selecting an arbitrary valid parameter among the multiple possibilities, the optimal estimator is driven to compute the expected value of the target distribution. 
-This well-known property is formally stated as follows.
-% 아래 proposition은 machine learning text (Bishop이나 팁쉬라니 등)에 등장하는 theorem임. 이걸 배경지식으로 먼저 던져줘야 함.
-\begin{proposition}[Optimal Predictor under Squared-Loss]
+\begin{proposition}[Optimal predictor under squared loss]
 \label{prop:optimal_predictor}
-Let $(\mathbf{x}_\mathrm{obs}, \theta)$ be random variables representing the observations and parameters drawn from the joint distribution $p(\mathbf{x}_\mathrm{obs}, \theta)$ with $\mathbb{E}[\|\theta\|_2^2] < \infty$. Among all measurable functions $g(\mathbf{x}_\mathrm{obs})$ minimizing the expected risk $\mathbb{E}_{(\mathbf{x}_\mathrm{obs}, \theta)}[\|\theta - g(\mathbf{x}_\mathrm{obs})\|_2^2]$, the optimal solution is given almost surely by the conditional mean:
-\begin{equation}
-    g^*(\mathbf{x}_\mathrm{obs}) = \mathbb{E}[\theta \mid \mathbf{x}_\mathrm{obs}].
-\end{equation}
+Let $(\mathbf{x}_\mathrm{obs}, \theta)$ be drawn from $p(\mathbf{x}_\mathrm{obs}, \theta)$ with $\mathbb{E}[\|\theta\|_2^2] < \infty$. Among all measurable $g(\mathbf{x}_\mathrm{obs})$ minimizing $\mathbb{E}\,\|\theta - g(\mathbf{x}_\mathrm{obs})\|_2^2$, the minimizer is the conditional mean $g^*(\mathbf{x}_\mathrm{obs}) = m(\mathbf{x}_\mathrm{obs})$ almost surely.
 \end{proposition}
 
-To understand the consequence of this statistical compromise on our fixed-point framework, we analyze the expected squared one-step residual assuming the network reaches the theoretical limit described in Proposition~\ref{prop:optimal_predictor}.
-
-\begin{theorem}[Expected Residual and Conditional Variance]
-\label{thm:expected_residual}
-Assume the iterative operator perfectly learns the optimal MSE predictor defined in Proposition~\ref{prop:optimal_predictor}, such that $\mathcal{T}(\theta; \mathbf{x}_\mathrm{obs}) = \mathbb{E}[\theta \mid \mathbf{x}_\mathrm{obs}]$ for any input parameter $\theta$. 
-Then, the expected squared one-step residual over the joint distribution $p(\mathbf{x}_\mathrm{obs}, \theta)$ is exactly equal to the expected conditional variance of the parameter distribution:
+This concerns an \emph{unconstrained} regressor. Our operator is not unconstrained: it must be a contraction in $\theta$. We therefore pose the idealized operator-learning problem of choosing, for each $\mathbf{x}_\mathrm{obs}$ and a fixed contraction budget $q<1$, the $q$-contraction $T_{\mathbf{x}_\mathrm{obs}}(\cdot)$ on the convex set $\Theta$ that minimizes the conditional one-step risk
 \begin{equation}
-    \mathbb{E}_{(\mathbf{x}_\mathrm{obs}, \theta)} \left[ \varepsilon(\mathbf{x}_\mathrm{obs})^2 \right] = \mathbb{E}_{\mathbf{x}_\mathrm{obs}} \left[ \operatorname{Var}(\theta \mid \mathbf{x}_\mathrm{obs}) \right].
+\label{eq:cond-onestep-risk}
+\mathcal{R}_{\mathbf{x}_\mathrm{obs}}(T)
+:=
+\mathbb{E}\big[\,\|T_{\mathbf{x}_\mathrm{obs}}(\theta)-\theta\|_2^2 \,\big|\, \mathbf{x}_\mathrm{obs}\big].
 \end{equation}
+
+\begin{theorem}[Risk-optimal contraction and its fixed point]
+\label{thm:variational}
+Assume $\Theta\subseteq\mathbb{R}^p$ is convex and closed, $m(\mathbf{x}_\mathrm{obs})\in\Theta$, and fix $q\in[0,1)$. Then:
+\begin{enumerate}
+\item[(i)] every $q$-contraction $T$ obeys $\mathcal{R}_{\mathbf{x}_\mathrm{obs}}(T)\ge (1-q)^2\,V(\mathbf{x}_\mathrm{obs})$, by \eqref{eq:incompat-var};
+\item[(ii)] the affine contraction $T^{\mathrm{opt}}_{\mathbf{x}_\mathrm{obs}}(\theta)=q\,\theta+(1-q)\,m(\mathbf{x}_\mathrm{obs})$ is a $q$-contraction mapping $\Theta$ into $\Theta$, and attains the bound: $\mathcal{R}_{\mathbf{x}_\mathrm{obs}}(T^{\mathrm{opt}})=(1-q)^2\,V(\mathbf{x}_\mathrm{obs})$;
+\item[(iii)] the minimum risk is $(1-q)^2\,V(\mathbf{x}_\mathrm{obs})$, and any minimizer has the conditional mean $m(\mathbf{x}_\mathrm{obs})$ as its fixed point.
+\end{enumerate}
 \end{theorem}
 
 \begin{proof}
-By Definition~\ref{def:one_step_residual} and the assumption that the operator acts as the optimal MSE predictor (Proposition~\ref{prop:optimal_predictor}), i.e., $\mathcal{T}(\theta^{\mathrm{true}}; \mathbf{x}_\mathrm{obs}) = \mathbb{E}[\theta \mid \mathbf{x}_\mathrm{obs}]$, the expected squared residual is:
-\begin{equation*}
-    \mathbb{E}_{(\mathbf{x}_\mathrm{obs}, \theta)} \left[ \varepsilon(\mathbf{x}_\mathrm{obs})^2 \right] = \mathbb{E}_{(\mathbf{x}_\mathrm{obs}, \theta)} \left[ \|\mathbb{E}[\theta \mid \mathbf{x}_\mathrm{obs}] - \theta\|_2^2 \right].
-\end{equation*}
-Applying the Law of Total Expectation by conditioning on $\mathbf{x}_\mathrm{obs}$, we obtain:
-\begin{equation*}
-    \mathbb{E}_{(\mathbf{x}_\mathrm{obs}, \theta)} \left[ \|\mathbb{E}[\theta \mid \mathbf{x}_\mathrm{obs}] - \theta\|_2^2 \right] = \mathbb{E}_{\mathbf{x}_\mathrm{obs}} \left[ \mathbb{E}_{\theta \mid \mathbf{x}_\mathrm{obs}} \left[ \|\theta - \mathbb{E}[\theta \mid \mathbf{x}_\mathrm{obs}]\|_2^2 \right] \right].
-\end{equation*}
-The inner expectation is the exact definition of the conditional variance $\operatorname{Var}(\theta \mid \mathbf{x}_\mathrm{obs})$. 
-Thus, the equality holds.
+(i) is \eqref{eq:incompat-var}. For (ii), $T^{\mathrm{opt}}$ has Lipschitz constant $q<1$, and for $\theta\in\Theta$ it is the convex combination $q\theta+(1-q)m(\mathbf{x}_\mathrm{obs})$ of two points of $\Theta$, hence lies in $\Theta$; its unique fixed point is $m(\mathbf{x}_\mathrm{obs})$. Its residual is $T^{\mathrm{opt}}(\theta)-\theta=(1-q)\big(m(\mathbf{x}_\mathrm{obs})-\theta\big)$, so $\mathcal{R}_{\mathbf{x}_\mathrm{obs}}(T^{\mathrm{opt}})=(1-q)^2\,\mathbb{E}[\|\theta-m(\mathbf{x}_\mathrm{obs})\|_2^2\mid\mathbf{x}_\mathrm{obs}]=(1-q)^2V(\mathbf{x}_\mathrm{obs})$. Combining (i) and (ii) gives the minimum value in (iii). Finally, if $T$ is any $q$-contraction with fixed point $g$, then \eqref{eq:incompat-var} gives $\mathcal{R}_{\mathbf{x}_\mathrm{obs}}(T)\ge (1-q)^2(V(\mathbf{x}_\mathrm{obs})+\|g-m(\mathbf{x}_\mathrm{obs})\|_2^2)$; attaining the minimum $(1-q)^2V(\mathbf{x}_\mathrm{obs})$ forces $\|g-m(\mathbf{x}_\mathrm{obs})\|_2=0$, i.e. $g=m(\mathbf{x}_\mathrm{obs})$.
 \end{proof}
 
-\begin{corollary}[Regression-to-the-Mean and Error Lower Bound]
+\begin{remark}[What is and is not optimized in training]
+\label{rem:objective-gap}
+Theorem~\ref{thm:variational} concerns the \emph{composite} one-step risk~\eqref{eq:cond-onestep-risk} of an idealized contractive operator. The decoupled teacher forcing of Section~\ref{subsec:training} does \emph{not} minimize \eqref{eq:cond-onestep-risk}: it minimizes the two separate losses $\mathcal{L}_H+\mathcal{L}_P$ on ground-truth pairs, with no term tying $P_\psi\!\circ\!H_\phi$ to the identity in the composed sense. We therefore do \emph{not} claim that the trained operator equals the risk-optimal contraction $T^{\mathrm{opt}}$, nor that it exactly realizes the conditional-mean fixed point. Theorem~\ref{thm:variational} should be read as a statement about (a) the idealized contraction that best trades off residual against ambiguity, and (b) the explicit consistency objective
+\begin{equation}
+\label{eq:consistency-loss}
+\mathcal{L}_T := \mathbb{E}\,\big\|P_\psi\big(\mathbf{x}_\mathrm{obs},H_\phi(\mathbf{x}_\mathrm{obs},\theta)\big)-\theta\big\|_2^2,
+\end{equation}
+which is a sample form of \eqref{eq:cond-onestep-risk}. The conditional-mean collapse observed for the trained decoupled operator (Section~\ref{sec:experiments}) is then reported as \emph{empirical} corroboration of this theoretical prediction, not as an identity guaranteed by the training loss.
+\end{remark}
+
+We record the population consequences used in the sequel, separating the risk-optimal case (an equality) from an arbitrary learned contraction (a sandwich).
+
+\begin{theorem}[Conditional-mean operator: residual and error are exact]
+\label{thm:expected_residual}
+Suppose the operator's fixed point is the conditional mean, $g=m(\mathbf{x}_\mathrm{obs})$ --- attained, for any $q\in[0,1)$, by the risk-optimal affine contraction $T^{\mathrm{opt}}$ of Theorem~\ref{thm:variational}, and in particular by the constant map $\mathcal{T}(\theta;\mathbf{x}_\mathrm{obs})=m(\mathbf{x}_\mathrm{obs})$. Then the fixed-point error is \emph{exactly} the Bayes floor,
+\begin{equation}
+    \mathbb{E}\big\|\theta^*(\mathbf{x}_\mathrm{obs})-\theta\big\|_2^2 = \mathbb{E}_{\mathbf{x}_\mathrm{obs}}\big[\operatorname{Var}(\theta\mid\mathbf{x}_\mathrm{obs})\big],
+\end{equation}
+and the expected squared one-step residual at the ground truth is $\mathbb{E}[\varepsilon(\mathbf{x}_\mathrm{obs})^2]=(1-q)^2\,\mathbb{E}[\operatorname{Var}(\theta\mid\mathbf{x}_\mathrm{obs})]$ for $T^{\mathrm{opt}}$ (equal to $\mathbb{E}[\operatorname{Var}(\theta\mid\mathbf{x}_\mathrm{obs})]$ for the constant map).
+\end{theorem}
+
+\begin{proof}
+Since $\theta^*=g=m(\mathbf{x}_\mathrm{obs})$, the excess term in the Bayes decomposition~\eqref{eq:bayes-decomp} vanishes, giving the first equality. For $T^{\mathrm{opt}}$, $\varepsilon(\mathbf{x}_\mathrm{obs})=\|T^{\mathrm{opt}}(\theta^{\mathrm{true}})-\theta^{\mathrm{true}}\|_2=(1-q)\|m(\mathbf{x}_\mathrm{obs})-\theta^{\mathrm{true}}\|_2$; squaring and taking $\mathbb{E}[\,\cdot\mid\mathbf{x}_\mathrm{obs}]$ then the tower rule gives the residual identity.
+\end{proof}
+
+\begin{corollary}[Regression-to-the-mean sandwich]
 \label{cor:lower_bound}
-Under the assumptions of Lemma \ref{lem:error_bound} and Theorem \ref{thm:expected_residual}, the expected squared estimation error of the fixed-point solver is strictly lower-bounded by the structural uncertainty of the system:
+For \emph{any} learned $q$-contraction ($q=\mathrm{Lip}_\mathcal{T}<1$) with fixed point $\theta^*$, the Bayes lower bound (Proposition~\ref{prop:ceiling}) and the residual upper bound (Lemma~\ref{lem:error_bound}) sandwich the fixed-point risk:
 \begin{equation}
-    \mathbb{E}_{(\mathbf{x}_\mathrm{obs}, \theta)} \left[ \|\theta^*(\mathbf{x}_\mathrm{obs}) - \theta\|_2^2 \right] \ge \mathbb{E}_{\mathbf{x}_\mathrm{obs}} \left[ \operatorname{Var}(\theta \mid \mathbf{x}_\mathrm{obs}) \right].
+    \mathbb{E}_{\mathbf{x}_\mathrm{obs}}\big[\operatorname{Var}(\theta\mid\mathbf{x}_\mathrm{obs})\big]
+    \;\le\;
+    \mathbb{E}\big\|\theta^*(\mathbf{x}_\mathrm{obs})-\theta\big\|_2^2
+    \;\le\;
+    \frac{\mathbb{E}\big[\varepsilon(\mathbf{x}_\mathrm{obs})^2\big]}{(1-q)^2}.
 \end{equation}
-Furthermore, the upper bound is dictated by the contractivity:
-\begin{equation}
-    \mathbb{E}_{(\mathbf{x}_\mathrm{obs}, \theta)} \left[ \|\theta^*(\mathbf{x}_\mathrm{obs}) - \theta\|_2^2 \right] \le \frac{\mathbb{E}_{\mathbf{x}_\mathrm{obs}} \left[ \operatorname{Var}(\theta \mid \mathbf{x}_\mathrm{obs}) \right]}{(1 - \mathrm{Lip}_\mathcal{T})^2}.
-\end{equation}
+The lower bound is attained iff $\theta^*=m$ (Theorem~\ref{thm:expected_residual}); it is strictly positive whenever $\operatorname{Var}(\theta\mid\mathbf{x}_\mathrm{obs})>0$.
 \end{corollary}
 
-Corollary~\ref{cor:lower_bound} mathematically proves that even if the operator perfectly and stably converges ($\mathrm{Lip}_\mathcal{T} < 1$), the fixed point cannot align with the true parameter if $\operatorname{Var}(\theta \mid \mathbf{x}_\mathrm{obs}) > 0$.
-Instead, the model structurally collapses to the conditional mean.
-This rigorously explains why deterministic iterative solvers applied to non-identifiable inverse problems inevitably suffer from the regression-to-the-mean phenomenon and joint-distribution collapse, highlighting the fundamental limitation of MSE supervision in such regimes.
+Corollary~\ref{cor:lower_bound} shows that even under perfect, stable convergence ($\mathrm{Lip}_\mathcal{T}<1$), the fixed point cannot align with the sample-specific truth whenever $\operatorname{Var}(\theta \mid \mathbf{x}_\mathrm{obs}) > 0$: its risk is floored at the Bayes level, and the risk-optimal contraction attains that floor exactly by collapsing to the conditional mean. This is the regression-to-the-mean and joint-distribution collapse of deterministic squared-loss estimators under non-identifiability.
 
-\subsection{The Conditional Mean Lies Off the Physical Solution Manifold}
+\subsection{The Conditional Mean Lies Off the Solution Fiber}
 \label{subsec:off_fiber}
 
-Corollary~\ref{cor:lower_bound} shows that the estimate collapses to the conditional mean $\mathbb{E}[\theta \mid \mathbf{x}_\mathrm{obs}]$. We now sharpen this into a geometric statement: under a multiplicative non-identifiability, the conditional mean is not merely inaccurate --- it is not even a physically admissible solution, because it lies strictly \emph{off} the manifold of parameters consistent with the observation.
+Corollary~\ref{cor:lower_bound}, together with the variational route of Theorem~\ref{thm:variational}, identifies the conditional mean $m(\mathbf{x}_\mathrm{obs})$ as the relevant target. We now sharpen this into a geometric statement: under a curved non-identifiability, the conditional mean is not merely inaccurate --- it is not itself a parameter consistent with the observation, because it lies strictly \emph{off} the solution fiber. We are explicit about the conditions this requires.
 
-For a given observation, write $c=c(\mathbf{x}_\mathrm{obs})$ for the value of the identifiable statistic and let the \emph{fiber} be the set of parameters consistent with it,
+\begin{assumption}[Fiber model]
+\label{ass:fiber}
+For a given observation, write $c=c(\mathbf{x}_\mathrm{obs})$ for the value of the identifiable statistic and let the \emph{solution fiber} be the set of parameters consistent with the observation,
 \[
-\mathcal{F}_c = \{\theta \in \Theta : \theta \text{ reproduces } \mathbf{x}_\mathrm{obs}\},
+\mathcal{F}_c = \{\theta \in \Theta : \theta \text{ reproduces } \mathbf{x}_\mathrm{obs}\}.
 \]
-i.e., the support of the conditional law $p(\theta \mid \mathbf{x}_\mathrm{obs})$. The following statement is geometric and does not depend on the specific form of the degeneracy; it says that whenever the fiber is genuinely curved, its conditional mean leaves it.
+We assume (i) the data are noiseless and generated by the model, and any nuisance initial conditions are marginalized under the prior $\pi$, so that the support of the conditional law $p(\theta \mid \mathbf{x}_\mathrm{obs})$ is $\mathcal{F}_c\cap\operatorname{supp}(\pi)$ (a subset of the physical fiber, and equal to it when $\pi$ has full support); and (ii) the conditional law is not a Dirac measure --- equivalently, its support contains at least two points; for a continuous prior this means it assigns positive probability to two disjoint relative neighborhoods on the fiber.
+\end{assumption}
+
+Under Assumption~\ref{ass:fiber}, the following statement is geometric and does not depend on the specific form of the degeneracy: whenever the fiber is genuinely curved \emph{in the coordinate carrying the squared loss}, the conditional mean of that coordinate leaves it. Curvature is coordinate-dependent, and this dependence is the crux of the OGTT discussion below.
 
 \begin{proposition}[Conditional mean off a curved fiber]
 \label{prop:off_fiber}
-Assume the fiber $\mathcal{F}_c\subset\mathbb{R}^p$ is compact and in \emph{strictly convex position}: every point of $\mathcal{F}_c$ is an extreme point of its convex hull $\operatorname{conv}(\mathcal{F}_c)$ (equivalently, no point of $\mathcal{F}_c$ is a nontrivial convex combination of other points of $\mathcal{F}_c$). If the conditional law $p(\theta\mid\mathbf{x}_\mathrm{obs})$, which is supported on $\mathcal{F}_c$, is non-degenerate (not a single point mass), then
+Suppose Assumption~\ref{ass:fiber} holds and the fiber $\mathcal{F}_c\subset\mathbb{R}^p$ is compact and in \emph{strictly convex position}: every point of $\mathcal{F}_c$ is an extreme point of its convex hull $\operatorname{conv}(\mathcal{F}_c)$. Then
 \[
-\mathbb{E}[\theta\mid\mathbf{x}_\mathrm{obs}]\notin\mathcal{F}_c .
+m(\mathbf{x}_\mathrm{obs})=\mathbb{E}[\theta\mid\mathbf{x}_\mathrm{obs}]\notin\mathcal{F}_c .
 \]
-The MSE-optimal estimate (Proposition~\ref{prop:optimal_predictor}) is therefore not itself a parameter consistent with the observation.
+Hence an estimator attaining the population squared-loss Bayes rule (Proposition~\ref{prop:optimal_predictor}) returns the conditional mean, which is observation-inconsistent: it lies off the solution fiber.
 \end{proposition}
 
 \begin{proof}
-Let $m=\mathbb{E}[\theta\mid\mathbf{x}_\mathrm{obs}]$ be the barycenter of the conditional law. Since that law is supported on $\mathcal{F}_c\subseteq\operatorname{conv}(\mathcal{F}_c)$, we have $m\in\operatorname{conv}(\mathcal{F}_c)$. By the strictly-convex-position hypothesis, $\mathcal{F}_c$ is exactly the set of extreme points of the compact convex body $\operatorname{conv}(\mathcal{F}_c)$. By Bauer's characterization, the barycenter of a probability measure equals an extreme point $e$ if and only if the measure is the Dirac mass $\delta_e$. As the conditional law is non-degenerate, $m$ is not an extreme point of $\operatorname{conv}(\mathcal{F}_c)$; hence $m\notin\mathcal{F}_c$.
+Let $m=m(\mathbf{x}_\mathrm{obs})$ be the barycenter of the conditional law. Since that law is supported on $\mathcal{F}_c\subseteq\operatorname{conv}(\mathcal{F}_c)$, we have $m\in\operatorname{conv}(\mathcal{F}_c)$. By strictly-convex position, $\mathcal{F}_c$ is the set of extreme points of the compact convex body $\operatorname{conv}(\mathcal{F}_c)$. By Bauer's characterization of extreme points via representing measures~\cite{phelps2001choquet}, the barycenter of a probability measure supported on such a body is an extreme point $e$ if and only if the measure is the Dirac mass $\delta_e$. As the conditional law is non-degenerate (Assumption~\ref{ass:fiber}(ii)), $m$ is not an extreme point; hence $m\notin\mathcal{F}_c$.
 \end{proof}
 
-The 1-D product degeneracy of the OGTT model is the canonical instance, and there the displacement is fully explicit.
+The 1-D product degeneracy is the canonical instance of a curved physical fiber, and there the displacement under a \emph{physical-coordinate} squared loss is fully explicit.
 
-\begin{corollary}[Product degeneracy and its quantitative bias]
+\begin{corollary}[Product degeneracy under physical-coordinate MSE]
 \label{cor:off_fiber_product}
-Suppose the observation identifies only the product $c=\theta_1\theta_2$ on the physical domain $\theta_1,\theta_2>0$ (the OGTT glucose-only model, where only $mDI=S_I\sigma$ is identifiable, is exactly of this form; see Section~\ref{sec:identifiability}), so that on a bounded parameter box the fiber is the hyperbolic arc $\mathcal{F}_c=\{(\theta_1,c/\theta_1)\}$. Then $\mathcal{F}_c$ is in strictly convex position, so Proposition~\ref{prop:off_fiber} applies; moreover the bias is quantified by
+Suppose the observation identifies only the product $c=\theta_1\theta_2$ on the physical domain $\theta_1,\theta_2>0$ (the constant-HGP glucose-only OGTT idealization is exactly of this form, and the sparse full-HGP regime approximately so; see Section~\ref{sec:identifiability}), so that on a bounded parameter box the fiber is the hyperbolic arc $\mathcal{F}_c=\{(\theta_1,c/\theta_1)\}$. Under squared loss \emph{in the physical coordinate} $(\theta_1,\theta_2)$, $\mathcal{F}_c$ is in strictly convex position, so Proposition~\ref{prop:off_fiber} applies, and the bias is quantified by
 \[
 \mathbb{E}[\theta_1\mid c]\,\mathbb{E}[\theta_2\mid c]
 = c\,\mathbb{E}[\theta_1\mid c]\,\mathbb{E}[\theta_1^{-1}\mid c]
 \;\ge\; c,
 \]
-with strict inequality unless $\theta_1$ is almost surely constant given $c$. The estimated product thus exceeds the true identifiable value $c$: the conditional mean lies strictly on the convex side of the fiber.
+with strict inequality unless $\theta_1$ is almost surely constant given $c$. The product of conditional means thus exceeds the true identifiable value $c$: the conditional mean lies strictly on the convex side of the fiber.
 \end{corollary}
 
 \begin{proof}
 The map $\theta_1\mapsto c/\theta_1$ is strictly convex on $(0,\infty)$, so the hyperbolic arc lies strictly on one side of each of its chords; every point is therefore extreme in $\operatorname{conv}(\mathcal{F}_c)$, giving strictly convex position. For the bound, $\theta_2=c/\theta_1$ on $\mathcal{F}_c$ gives $\mathbb{E}[\theta_2\mid c]=c\,\mathbb{E}[\theta_1^{-1}\mid c]$, and Jensen's inequality for the strictly convex $x\mapsto x^{-1}$ yields $\mathbb{E}[\theta_1^{-1}\mid c]\ge(\mathbb{E}[\theta_1\mid c])^{-1}$, with equality iff $\theta_1$ is a.s.\ constant. Multiplying by $\mathbb{E}[\theta_1\mid c]>0$ gives the claim.
 \end{proof}
 
-Proposition~\ref{prop:off_fiber} shows the failure is \emph{structural and statistical}, not an artifact of the solver: any estimator driven to the conditional mean by a squared-loss objective (Proposition~\ref{prop:optimal_predictor}) is pushed off the physical solution manifold whenever the fiber is curved and the fiber-conditional law is non-degenerate. Corollary~\ref{cor:off_fiber_product} additionally gives a directly checkable signature in the product case --- the recovered product $\widehat\theta_1\widehat\theta_2$ is biased away from the true identifiable statistic $c$ --- which we examine empirically in Section~\ref{sec:experiments}.
+\begin{remark}[The off-fiber displacement is a property of the loss coordinate]
+\label{rem:coordinate}
+Corollary~\ref{cor:off_fiber_product} is stated for squared loss in the physical coordinate $(\theta_1,\theta_2)$. The displacement is \emph{not} intrinsic to the product degeneracy: it is a property of that coordinate. Under the logarithmic reparameterization $u=(\log\theta_1,\log\theta_2)$ the same fiber becomes the \emph{affine} line $u_1+u_2=\log c$, which is not curved, so its (log-coordinate) conditional mean stays on it,
+\[
+\mathbb{E}[\log\theta_1\mid c]+\mathbb{E}[\log\theta_2\mid c]=\log c
+\quad\Longrightarrow\quad
+e^{\mathbb{E}[\log\theta_1\mid c]}\,e^{\mathbb{E}[\log\theta_2\mid c]}=c,
+\]
+i.e.\ the back-transformed conditional geometric mean reproduces the product exactly. Whether the Bayes-optimal point leaves the fiber thus depends on the loss coordinate: physical-coordinate MSE incurs the arithmetic-mean Jensen bias above, whereas log-coordinate MSE --- the coordinate our OGTT pipeline actually uses (Appendix~\ref{app:repro-norm}) --- does not. Corollary~\ref{cor:off_fiber_product} should therefore be read as an exact theoretical example of physical-coordinate MSE, \emph{not} as a description of the log-coordinate OGTT experiments; we make this distinction operational in Section~\ref{subsec:exp-ogtt}.
+\end{remark}
+
+The scope of Proposition~\ref{prop:off_fiber} is therefore precise: it does not assert that \emph{every} squared-loss estimator lies off the fiber, but that an estimator attaining the population squared-loss Bayes rule in a coordinate where the fiber is curved returns a conditional mean off that fiber (Assumption~\ref{ass:fiber}). For our fixed-point operator this bites only to the extent that (a) its fixed point is close to the relevant conditional mean --- a link supported theoretically by the variational Theorem~\ref{thm:variational} and, for the trained operator, empirically in Section~\ref{sec:experiments} --- and (b) the loss coordinate makes the fiber curved. Because the OGTT pipeline trains in log coordinates, its product fiber is affine and the off-fiber arithmetic-mean bias of Corollary~\ref{cor:off_fiber_product} does not apply to it; the residual product error we observe there is attributed to operator approximation, not to an off-fiber conditional mean (Section~\ref{subsec:exp-ogtt}).
 
 \begin{remark}[Two sources of the fixed-point error]
 \label{rem:decomposition}
-The one-step residual $\varepsilon(\mathbf{x}_\mathrm{obs})$ governing the bound in Lemma~\ref{lem:error_bound} conflates two distinct contributions:
-(i) a \emph{structural} part, whose expected square equals the conditional variance $\mathbb{E}[\operatorname{Var}(\theta\mid\mathbf{x}_\mathrm{obs})]$ (Theorem~\ref{thm:expected_residual}) and is irreducible under non-identifiability; and
-(ii) an \emph{operator-approximation} part that persists even when the observation is fully identifying ($\operatorname{Var}(\theta\mid\mathbf{x}_\mathrm{obs})=0$), reflecting the finite capacity and teacher-forced training of the learned composition $P_\psi\!\circ\! H_\phi$.
-The two are separable experimentally: a structurally identifiable system exposes (ii) in isolation, whereas a non-identifiable system is dominated by (i). Our experiments in Section~\ref{sec:experiments} instantiate both regimes.
+The one-step residual $\varepsilon(\mathbf{x}_\mathrm{obs})$ governing Lemma~\ref{lem:error_bound} conflates two contributions:
+(i) a \emph{structural} part, bounded below by $(1-q)^2 V(\mathbf{x}_\mathrm{obs})$ (Theorem~\ref{thm:incompat}); for the risk-optimal affine contraction its expected square is exactly $(1-q)^2 V(\mathbf{x}_\mathrm{obs})$ (equal to $V$ only in the $q\to0$ constant-map limit; Theorem~\ref{thm:expected_residual}), irreducible under non-identifiability; and
+(ii) an \emph{operator-approximation} part that persists even when the observation is fully identifying ($V(\mathbf{x}_\mathrm{obs})=0$), reflecting the finite capacity and decoupled teacher-forced training of the learned composition $P_\psi\!\circ\! H_\phi$.
+The two can be contrasted diagnostically: an identifiable, well-conditioned system (SIR) exposes (ii) with the structural term small, whereas a non-identifiable system is dominated by (i). Section~\ref{sec:experiments} instantiates both regimes.
 \end{remark}
