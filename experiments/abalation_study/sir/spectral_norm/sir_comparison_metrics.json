@@ -1,0 +1,38 @@
+{
+    "beta": {
+        "Baseline": {
+            "RMSE": NaN,
+            "MAE": NaN,
+            "Pearson_r": NaN
+        },
+        "Ours": {
+            "RMSE": 0.15140977501869202,
+            "MAE": 0.0954759493470192,
+            "Pearson_r": 0.7700225710868835
+        }
+    },
+    "gamma": {
+        "Baseline": {
+            "RMSE": NaN,
+            "MAE": NaN,
+            "Pearson_r": NaN
+        },
+        "Ours": {
+            "RMSE": 0.06846195459365845,
+            "MAE": 0.05104447156190872,
+            "Pearson_r": 0.8917598724365234
+        }
+    },
+    "R0": {
+        "Baseline": {
+            "RMSE": NaN,
+            "MAE": NaN,
+            "Pearson_r": NaN
+        },
+        "Ours": {
+            "RMSE": 4.821519374847412,
+            "MAE": 2.140549898147583,
+            "Pearson_r": 0.7978363037109375
+        }
+    }
+}

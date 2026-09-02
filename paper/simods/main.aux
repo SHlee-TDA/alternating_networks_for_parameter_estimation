@@ -1,0 +1,335 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyperFirstAtBeginDocument{\AtBeginDocument}
+\HyperFirstAtBeginDocument{\ifx\hyper@anchor\@undefined
+\global\let\oldcontentsline\contentsline
+\gdef\contentsline#1#2#3#4{\oldcontentsline{#1}{#2}{#3}}
+\global\let\oldnewlabel\newlabel
+\gdef\newlabel#1#2{\newlabelxx{#1}#2}
+\gdef\newlabelxx#1#2#3#4#5#6{\oldnewlabel{#1}{{#2}{#3}}}
+\AtEndDocument{\ifx\hyper@anchor\@undefined
+\let\contentsline\oldcontentsline
+\let\newlabel\oldnewlabel
+\fi}
+\fi}
+\global\let\hyper@last\relax 
+\gdef\HyperFirstAtBeginDocument#1{#1}
+\providecommand*\HyPL@Entry[1]{}
+\citation{tarantola2005inverse}
+\HyPL@Entry{0<</S/D>>}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{section.1}\protected@file@percent }
+\citation{bai2019deep}
+\citation{villaverde2016structural}
+\citation{cranmer2020frontier}
+\citation{papamakarios2016fast}
+\newlabel{sec:problem}{{2}{3}{Problem Formulation}{section.2}{}}
+\newlabel{sec:problem@cref}{{[section][2][]2}{[1][3][]3}}
+\@writefile{toc}{\contentsline {section}{\numberline {2}Problem Formulation}{3}{section.2}\protected@file@percent }
+\citation{tarantola2005inverse}
+\newlabel{eq:ode}{{2.1}{4}{Problem Formulation}{equation.3}{}}
+\newlabel{eq:ode@cref}{{[equation][1][2]2.1}{[1][3][]4}}
+\newlabel{subsec:obsmodel}{{2.1}{4}{Partial and Sparse Observation Setting}{subsection.4}{}}
+\newlabel{subsec:obsmodel@cref}{{[subsection][1][2]2.1}{[1][4][]4}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}Partial and Sparse Observation Setting}{4}{subsection.4}\protected@file@percent }
+\newlabel{eq:h-projection}{{2.2}{4}{Partial and Sparse Observation Setting}{equation.5}{}}
+\newlabel{eq:h-projection@cref}{{[equation][2][2]2.2}{[1][4][]4}}
+\newlabel{eq:sampling-times}{{2.3}{4}{Partial and Sparse Observation Setting}{equation.6}{}}
+\newlabel{eq:sampling-times@cref}{{[equation][3][2]2.3}{[1][4][]4}}
+\citation{takens1981detecting}
+\citation{hermann1977nonlinear}
+\@writefile{thm}{\contentsline {remark}{{Remark}{2.1}{Why sparsity is essential}}{5}{theorem.9}\protected@file@percent }
+\newlabel{sec:method}{{3}{5}{Method: Iteration of Two Networks for Parameter Estimation}{section.10}{}}
+\newlabel{sec:method@cref}{{[section][3][]3}{[1][5][]5}}
+\@writefile{toc}{\contentsline {section}{\numberline {3}Method: Iteration of Two Networks for Parameter Estimation}{5}{section.10}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Illustration of the forward mapping and the inherent circular dependency in the inverse problem. The forward process generates the full state via an ODE integrator, followed by a non-injective projection $h$ that yields the partial observation $\mathbf  {x}_{\text  {obs}}$. A direct estimator (red dashed arrow) maps the observation to the parameter without forming the hidden state. Inverting this process step-by-step requires resolving a circular dependency: estimating the parameter $\theta $ requires the hidden state $\mathbf  {x}_{\text  {hid}}$ (left green arrow), while recovering $\mathbf  {x}_{\text  {hid}}$ necessitates prior knowledge of $\theta $ (right green arrow).\relax }}{6}{figure.caption.11}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:motive}{{1}{6}{Illustration of the forward mapping and the inherent circular dependency in the inverse problem. The forward process generates the full state via an ODE integrator, followed by a non-injective projection $h$ that yields the partial observation $\mathbf {x}_{\text {obs}}$. A direct estimator (red dashed arrow) maps the observation to the parameter without forming the hidden state. Inverting this process step-by-step requires resolving a circular dependency: estimating the parameter $\theta $ requires the hidden state $\mathbf {x}_{\text {hid}}$ (left green arrow), while recovering $\mathbf {x}_{\text {hid}}$ necessitates prior knowledge of $\theta $ (right green arrow).\relax }{figure.caption.11}{}}
+\newlabel{fig:motive@cref}{{[figure][1][]1}{[1][5][]6}}
+\newlabel{subsec:data_gen}{{3.1}{6}{Data Representation}{subsection.13}{}}
+\newlabel{subsec:data_gen@cref}{{[subsection][1][3]3.1}{[1][6][]6}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Data Representation}{6}{subsection.13}\protected@file@percent }
+\newlabel{eq:training-samples}{{3.2}{6}{Data Representation}{equation.14}{}}
+\newlabel{eq:training-samples@cref}{{[equation][2][3]3.2}{[1][6][]6}}
+\citation{williams1989learning}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Fixed-Point Iteration Operator}{7}{subsection.15}\protected@file@percent }
+\newlabel{eq:H-map}{{3.3}{7}{Fixed-Point Iteration Operator}{equation.16}{}}
+\newlabel{eq:H-map@cref}{{[equation][3][3]3.3}{[1][7][]7}}
+\newlabel{eq:P-map}{{3.4}{7}{Fixed-Point Iteration Operator}{equation.17}{}}
+\newlabel{eq:P-map@cref}{{[equation][4][3]3.4}{[1][7][]7}}
+\newlabel{eqn:iter_oper}{{3.5}{7}{Fixed-Point Iteration Operator}{equation.18}{}}
+\newlabel{eqn:iter_oper@cref}{{[equation][5][3]3.5}{[1][7][]7}}
+\newlabel{subsec:training}{{3.3}{7}{Decoupled Supervised Training}{subsection.22}{}}
+\newlabel{subsec:training@cref}{{[subsection][3][3]3.3}{[1][7][]7}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Decoupled Supervised Training}{7}{subsection.22}\protected@file@percent }
+\newlabel{fig:method_train}{{2a}{8}{Subfigure 2a}{subfigure.20}{}}
+\newlabel{fig:method_train@cref}{{[subfigure][1][2]2a}{[1][7][]8}}
+\newlabel{sub@fig:method_train}{{(a)}{a}{Subfigure 2a\relax }{subfigure.20}{}}
+\newlabel{fig:method_infer}{{2b}{8}{Subfigure 2b}{subfigure.21}{}}
+\newlabel{fig:method_infer@cref}{{[subfigure][2][2]2b}{[1][7][]8}}
+\newlabel{sub@fig:method_infer}{{(b)}{b}{Subfigure 2b\relax }{subfigure.21}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Overview of the proposed fixed-point iteration networks. The training and inference pipelines are connected but structurally distinct. \textbf  {(a)} During training, the hidden-state estimator $H_\phi $ and the parameter estimator $P_\psi $ are decoupled. Ground-truth values are provided to optimize $\mathcal  {L}_H$ and $\mathcal  {L}_P$ independently. \textbf  {(b)} At inference, given sparse observations $\mathbf  {x}_\mathrm  {obs}$, the networks are coupled to define a fixed-point update operator $\mathcal  {T}(\cdot ; \mathbf  {x}_\mathrm  {obs})$.\relax }}{8}{figure.caption.19}\protected@file@percent }
+\newlabel{fig:method_overview}{{2}{8}{Overview of the proposed fixed-point iteration networks. The training and inference pipelines are connected but structurally distinct. \textbf {(a)} During training, the hidden-state estimator $H_\phi $ and the parameter estimator $P_\psi $ are decoupled. Ground-truth values are provided to optimize $\mathcal {L}_H$ and $\mathcal {L}_P$ independently. \textbf {(b)} At inference, given sparse observations $\mathbf {x}_\mathrm {obs}$, the networks are coupled to define a fixed-point update operator $\mathcal {T}(\cdot ; \mathbf {x}_\mathrm {obs})$.\relax }{figure.caption.19}{}}
+\newlabel{fig:method_overview@cref}{{[figure][2][]2}{[1][7][]8}}
+\@writefile{lof}{\contentsline {subfigure}{\numberline{(a)}{\ignorespaces {Supervised training via teacher forcing}}}{8}{subfigure.2.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {subfigure}{\numberline{(b)}{\ignorespaces {Inference via alternating iteration}}}{8}{subfigure.2.2}\protected@file@percent }
+\newlabel{eq:loss_h}{{3.6}{8}{Decoupled Supervised Training}{equation.23}{}}
+\newlabel{eq:loss_h@cref}{{[equation][6][3]3.6}{[1][7][]8}}
+\newlabel{eq:loss_p}{{3.7}{8}{Decoupled Supervised Training}{equation.24}{}}
+\newlabel{eq:loss_p@cref}{{[equation][7][3]3.7}{[1][7][]8}}
+\@writefile{loa}{\contentsline {algorithm}{\numberline {3.1}{\ignorespaces Fixed-step iterative inference for parameter estimation\relax }}{9}{algorithm.27}\protected@file@percent }
+\newlabel{alg:inference}{{3.1}{9}{Fixed-step iterative inference for parameter estimation\relax }{algorithm.27}{}}
+\newlabel{alg:inference@cref}{{[algorithm][1][3]3.1}{[1][9][]9}}
+\newlabel{subsec:inference}{{3.4}{9}{Coupled Inference via Fixed-Point Iteration}{subsection.26}{}}
+\newlabel{subsec:inference@cref}{{[subsection][4][3]3.4}{[1][8][]9}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Coupled Inference via Fixed-Point Iteration}{9}{subsection.26}\protected@file@percent }
+\newlabel{sec:convergence}{{4}{9}{Theory 1: Convergence}{section.34}{}}
+\newlabel{sec:convergence@cref}{{[section][4][]4}{[1][9][]9}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Theory 1: Convergence}{9}{section.34}\protected@file@percent }
+\newlabel{subsec:banach}{{4.1}{9}{Preliminaries: contraction mappings and Banach's theorem}{subsection.35}{}}
+\newlabel{subsec:banach@cref}{{[subsection][1][4]4.1}{[1][9][]9}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Preliminaries: contraction mappings and Banach's theorem}{9}{subsection.35}\protected@file@percent }
+\newlabel{eq:contraction-def}{{4.1}{9}{Preliminaries: contraction mappings and Banach's theorem}{equation.37}{}}
+\newlabel{eq:contraction-def@cref}{{[equation][1][4]4.1}{[1][9][]9}}
+\citation{miyato2018spectralnormalizationgenerativeadversarial}
+\newlabel{eq:geom-rate}{{4.2}{10}{Preliminaries: contraction mappings and Banach's theorem}{equation.38}{}}
+\newlabel{eq:geom-rate@cref}{{[equation][2][4]4.2}{[1][9][]10}}
+\newlabel{subsec:contractivity}{{4.2}{10}{A Sufficient Condition for Contractivity of $\mathcal {T}$}{subsection.39}{}}
+\newlabel{subsec:contractivity@cref}{{[subsection][2][4]4.2}{[1][10][]10}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}A Sufficient Condition for Contractivity of $\mathcal  {T}$}{10}{subsection.39}\protected@file@percent }
+\newlabel{eq:T-repeat}{{4.3}{10}{A Sufficient Condition for Contractivity of $\mathcal {T}$}{equation.40}{}}
+\newlabel{eq:T-repeat@cref}{{[equation][3][4]4.3}{[1][10][]10}}
+\@writefile{thm}{\contentsline {assumption}{{Assumption}{4.1}{Lipschitz continuity of the learned maps}}{10}{theorem.41}\protected@file@percent }
+\newlabel{ass:lipschitz}{{4.1}{10}{A Sufficient Condition for Contractivity of $\mathcal {T}$}{theorem.41}{}}
+\newlabel{ass:lipschitz@cref}{{[assumption][1][4]4.1}{[1][10][]10}}
+\@writefile{thm}{\contentsline {theorem}{{Theorem}{4.2}{Contractivity of the Iterative Operator}}{10}{theorem.42}\protected@file@percent }
+\newlabel{thm:contraction}{{4.2}{10}{A Sufficient Condition for Contractivity of $\mathcal {T}$}{theorem.42}{}}
+\newlabel{thm:contraction@cref}{{[theorem][2][4]4.2}{[1][10][]10}}
+\@writefile{thm}{\contentsline {proof}{{Proof}{1}{}}{10}{proof.43}\protected@file@percent }
+\newlabel{subsec:sn}{{4.3}{11}{Enforcing Lipschitz bounds via spectral normalization}{subsection.44}{}}
+\newlabel{subsec:sn@cref}{{[subsection][3][4]4.3}{[1][10][]11}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Enforcing Lipschitz bounds via spectral normalization}{11}{subsection.44}\protected@file@percent }
+\newlabel{subsec:Ksteps}{{4.4}{11}{Implications for the number of inference steps}{subsection.45}{}}
+\newlabel{subsec:Ksteps@cref}{{[subsection][4][4]4.4}{[1][11][]11}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}Implications for the number of inference steps}{11}{subsection.45}\protected@file@percent }
+\newlabel{sec:correctness}{{5}{11}{Theory 2: Correctness and Statistical Limitations}{section.46}{}}
+\newlabel{sec:correctness@cref}{{[section][5][]5}{[1][11][]11}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Theory 2: Correctness and Statistical Limitations}{11}{section.46}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Loss coordinate.}{12}{section*.47}\protected@file@percent }
+\newlabel{eq:bayes-decomp}{{5.1}{12}{Loss coordinate}{equation.48}{}}
+\newlabel{eq:bayes-decomp@cref}{{[equation][1][5]5.1}{[1][12][]12}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}The One-Step Residual and the Fixed-Point Error}{12}{subsection.49}\protected@file@percent }
+\@writefile{thm}{\contentsline {definition}{{Definition}{5.1}{One-Step Residual}}{12}{theorem.50}\protected@file@percent }
+\newlabel{def:one_step_residual}{{5.1}{12}{The One-Step Residual and the Fixed-Point Error}{theorem.50}{}}
+\newlabel{def:one_step_residual@cref}{{[definition][1][5]5.1}{[1][12][]12}}
+\@writefile{thm}{\contentsline {lemma}{{Lemma}{5.2}{Fixed-Point Error Bound}}{12}{theorem.52}\protected@file@percent }
+\newlabel{lem:error_bound}{{5.2}{12}{The One-Step Residual and the Fixed-Point Error}{theorem.52}{}}
+\newlabel{lem:error_bound@cref}{{[lemma][2][5]5.2}{[1][12][]12}}
+\@writefile{thm}{\contentsline {proof}{{Proof}{2}{}}{12}{proof.54}\protected@file@percent }
+\newlabel{subsec:incompat}{{5.2}{13}{Contraction and Ambiguity Are Incompatible}{subsection.55}{}}
+\newlabel{subsec:incompat@cref}{{[subsection][2][5]5.2}{[1][13][]13}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Contraction and Ambiguity Are Incompatible}{13}{subsection.55}\protected@file@percent }
+\@writefile{thm}{\contentsline {theorem}{{Theorem}{5.3}{Contraction--ambiguity incompatibility}}{13}{theorem.56}\protected@file@percent }
+\newlabel{thm:incompat}{{5.3}{13}{Contraction and Ambiguity Are Incompatible}{theorem.56}{}}
+\newlabel{thm:incompat@cref}{{[theorem][3][5]5.3}{[1][13][]13}}
+\newlabel{eq:incompat-residual}{{5.4}{13}{Contraction and Ambiguity Are Incompatible}{equation.57}{}}
+\newlabel{eq:incompat-residual@cref}{{[equation][4][5]5.4}{[1][13][]13}}
+\newlabel{eq:incompat-var}{{5.5}{13}{Contraction and Ambiguity Are Incompatible}{equation.58}{}}
+\newlabel{eq:incompat-var@cref}{{[equation][5][5]5.5}{[1][13][]13}}
+\newlabel{eq:incompat-pair}{{5.6}{13}{Contraction and Ambiguity Are Incompatible}{equation.59}{}}
+\newlabel{eq:incompat-pair@cref}{{[equation][6][5]5.6}{[1][13][]13}}
+\@writefile{thm}{\contentsline {proof}{{Proof}{3}{}}{13}{proof.60}\protected@file@percent }
+\newlabel{subsec:ceiling}{{5.3}{14}{The Conditional-Mean Ceiling: Reconstructing the Hidden State Adds No Information}{subsection.61}{}}
+\newlabel{subsec:ceiling@cref}{{[subsection][3][5]5.3}{[1][14][]14}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}The Conditional-Mean Ceiling: Reconstructing the Hidden State Adds No Information}{14}{subsection.61}\protected@file@percent }
+\@writefile{thm}{\contentsline {proposition}{{Proposition}{5.4}{Conditional-mean ceiling}}{14}{theorem.62}\protected@file@percent }
+\newlabel{prop:ceiling}{{5.4}{14}{The Conditional-Mean Ceiling: Reconstructing the Hidden State Adds No Information}{theorem.62}{}}
+\newlabel{prop:ceiling@cref}{{[proposition][4][5]5.4}{[1][14][]14}}
+\@writefile{thm}{\contentsline {proof}{{Proof}{4}{}}{14}{proof.63}\protected@file@percent }
+\newlabel{subsec:collapse}{{5.4}{14}{Which Contraction? A Variational Route to the Conditional-Mean Fixed Point}{subsection.64}{}}
+\newlabel{subsec:collapse@cref}{{[subsection][4][5]5.4}{[1][14][]14}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Which Contraction? A Variational Route to the Conditional-Mean Fixed Point}{14}{subsection.64}\protected@file@percent }
+\@writefile{thm}{\contentsline {proposition}{{Proposition}{5.5}{Optimal predictor under squared loss}}{15}{theorem.65}\protected@file@percent }
+\newlabel{prop:optimal_predictor}{{5.5}{15}{Which Contraction? A Variational Route to the Conditional-Mean Fixed Point}{theorem.65}{}}
+\newlabel{prop:optimal_predictor@cref}{{[proposition][5][5]5.5}{[1][15][]15}}
+\newlabel{eq:cond-onestep-risk}{{5.7}{15}{Which Contraction? A Variational Route to the Conditional-Mean Fixed Point}{equation.66}{}}
+\newlabel{eq:cond-onestep-risk@cref}{{[equation][7][5]5.7}{[1][15][]15}}
+\@writefile{thm}{\contentsline {theorem}{{Theorem}{5.6}{Risk-optimal contraction and its fixed point}}{15}{theorem.67}\protected@file@percent }
+\newlabel{thm:variational}{{5.6}{15}{Which Contraction? A Variational Route to the Conditional-Mean Fixed Point}{theorem.67}{}}
+\newlabel{thm:variational@cref}{{[theorem][6][5]5.6}{[1][15][]15}}
+\@writefile{thm}{\contentsline {proof}{{Proof}{5}{}}{15}{proof.68}\protected@file@percent }
+\@writefile{thm}{\contentsline {remark}{{Remark}{5.7}{What is and is not optimized in training}}{15}{theorem.69}\protected@file@percent }
+\newlabel{rem:objective-gap}{{5.7}{15}{Which Contraction? A Variational Route to the Conditional-Mean Fixed Point}{theorem.69}{}}
+\newlabel{rem:objective-gap@cref}{{[remark][7][5]5.7}{[1][15][]15}}
+\newlabel{eq:consistency-loss}{{5.8}{15}{Which Contraction? A Variational Route to the Conditional-Mean Fixed Point}{equation.70}{}}
+\newlabel{eq:consistency-loss@cref}{{[equation][8][5]5.8}{[1][15][]15}}
+\@writefile{thm}{\contentsline {theorem}{{Theorem}{5.8}{Conditional-mean operator: residual and error are exact}}{16}{theorem.71}\protected@file@percent }
+\newlabel{thm:expected_residual}{{5.8}{16}{Which Contraction? A Variational Route to the Conditional-Mean Fixed Point}{theorem.71}{}}
+\newlabel{thm:expected_residual@cref}{{[theorem][8][5]5.8}{[1][15][]16}}
+\@writefile{thm}{\contentsline {proof}{{Proof}{6}{}}{16}{proof.73}\protected@file@percent }
+\@writefile{thm}{\contentsline {corollary}{{Corollary}{5.9}{Regression-to-the-mean sandwich}}{16}{theorem.74}\protected@file@percent }
+\newlabel{cor:lower_bound}{{5.9}{16}{Which Contraction? A Variational Route to the Conditional-Mean Fixed Point}{theorem.74}{}}
+\newlabel{cor:lower_bound@cref}{{[corollary][9][5]5.9}{[1][16][]16}}
+\newlabel{subsec:off_fiber}{{5.5}{16}{The Conditional Mean Lies Off the Solution Fiber}{subsection.76}{}}
+\newlabel{subsec:off_fiber@cref}{{[subsection][5][5]5.5}{[1][16][]16}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.5}The Conditional Mean Lies Off the Solution Fiber}{16}{subsection.76}\protected@file@percent }
+\@writefile{thm}{\contentsline {assumption}{{Assumption}{5.10}{Fiber model}}{16}{theorem.77}\protected@file@percent }
+\newlabel{ass:fiber}{{5.10}{16}{The Conditional Mean Lies Off the Solution Fiber}{theorem.77}{}}
+\newlabel{ass:fiber@cref}{{[assumption][10][5]5.10}{[1][16][]16}}
+\citation{phelps2001choquet}
+\@writefile{thm}{\contentsline {proposition}{{Proposition}{5.11}{Conditional mean off a curved fiber}}{17}{theorem.78}\protected@file@percent }
+\newlabel{prop:off_fiber}{{5.11}{17}{The Conditional Mean Lies Off the Solution Fiber}{theorem.78}{}}
+\newlabel{prop:off_fiber@cref}{{[proposition][11][5]5.11}{[1][17][]17}}
+\@writefile{thm}{\contentsline {proof}{{Proof}{7}{}}{17}{proof.79}\protected@file@percent }
+\@writefile{thm}{\contentsline {corollary}{{Corollary}{5.12}{Product degeneracy under physical-coordinate MSE}}{17}{theorem.80}\protected@file@percent }
+\newlabel{cor:off_fiber_product}{{5.12}{17}{The Conditional Mean Lies Off the Solution Fiber}{theorem.80}{}}
+\newlabel{cor:off_fiber_product@cref}{{[corollary][12][5]5.12}{[1][17][]17}}
+\@writefile{thm}{\contentsline {proof}{{Proof}{8}{}}{17}{proof.81}\protected@file@percent }
+\@writefile{thm}{\contentsline {remark}{{Remark}{5.13}{The off-fiber displacement is a property of the loss coordinate}}{17}{theorem.82}\protected@file@percent }
+\newlabel{rem:coordinate}{{5.13}{17}{The Conditional Mean Lies Off the Solution Fiber}{theorem.82}{}}
+\newlabel{rem:coordinate@cref}{{[remark][13][5]5.13}{[1][17][]17}}
+\citation{hermann1977nonlinear}
+\@writefile{thm}{\contentsline {remark}{{Remark}{5.14}{Two sources of the fixed-point error}}{18}{theorem.83}\protected@file@percent }
+\newlabel{rem:decomposition}{{5.14}{18}{The Conditional Mean Lies Off the Solution Fiber}{theorem.83}{}}
+\newlabel{rem:decomposition@cref}{{[remark][14][5]5.14}{[1][18][]18}}
+\newlabel{sec:identifiability}{{6}{18}{Feasibility: Identifiability and Observability Analysis}{section.84}{}}
+\newlabel{sec:identifiability@cref}{{[section][6][]6}{[1][18][]18}}
+\@writefile{toc}{\contentsline {section}{\numberline {6}Feasibility: Identifiability and Observability Analysis}{18}{section.84}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.1}Nonlinear Observability Framework}{18}{subsection.85}\protected@file@percent }
+\citation{kermack1927contribution}
+\newlabel{eq:sampled-map}{{6.3}{19}{Nonlinear Observability Framework}{equation.88}{}}
+\newlabel{eq:sampled-map@cref}{{[equation][3][6]6.3}{[1][19][]19}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}SIR: Exact Observability via Lie Derivatives}{19}{subsection.89}\protected@file@percent }
+\citation{lotka1925elements}
+\citation{volterra1927fluctuations}
+\citation{ha2024iss}
+\citation{ha2025disposition}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3}Lotka-Volterra: Unidentifiability via Symbolic Arithmetic}{20}{subsection.92}\protected@file@percent }
+\newlabel{eq:lv-symmetry}{{6.7}{20}{Lotka-Volterra: Unidentifiability via Symbolic Arithmetic}{equation.94}{}}
+\newlabel{eq:lv-symmetry@cref}{{[equation][7][6]6.7}{[1][20][]20}}
+\newlabel{subsec:ident-ogtt}{{6.4}{20}{OGTT: Sampled-Sensitivity Rank and Conditioning}{subsection.96}{}}
+\newlabel{subsec:ident-ogtt@cref}{{[subsection][4][6]6.4}{[1][20][]20}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.4}OGTT: Sampled-Sensitivity Rank and Conditioning}{20}{subsection.96}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Structural unidentifiability in the Lotka-Volterra model. Scenario A ($x_0=1.0, y_0=0.5, \beta =0.4$) and Scenario B ($x_0=1.0, y_0=1.0, \beta =0.2$) produce identical observable trajectories for the prey $\mathbf  {x}_{obs}(t)$ (top), despite originating from completely different hidden predator states and parameters (bottom). This algebraic indistinguishability proves that the full system cannot be identified from partial observations alone.\relax }}{21}{figure.caption.95}\protected@file@percent }
+\newlabel{fig:lv_unidentifiable}{{3}{21}{Structural unidentifiability in the Lotka-Volterra model. Scenario A ($x_0=1.0, y_0=0.5, \beta =0.4$) and Scenario B ($x_0=1.0, y_0=1.0, \beta =0.2$) produce identical observable trajectories for the prey $\mathbf {x}_{obs}(t)$ (top), despite originating from completely different hidden predator states and parameters (bottom). This algebraic indistinguishability proves that the full system cannot be identified from partial observations alone.\relax }{figure.caption.95}{}}
+\newlabel{fig:lv_unidentifiable@cref}{{[figure][3][]3}{[1][20][]21}}
+\newlabel{eq:scaling-symmetry}{{6.8}{22}{OGTT: Sampled-Sensitivity Rank and Conditioning}{equation.97}{}}
+\newlabel{eq:scaling-symmetry@cref}{{[equation][8][6]6.8}{[1][22][]22}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.5}Sampled Local Rank versus Sparse-Sampling Conditioning}{22}{subsection.98}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Restricted sampled sensitivity of the OGTT model. \emph  {(Left)} The three singular values of the $5\times 3$ Jacobian $\nabla _\xi \mathcal  {G}$, $\xi =(I_0,S_I,\sigma )$, at the five-point grid: locally full rank $3$ but spanning $\sim \!10^3$ (ill-conditioned). \emph  {(Right)} The temporal sensitivity of glucose to $S_I$ and $\sigma $ is nearly identical throughout the window --- the two parameters act on glucose almost interchangeably, so only their stiff combination is well determined.\relax }}{22}{figure.caption.99}\protected@file@percent }
+\newlabel{fig:ogtt_sensitivity}{{4}{22}{Restricted sampled sensitivity of the OGTT model. \emph {(Left)} The three singular values of the $5\times 3$ Jacobian $\nabla _\xi \mathcal {G}$, $\xi =(I_0,S_I,\sigma )$, at the five-point grid: locally full rank $3$ but spanning $\sim \!10^3$ (ill-conditioned). \emph {(Right)} The temporal sensitivity of glucose to $S_I$ and $\sigma $ is nearly identical throughout the window --- the two parameters act on glucose almost interchangeably, so only their stiff combination is well determined.\relax }{figure.caption.99}{}}
+\newlabel{fig:ogtt_sensitivity@cref}{{[figure][4][]4}{[1][22][]22}}
+\citation{ha2025disposition}
+\@writefile{toc}{\contentsline {paragraph}{The weak direction is only the HGP symmetry-breaking}{23}{section*.100}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Full ISS-HGP versus constant-HGP ablation of the restricted OGTT sampled Jacobian $\mathbf  {J}=\nabla _\xi \mathcal  {G}\operatorname  {diag}(\xi )$, $\xi =(I_0,S_I,\sigma )$ (central differences, step-size stable). \emph  {(a)} Three-value spectrum at the five-point grid: the smallest singular value drops from $\varsigma _3\approx 0.073$ (full, numerically rank $3$) to $\approx 5\times 10^{-5}$ (constant HGP, analytic rank $\le 2$; a third value at the numerical floor). \emph  {(b)} Sensitivity $\|\mathbf  {J}\hat  t\|$ along the scaling tangent $\hat  t=(+1,-1,+1)/\sqrt  3$ versus number of glucose samples: for the full model it grows with density, while for constant HGP it stays at the numerical floor (exact null). \emph  {(c)} Glucose invariance under the scaling symmetry\nobreakspace  {}\textup  {\hbox {\mathsurround \z@ \normalfont  (\ignorespaces \ref  {eq:scaling-symmetry}\unskip \@@italiccorr )}}: constant-HGP glucose is invariant to within numerical tolerance (exact symmetry), whereas the full model breaks it by a sub-percent, $c$-dependent amount --- the origin of the weak, ill-conditioned product-orthogonal direction.\relax }}{23}{figure.caption.101}\protected@file@percent }
+\newlabel{fig:ogtt_hgp}{{5}{23}{Full ISS-HGP versus constant-HGP ablation of the restricted OGTT sampled Jacobian $\mathbf {J}=\nabla _\xi \mathcal {G}\operatorname {diag}(\xi )$, $\xi =(I_0,S_I,\sigma )$ (central differences, step-size stable). \emph {(a)} Three-value spectrum at the five-point grid: the smallest singular value drops from $\varsigma _3\approx 0.073$ (full, numerically rank $3$) to $\approx 5\times 10^{-5}$ (constant HGP, analytic rank $\le 2$; a third value at the numerical floor). \emph {(b)} Sensitivity $\|\mathbf {J}\hat t\|$ along the scaling tangent $\hat t=(+1,-1,+1)/\sqrt 3$ versus number of glucose samples: for the full model it grows with density, while for constant HGP it stays at the numerical floor (exact null). \emph {(c)} Glucose invariance under the scaling symmetry~\eqref {eq:scaling-symmetry}: constant-HGP glucose is invariant to within numerical tolerance (exact symmetry), whereas the full model breaks it by a sub-percent, $c$-dependent amount --- the origin of the weak, ill-conditioned product-orthogonal direction.\relax }{figure.caption.101}{}}
+\newlabel{fig:ogtt_hgp@cref}{{[figure][5][]5}{[1][23][]23}}
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Parameter recovery (RMSE\,/\,Pearson $r$) on synthetic test data. The direct baseline recovers well-conditioned parameters nearly perfectly ($r\!\approx \!0.98$); its recovery degrades along the directions the observability analysis flags as rank-deficient or ill-conditioned (LV $\beta $; OGTT $S_I,\sigma $ individually). The iterative estimator converges but exhibits an additional approximation gap even where the problem is well-conditioned (SIR).\relax }}{24}{table.caption.104}\protected@file@percent }
+\newlabel{tab:recovery}{{1}{24}{Parameter recovery (RMSE\,/\,Pearson $r$) on synthetic test data. The direct baseline recovers well-conditioned parameters nearly perfectly ($r\!\approx \!0.98$); its recovery degrades along the directions the observability analysis flags as rank-deficient or ill-conditioned (LV $\beta $; OGTT $S_I,\sigma $ individually). The iterative estimator converges but exhibits an additional approximation gap even where the problem is well-conditioned (SIR).\relax }{table.caption.104}{}}
+\newlabel{tab:recovery@cref}{{[table][1][]1}{[1][24][]24}}
+\newlabel{sec:experiments}{{7}{24}{Experiments}{section.102}{}}
+\newlabel{sec:experiments@cref}{{[section][7][]7}{[1][23][]24}}
+\@writefile{toc}{\contentsline {section}{\numberline {7}Experiments}{24}{section.102}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Protocol.}{24}{section*.103}\protected@file@percent }
+\newlabel{subsec:exp-sir}{{7.1}{25}{SIR: an identifiability control where the operator gap dominates}{subsection.105}{}}
+\newlabel{subsec:exp-sir@cref}{{[subsection][1][7]7.1}{[1][24][]25}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.1}SIR: an identifiability control where the operator gap dominates}{25}{subsection.105}\protected@file@percent }
+\newlabel{subsec:exp-lv}{{7.2}{25}{Lotka--Volterra: observability predicts which parameters are recoverable}{subsection.108}{}}
+\newlabel{subsec:exp-lv@cref}{{[subsection][2][7]7.2}{[1][25][]25}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.2}Lotka--Volterra: observability predicts which parameters are recoverable}{25}{subsection.108}\protected@file@percent }
+\citation{ha2024iss}
+\citation{ha2025disposition}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces SIR observation-density sweep (identifiable regime, unknown-hidden-state setting; fixed initial condition). The iterative estimator's parameter recovery improves monotonically with the number of observation points --- consistent with the fixed-point error being governed by the one-step residual (Lemma\nobreakspace  {}\ref  {lem:error_bound}) --- but plateaus below the direct-regression benchmark (Proposition\nobreakspace  {}\ref  {prop:ceiling}): denser data eases hidden-state reconstruction yet does not remove the detour cost.\relax }}{26}{figure.caption.106}\protected@file@percent }
+\newlabel{fig:sir-density}{{6}{26}{SIR observation-density sweep (identifiable regime, unknown-hidden-state setting; fixed initial condition). The iterative estimator's parameter recovery improves monotonically with the number of observation points --- consistent with the fixed-point error being governed by the one-step residual (Lemma~\ref {lem:error_bound}) --- but plateaus below the direct-regression benchmark (Proposition~\ref {prop:ceiling}): denser data eases hidden-state reconstruction yet does not remove the detour cost.\relax }{figure.caption.106}{}}
+\newlabel{fig:sir-density@cref}{{[figure][6][]6}{[1][25][]26}}
+\newlabel{subsec:exp-ogtt}{{7.3}{26}{OGTT: collapse along an approximate product ridge and coordinate-dependent fiber selection}{subsection.110}{}}
+\newlabel{subsec:exp-ogtt@cref}{{[subsection][3][7]7.3}{[1][26][]26}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.3}OGTT: collapse along an approximate product ridge and coordinate-dependent fiber selection}{26}{subsection.110}\protected@file@percent }
+\newlabel{eq:ogtt-glucose}{{7.1}{26}{OGTT: collapse along an approximate product ridge and coordinate-dependent fiber selection}{equation.111}{}}
+\newlabel{eq:ogtt-glucose@cref}{{[equation][1][7]7.1}{[1][26][]26}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces SIR parameter recovery, iterative estimator. Predictions (blue) versus ground truth for $\beta ,\gamma ,\mathcal  {R}_0$. Despite guaranteed convergence, predictions compress toward a central band and $\mathcal  {R}_0$ saturates --- the operator-approximation gap of Remark\nobreakspace  {}\ref  {rem:decomposition}(ii), present even though SIR is identifiable (cf. the direct baseline, $r\approx 0.98$).\relax }}{27}{figure.caption.107}\protected@file@percent }
+\newlabel{fig:sir-scatter}{{7}{27}{SIR parameter recovery, iterative estimator. Predictions (blue) versus ground truth for $\beta ,\gamma ,\mathcal {R}_0$. Despite guaranteed convergence, predictions compress toward a central band and $\mathcal {R}_0$ saturates --- the operator-approximation gap of Remark~\ref {rem:decomposition}(ii), present even though SIR is identifiable (cf. the direct baseline, $r\approx 0.98$).\relax }{figure.caption.107}{}}
+\newlabel{fig:sir-scatter@cref}{{[figure][7][]7}{[1][25][]27}}
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Lotka--Volterra recovery, direct baseline. Three parameters are recovered nearly perfectly ($\alpha ,\delta ,\gamma $: $r\approx 0.99$); the interaction parameter $\beta $ is not ($r=0.22$)---exactly the direction the observability matrix flags as rank-deficient (Section\nobreakspace  {}\ref  {sec:identifiability}).\relax }}{27}{figure.caption.109}\protected@file@percent }
+\newlabel{fig:lv-scatter}{{8}{27}{Lotka--Volterra recovery, direct baseline. Three parameters are recovered nearly perfectly ($\alpha ,\delta ,\gamma $: $r\approx 0.99$); the interaction parameter $\beta $ is not ($r=0.22$)---exactly the direction the observability matrix flags as rank-deficient (Section~\ref {sec:identifiability}).\relax }{figure.caption.109}{}}
+\newlabel{fig:lv-scatter@cref}{{[figure][8][]8}{[1][25][]27}}
+\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces OGTT joint-distribution collapse (iterative estimator; the direct baseline is qualitatively identical). \emph  {Left:} predictions (blue) collapse the 2-D ground-truth cloud (grey) onto a 1-D locus. \emph  {Center:} the identifiable product $S_I\sigma $ (stiff direction) is recovered ($r=0.93$). \emph  {Right:} the two individual coordinates $S_I$ and $\sigma $ are both weakly recovered and to the same degree ($r=0.65$ each), neither privileged --- the estimate collapses along the approximate product direction (with an additional off-fiber operator error for the iteration, quantified below). This realizes the regression-to-the-mean of Corollary\nobreakspace  {}\ref  {cor:lower_bound} in the log training coordinate.\relax }}{28}{figure.caption.112}\protected@file@percent }
+\newlabel{fig:ogtt-collapse}{{9}{28}{OGTT joint-distribution collapse (iterative estimator; the direct baseline is qualitatively identical). \emph {Left:} predictions (blue) collapse the 2-D ground-truth cloud (grey) onto a 1-D locus. \emph {Center:} the identifiable product $S_I\sigma $ (stiff direction) is recovered ($r=0.93$). \emph {Right:} the two individual coordinates $S_I$ and $\sigma $ are both weakly recovered and to the same degree ($r=0.65$ each), neither privileged --- the estimate collapses along the approximate product direction (with an additional off-fiber operator error for the iteration, quantified below). This realizes the regression-to-the-mean of Corollary~\ref {cor:lower_bound} in the log training coordinate.\relax }{figure.caption.112}{}}
+\newlabel{fig:ogtt-collapse@cref}{{[figure][9][]9}{[1][28][]28}}
+\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces Predictions and the \emph  {product-conditioned arithmetic-mean locus} $\setbox \z@ \hbox {\mathsurround \z@ $\textstyle m$}\mathaccent "0365{m}(c)=\setbox \z@ \hbox {\mathsurround \z@ $\textstyle \mathbb  {E}$}\mathaccent "0362{\mathbb  {E}}[(S_I,\sigma )\mid S_I\sigma =c]$ in the $(S_I,\sigma )$ plane (shared test split; grey: ground-truth joint, dotted: constant-$S_I\sigma $ fibers, red: $\setbox \z@ \hbox {\mathsurround \z@ $\textstyle m$}\mathaccent "0365{m}(c)$). The red curve is a \emph  {reference geometry}, not the estimators' Bayes target: the network trains in log coordinates, whose on-fiber geometric mean --- not this arithmetic locus --- is its target (Remark\nobreakspace  {}\ref  {rem:coordinate}), and $\setbox \z@ \hbox {\mathsurround \z@ $\textstyle m$}\mathaccent "0365{m}(c)$ conditions on the product rather than on $\mathbf  {x}_\mathrm  {obs}$. \emph  {Left:} the iterative fixed point collapses onto a tight $1$-D band, sitting off the fibers by an amount consistent with operator approximation. \emph  {Right:} the matched direct estimator recovers the product and fans \emph  {along} the fibers (near the on-fiber geometric mean). Annotations report per-bin distances and the off-fiber product bias $\setbox \z@ \hbox {\mathsurround \z@ $\textstyle m$}\mathaccent "0365{m}_1\setbox \z@ \hbox {\mathsurround \z@ $\textstyle m$}\mathaccent "0365{m}_2-c$ of the reference locus (positive, the Jensen property of Corollary\nobreakspace  {}\ref  {cor:off_fiber_product} under physical-coordinate averaging).\relax }}{29}{figure.caption.113}\protected@file@percent }
+\newlabel{fig:ogtt-condmean}{{10}{29}{Predictions and the \emph {product-conditioned arithmetic-mean locus} $\widetilde m(c)=\widehat {\mathbb {E}}[(S_I,\sigma )\mid S_I\sigma =c]$ in the $(S_I,\sigma )$ plane (shared test split; grey: ground-truth joint, dotted: constant-$S_I\sigma $ fibers, red: $\widetilde m(c)$). The red curve is a \emph {reference geometry}, not the estimators' Bayes target: the network trains in log coordinates, whose on-fiber geometric mean --- not this arithmetic locus --- is its target (Remark~\ref {rem:coordinate}), and $\widetilde m(c)$ conditions on the product rather than on $\mathbf {x}_\mathrm {obs}$. \emph {Left:} the iterative fixed point collapses onto a tight $1$-D band, sitting off the fibers by an amount consistent with operator approximation. \emph {Right:} the matched direct estimator recovers the product and fans \emph {along} the fibers (near the on-fiber geometric mean). Annotations report per-bin distances and the off-fiber product bias $\widetilde m_1\widetilde m_2-c$ of the reference locus (positive, the Jensen property of Corollary~\ref {cor:off_fiber_product} under physical-coordinate averaging).\relax }{figure.caption.113}{}}
+\newlabel{fig:ogtt-condmean@cref}{{[figure][10][]10}{[1][29][]29}}
+\@writefile{toc}{\contentsline {paragraph}{Physical- versus log-coordinate MSE}{29}{section*.114}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {11}{\ignorespaces Physical- versus log-coordinate MSE for the direct regressor (one representative seed; grey: ground truth, dotted: constant-$S_I\sigma $ fibers, blue: predictions). Titles report the per-point product error (mDI) and signed product bias. \emph  {Left:} log-coordinate MSE keeps the product on the fiber (bias $\approx 0$). \emph  {Right:} physical-coordinate MSE inflates the product (bias $>0$, the Jensen/convex side of Corollary\nobreakspace  {}\ref  {cor:off_fiber_product}), i.e.\ leaves the fiber --- while individual-coordinate recovery is unchanged. Off-fiber displacement is thus a property of the loss coordinate (Remark\nobreakspace  {}\ref  {rem:coordinate}).\relax }}{30}{figure.caption.115}\protected@file@percent }
+\newlabel{fig:ogtt-coord}{{11}{30}{Physical- versus log-coordinate MSE for the direct regressor (one representative seed; grey: ground truth, dotted: constant-$S_I\sigma $ fibers, blue: predictions). Titles report the per-point product error (mDI) and signed product bias. \emph {Left:} log-coordinate MSE keeps the product on the fiber (bias $\approx 0$). \emph {Right:} physical-coordinate MSE inflates the product (bias $>0$, the Jensen/convex side of Corollary~\ref {cor:off_fiber_product}), i.e.\ leaves the fiber --- while individual-coordinate recovery is unchanged. Off-fiber displacement is thus a property of the loss coordinate (Remark~\ref {rem:coordinate}).\relax }{figure.caption.115}{}}
+\newlabel{fig:ogtt-coord@cref}{{[figure][11][]11}{[1][30][]30}}
+\newlabel{subsec:exp-convergence}{{7.4}{30}{Convergence and the role of the contraction margin}{subsection.116}{}}
+\newlabel{subsec:exp-convergence@cref}{{[subsection][4][7]7.4}{[1][30][]30}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.4}Convergence and the role of the contraction margin}{30}{subsection.116}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{A note on distribution shift}{31}{section*.118}\protected@file@percent }
+\newlabel{sec:discussion}{{8}{31}{Discussion}{section.119}{}}
+\newlabel{sec:discussion@cref}{{[section][8][]8}{[1][31][]31}}
+\@writefile{toc}{\contentsline {section}{\numberline {8}Discussion}{31}{section.119}\protected@file@percent }
+\citation{hermann1977nonlinear}
+\@writefile{lof}{\contentsline {figure}{\numberline {12}{\ignorespaces Fixed-point dynamics for OGTT in the $(S_I,\sigma )$ plane. Trajectories from four initializations converge to one fixed point (red star), which differs from the ground truth (blue cross): convergence does not imply correctness. Annotations report the one-step residual $\varepsilon $ and the fixed-point error, consistent with Lemma\nobreakspace  {}\ref  {lem:error_bound}.\relax }}{32}{figure.caption.117}\protected@file@percent }
+\newlabel{fig:ogtt-phase}{{12}{32}{Fixed-point dynamics for OGTT in the $(S_I,\sigma )$ plane. Trajectories from four initializations converge to one fixed point (red star), which differs from the ground truth (blue cross): convergence does not imply correctness. Annotations report the one-step residual $\varepsilon $ and the fixed-point error, consistent with Lemma~\ref {lem:error_bound}.\relax }{figure.caption.117}{}}
+\newlabel{fig:ogtt-phase@cref}{{[figure][12][]12}{[1][31][]32}}
+\@writefile{toc}{\contentsline {section}{Appendix\nobreakspace  {}A. Observability computations for SIR, Lotka--Volterra, and OGTT}{32}{appendix.120}\protected@file@percent }
+\newlabel{app:observability}{{A}{32}{Discussion}{appendix.120}{}}
+\newlabel{app:observability@cref}{{[appendix][1][2147483647]A}{[1][32][]32}}
+\newlabel{app:obs-sir}{{A.1}{32}{SIR model: Lie-derivative-based observability matrix}{subsection.121}{}}
+\newlabel{app:obs-sir@cref}{{[subappendix][1][2147483647,1]A.1}{[1][32][]32}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.1}SIR model: Lie-derivative-based observability matrix}{32}{subsection.121}\protected@file@percent }
+\newlabel{app:obs-lv}{{A.2}{34}{Lotka--Volterra model: symbolic rank deficiency}{subsection.122}{}}
+\newlabel{app:obs-lv@cref}{{[subappendix][2][2147483647,1]A.2}{[1][33][]34}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.2}Lotka--Volterra model: symbolic rank deficiency}{34}{subsection.122}\protected@file@percent }
+\newlabel{app:obs-ogtt}{{A.3}{34}{OGTT model: restricted sampled-sensitivity rank and conditioning}{subsection.123}{}}
+\newlabel{app:obs-ogtt@cref}{{[subappendix][3][2147483647,1]A.3}{[1][34][]34}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.3}OGTT model: restricted sampled-sensitivity rank and conditioning}{34}{subsection.123}\protected@file@percent }
+\citation{ha2024iss}
+\newlabel{app:obs-ogtt-sym}{{A.4}{35}{Homogeneity behind the constant-HGP scaling symmetry}{subsection.124}{}}
+\newlabel{app:obs-ogtt-sym@cref}{{[subappendix][4][2147483647,1]A.4}{[1][35][]35}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.4}Homogeneity behind the constant-HGP scaling symmetry}{35}{subsection.124}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{Appendix\nobreakspace  {}B. Reproducibility: systems, data, architecture, and training}{35}{appendix.125}\protected@file@percent }
+\newlabel{app:repro}{{B}{35}{Homogeneity behind the constant-HGP scaling symmetry}{appendix.125}{}}
+\newlabel{app:repro@cref}{{[appendix][2][2147483647]B}{[1][35][]35}}
+\citation{ha2024iss}
+\newlabel{app:repro-systems}{{B.1}{36}{Benchmark systems and governing equations}{subsection.126}{}}
+\newlabel{app:repro-systems@cref}{{[subappendix][1][2147483647,2]B.1}{[1][36][]36}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {B.1}Benchmark systems and governing equations}{36}{subsection.126}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{SIR (epidemiological)}{36}{section*.127}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Lotka--Volterra (ecological)}{36}{section*.128}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{OGTT (physiological, full ISS model)}{36}{section*.129}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Observations}{37}{section*.130}\protected@file@percent }
+\newlabel{app:repro-norm}{{B.2}{37}{Data splits and normalization}{subsection.131}{}}
+\newlabel{app:repro-norm@cref}{{[subappendix][2][2147483647,2]B.2}{[1][37][]37}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {B.2}Data splits and normalization}{37}{subsection.131}\protected@file@percent }
+\newlabel{app:repro-arch}{{B.3}{37}{Network architecture and matched-capacity baseline}{subsection.132}{}}
+\newlabel{app:repro-arch@cref}{{[subappendix][3][2147483647,2]B.3}{[1][37][]37}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {B.3}Network architecture and matched-capacity baseline}{37}{subsection.132}\protected@file@percent }
+\newlabel{app:repro-train}{{B.4}{37}{Training and inference hyperparameters}{subsection.133}{}}
+\newlabel{app:repro-train@cref}{{[subappendix][4][2147483647,2]B.4}{[1][37][]37}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {B.4}Training and inference hyperparameters}{37}{table.caption.134}\protected@file@percent }
+\bibstyle{siamplain}
+\bibdata{references}
+\bibcite{bai2019deep}{1}
+\bibcite{cranmer2020frontier}{2}
+\bibcite{ha2024iss}{3}
+\bibcite{ha2025disposition}{4}
+\bibcite{hermann1977nonlinear}{5}
+\bibcite{kermack1927contribution}{6}
+\bibcite{lotka1925elements}{7}
+\bibcite{miyato2018spectralnormalizationgenerativeadversarial}{8}
+\bibcite{papamakarios2016fast}{9}
+\bibcite{phelps2001choquet}{10}
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Training and inference configuration (identical across the three systems unless a value is listed per system).\relax }}{38}{table.caption.134}\protected@file@percent }
+\newlabel{tab:hyperparams}{{2}{38}{Training and inference configuration (identical across the three systems unless a value is listed per system).\relax }{table.caption.134}{}}
+\newlabel{tab:hyperparams@cref}{{[table][2][2147483647]2}{[1][37][]38}}
+\newlabel{app:repro-code}{{B.5}{38}{Code and scripts}{subsection.135}{}}
+\newlabel{app:repro-code@cref}{{[subappendix][5][2147483647,2]B.5}{[1][37][]38}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {B.5}Code and scripts}{38}{subsection.135}\protected@file@percent }
+\bibcite{takens1981detecting}{11}
+\bibcite{tarantola2005inverse}{12}
+\bibcite{villaverde2016structural}{13}
+\bibcite{volterra1927fluctuations}{14}
+\bibcite{williams1989learning}{15}
+\gdef \@abspage@last{39}

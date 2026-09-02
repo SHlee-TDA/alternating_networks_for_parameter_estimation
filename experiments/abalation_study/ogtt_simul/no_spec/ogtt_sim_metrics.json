@@ -1,0 +1,26 @@
+{
+    "si": {
+        "Baseline": {
+            "RMSE": NaN,
+            "MAE": NaN,
+            "Pearson_r": NaN
+        },
+        "Ours": {
+            "RMSE": 0.2521524429321289,
+            "MAE": 0.17079338431358337,
+            "Pearson_r": 0.6537339687347412
+        }
+    },
+    "sigma": {
+        "Baseline": {
+            "RMSE": NaN,
+            "MAE": NaN,
+            "Pearson_r": NaN
+        },
+        "Ours": {
+            "RMSE": 0.32759636640548706,
+            "MAE": 0.21796514093875885,
+            "Pearson_r": 0.6400851607322693
+        }
+    }
+}

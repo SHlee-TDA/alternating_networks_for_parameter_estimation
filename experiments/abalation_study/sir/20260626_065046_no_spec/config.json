@@ -1,0 +1,76 @@
+{
+    "AUGMENTATION_FACTOR": 0,
+    "BATCH_SIZE": 256,
+    "DERIVATIVE_METHOD": "spline",
+    "DEVICE": "cuda",
+    "EARLY_STOPPING_MIN_DELTA": 1e-06,
+    "EARLY_STOPPING_PATIENCE": 200,
+    "EPOCHS": 10000,
+    "EXPERIMENTS": [
+        {
+            "NAME": "ode_only_supervised",
+            "USE_SDE": false,
+            "SCENARIO": "sim_only",
+            "VAL_SOURCE": "sim",
+            "OOD_SPLIT": true
+        }
+    ],
+    "EXPERIMENT_NAME": "no_spec",
+    "ITERATIONS": 10,
+    "LEARNING_RATE": 0.001,
+    "LOSS_CONFIG": [
+        [
+            "supervised",
+            1.0
+        ]
+    ],
+    "MODEL_CONFIG": {
+        "hidden_net": {
+            "hidden_dims": [
+                256,
+                256,
+                256
+            ],
+            "activation": "SiLU"
+        },
+        "param_net": {
+            "hidden_dims": [
+                256,
+                256,
+                256
+            ],
+            "activation": "SiLU"
+        }
+    },
+    "NAME": "ode_only_supervised",
+    "NORMALIZER_PARAM_BOUNDS": null,
+    "NORMALIZER_STATE_SCALES": null,
+    "NUM_SAMPLES": 100000,
+    "OOD_SPLIT": true,
+    "PLOT_PHASE_EVOLUTION": true,
+    "RESULTS_DIR": "experiments/abalation_study/",
+    "RUN_BASELINE": false,
+    "SCENARIO": "sim_only",
+    "SCENARIOS": [
+        {
+            "NAME": "ode_only",
+            "USE_SDE": false,
+            "SCENARIO": "sim_only",
+            "VAL_SOURCE": "sim",
+            "OOD_SPLIT": true
+        }
+    ],
+    "SDE_SCALE_FACTORS": {
+        "bias_scale": 1.0,
+        "diffusion_scale": 1.27
+    },
+    "SEED": 42,
+    "SYSTEM_NAME": "sir",
+    "TEST_SPLIT": 0.2,
+    "USE_DERIVATIVE": false,
+    "USE_EARLY_STOPPING": false,
+    "USE_SDE": false,
+    "USE_SPECTRAL_NORM": false,
+    "VAL_SOURCE": "sim",
+    "WEIGHT_DECAY": 0.0
+}

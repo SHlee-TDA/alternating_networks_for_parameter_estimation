@@ -1,0 +1,88 @@
+{
+    "SYSTEM_NAME": "sir",
+    "EXPERIMENT_NAME": "spectral_norm",
+    "SEED": 42,
+    "DEVICE": "cuda",
+    "RESULTS_DIR": "experiments/abalation_study/",
+    "RUN_BASELINE": false,
+    "NUM_SAMPLES": 100000,
+    "AUGMENTATION_FACTOR": 0,
+    "SDE_SCALE_FACTORS": {
+        "bias_scale": 1.0,
+        "diffusion_scale": 1.27
+    },
+    "TEST_SPLIT": 0.2,
+    "BATCH_SIZE": 256,
+    "NORMALIZER_STATE_SCALES": [
+        58.746553470710026,
+        44.55041043299701
+    ],
+    "NORMALIZER_PARAM_BOUNDS": [
+        [
+            -0.038935036950055686,
+            -0.03892732684714418
+        ],
+        [
+            0.54891045332403,
+            0.5487817488784462
+        ]
+    ],
+    "EPOCHS": 10000,
+    "LEARNING_RATE": 0.001,
+    "WEIGHT_DECAY": 0.0,
+    "USE_EARLY_STOPPING": false,
+    "EARLY_STOPPING_PATIENCE": 200,
+    "EARLY_STOPPING_MIN_DELTA": 1e-06,
+    "USE_DERIVATIVE": false,
+    "DERIVATIVE_METHOD": "spline",
+    "LOSS_CONFIG": [
+        [
+            "supervised",
+            1.0
+        ]
+    ],
+    "ITERATIONS": 10,
+    "MODEL_CONFIG": {
+        "hidden_net": {
+            "hidden_dims": [
+                256,
+                256,
+                256
+            ],
+            "activation": "SiLU"
+        },
+        "param_net": {
+            "hidden_dims": [
+                256,
+                256,
+                256
+            ],
+            "activation": "SiLU"
+        }
+    },
+    "USE_SPECTRAL_NORM": true,
+    "PLOT_PHASE_EVOLUTION": true,
+    "SCENARIOS": [
+        {
+            "NAME": "ode_only",
+            "USE_SDE": false,
+            "SCENARIO": "sim_only",
+            "VAL_SOURCE": "sim",
+            "OOD_SPLIT": true
+        }
+    ],
+    "EXPERIMENTS": [
+        {
+            "NAME": "ode_only_supervised",
+            "USE_SDE": false,
+            "SCENARIO": "sim_only",
+            "VAL_SOURCE": "sim",
+            "OOD_SPLIT": true
+        }
+    ],
+    "NAME": "ode_only_supervised",
+    "USE_SDE": false,
+    "SCENARIO": "sim_only",
+    "VAL_SOURCE": "sim",
+    "OOD_SPLIT": true
+}

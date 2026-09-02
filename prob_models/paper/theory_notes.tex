@@ -1,19 +1,64 @@
 \documentclass[11pt]{article}
 
 % =====================================================================
-%  THEORY NOTES (backstage) for A-DCVAE  -- Revision 2
+%  THEORY NOTES (backstage) for A-DCVAE  -- Revision 3
 %  Self-contained mathematical note. NOT the paper. Kept fully rigorous;
 %  the paper will abbreviate/summarize as needed. Reused as the formal
 %  foundation for subsequent theorems.
-%  Compile standalone:  pdflatex theory_notes.tex
+%  Compile standalone:  pdflatex theory_notes_rev3.tex
 %
-%  Rev.2 incorporates a rigor review: (i) measurability of the kernel is
+%  Rev.2 incorporated a rigor review: (i) measurability of the kernel is
 %  now proved; (ii) the coupling is formalized via an explicit joint
 %  kernel + Ionescu--Tulcea; (iii) the deterministic-collapse remark is
 %  corrected (Doeblin is sufficient, not necessary); (iv) the standard
 %  facts used (TV-completeness, Leb(dK)=0, kernel TV-nonexpansiveness,
 %  projection properties) are stated as cited/proved lemmas; plus assorted
 %  fixes (epsilon<=1 via A=Omega, typos).
+%
+%  Rev.3 (this revision). Constraint: everything up to and including
+%  Theorem A (Secs. 1--9) is left VERBATIM; only the preamble (cosmetic)
+%  and Secs. 10--13 + bibliography are touched. Changes, each marked
+%  inline with a [Rev.3-n] comment:
+%   [Rev.3-1]  Cosmetic only: theorem/definition/remark styles now break
+%              the line after the heading, and proofs start their body on
+%              a fresh line. No mathematical content is affected.
+%   [Rev.3-2]  New Fact (kernmeas): on a Polish target, the evaluation
+%              sigma-algebra on P(Om) equals the Borel sigma-algebra of
+%              the weak topology. This is the missing bridge that (a)
+%              legitimizes applying Villani Cor. 5.22 to our kernels and
+%              (b) makes mixtures of coupling kernels well defined.
+%   [Rev.3-3]  Fact (msel) restated as (i)-(iii) with a full proof;
+%              "equivalently" weakened to a proved "in particular"; the
+%              operation \int gamma_s rho(ds) is now called MIXING (the
+%              gluing lemma is a different operation) here and wherever
+%              it is invoked (Lemma sweep, Lemma perturb).
+%   [Rev.3-4]  Sec. 13 target paragraph: removed the category error
+%              "Pi-dagger is K-dagger-invariant" (K-dagger acts on
+%              P(Om_Theta), not on joint laws); the needed statement
+%              nu-dagger K-dagger = nu-dagger is now PROVED by the
+%              sweep-reproduction argument (same as Prop. inc), and the
+%              kernel-ness of K-dagger is pointed to Fact compose.
+%   [Rev.3-5]  Assumption citations of Lemma opdisc and Theorem B now
+%              include Assumption suptrue (it was silently used: domain
+%              of the true sweep, definition of eps_H/eps_P, and the
+%              Lipschitz domain coverage all depend on it). suptrue is
+%              kept in Sec. 13 (not moved to Sec. 6) so that Secs. 1--9
+%              stay untouched; logically it is standing for Sec. 13.
+%   [Rev.3-6]  Prop. inc: standing assumptions made explicit; Remark
+%              pileftpi: kappa<1 noted as in force.
+%   [Rev.3-7]  Remark edist: the law of Y (stationary pre-projection
+%              proposal) is specified; sqrt(d) dimension factors flagged.
+%   [Rev.3-8]  Remark nodouble: hedge sharpened -- the swap-learned-first
+%              triangle route suggests the constant closes with
+%              kappa, L_H, L_P alone (no regularity of the true
+%              conditionals); precise constant still deferred.
+%   [Rev.3-9]  Lemma condlip / Lemma sweep statements: quantifier domains
+%              Om_Theta, Om_H made explicit (matching the domains in
+%              Assumption lip).
+%   [Rev.3-10] Notation in Secs. 10--13 unified to the bold convention of
+%              Secs. 1--8 (\bth, \bm u, \bm z_H, ...). Purely notational.
+%   [Rev.3-11] Bibliography parentheticals extended (Villani Cor. 5.22;
+%              Kallenberg: measurable structure of P(Om)).
 % =====================================================================
 
 \usepackage[margin=1in]{geometry}
@@ -21,20 +66,45 @@
 \usepackage{bm}
 \usepackage{hyperref}
 
-\theoremstyle{definition}
+% ---------------------------------------------------------------------
+% [Rev.3-1] COSMETIC: break-after-heading theorem styles.
+% WHY: run-in headings ("Theorem 4.1 (name). text...") reduce readability.
+% HOW: custom amsthm styles with \newline as the head/body separator, so
+% every statement body starts on its own line; the proof environment is
+% redefined so "Proof." also stands on its own line. Display only ---
+% numbering, counters, and all statement bodies are unchanged.
+% ---------------------------------------------------------------------
+\newtheoremstyle{plainbreak}%
+  {10pt}{10pt}{\itshape}{}{\bfseries}{.}{\newline}{}
+\newtheoremstyle{definitionbreak}%
+  {10pt}{10pt}{\normalfont}{}{\bfseries}{.}{\newline}{}
+\newtheoremstyle{remarkbreak}%
+  {8pt}{8pt}{\normalfont}{}{\itshape}{.}{\newline}{}
+
+\theoremstyle{definitionbreak}
 \newtheorem{definition}{Definition}[section]
 \newtheorem{assumption}{Assumption}
 \newtheorem{notation}{Notation}[section]
 
-\theoremstyle{plain}
+\theoremstyle{plainbreak}
 \newtheorem{theorem}{Theorem}[section]
 \newtheorem{lemma}[theorem]{Lemma}
 \newtheorem{proposition}[theorem]{Proposition}
 \newtheorem{corollary}[theorem]{Corollary}
 \newtheorem{fact}[theorem]{Fact}
 
-\theoremstyle{remark}
+\theoremstyle{remarkbreak}
 \newtheorem{remark}{Remark}[section]
+
+% [Rev.3-1] Proof header on its own line.
+\makeatletter
+\renewenvironment{proof}[1][\proofname]{\par
+  \pushQED{\qed}\normalfont
+  \topsep6\p@\@plus6\p@\relax
+  \trivlist
+  \item[\hskip\labelsep\itshape #1\@addpunct{.}]\mbox{}\par\nobreak\ignorespaces
+}{\popQED\endtrivlist\@endpefalse}
+\makeatother
 
 \newcommand{\R}{\mathbb{R}}
 \newcommand{\N}{\mathbb{N}}
@@ -57,7 +127,7 @@
 
 \title{\textbf{Theory Notes for A-DCVAE}\\[2pt]
 \large Foundations, and Theorem~A: Uniform Ergodicity of the Continuous Pseudo-Gibbs Chain}
-\author{Backstage reference note (internal), Rev.\ 2}
+\author{Backstage reference note (internal), Rev.\ 3}
 \date{\today}
 
 \begin{document}
@@ -76,6 +146,8 @@ notes (rate bounds; steering/consistency of the invariant law).
 
 \tableofcontents
 
+% ====================================================================
+%  Secs. 1--9 below are VERBATIM from Rev.2 (per the Rev.3 constraint).
 % ====================================================================
 \section{Notation and standing conventions}
 \label{sec:notation}
@@ -619,6 +691,8 @@ Fact~\ref{fact:compose} in particular recurs in any kernel manipulation.
 \end{remark}
 
 % ====================================================================
+%  From here on (Secs. 10--13): Rev.3 edits, each marked [Rev.3-n].
+% ====================================================================
 \section{Wasserstein preliminaries}
 \label{sec:wass}
 
@@ -652,7 +726,7 @@ If $f$ is $L$-Lipschitz then $W_2(f\push\mu,f\push\nu)\le L\,W_2(\mu,\nu)$ (push
 through $f\times f$). In particular the coordinate projection
 $\mathrm{proj}_\Theta:\Om_H\times\Om_\Theta\to\Om_\Theta$ is $1$-Lipschitz, so
 $W_2\big(\mathrm{proj}_\Theta\push\mu,\ \mathrm{proj}_\Theta\push\nu\big)\le W_2(\mu,\nu)$; this yields
-the $\theta$-marginal form of any joint $W_2$ bound for free.
+the $\bth$-marginal form of any joint $W_2$ bound for free.
 \end{fact}
 
 \begin{fact}[Banach fixed point in $(\cP(\Om),W_2)$]
@@ -663,34 +737,97 @@ $W_2(\mu_0K^n,\nu^\ast)\le\kappa^n W_2(\mu_0,\nu^\ast)\to0$ (Banach fixed point 
 of Fact~\ref{fact:w2basic}).
 \end{fact}
 
-\begin{fact}[Measurable selection of optimal couplings; averaged $W_2$ of kernels]
-\label{fact:msel}
-Let $K,K'$ be Markov kernels from $(\mathsf S,\mathcal S)$ to the compact $\Om$. On the Polish space
-$\Om$ there is a measurable map $s\mapsto\gamma_s\in\cP(\Om\times\Om)$ with $\gamma_s$ an optimal
-coupling of $K(s,\cdot),K'(s,\cdot)$ \cite[Cor.~5.22]{Villani}; equivalently
-$s\mapsto W_2(K(s,\cdot),K'(s,\cdot))$ is measurable. Consequently, for any $\rho\in\cP(\mathsf S)$,
-gluing $\{\gamma_s\}$ against $\rho$ yields a coupling of $\rho K,\rho K'$ and hence
-\[
-  W_2(\rho K,\rho K')^2\ \le\ \int W_2\big(K(s,\cdot),K'(s,\cdot)\big)^2\,\rho(ds)
-  \ \le\ \sup_s W_2\big(K(s,\cdot),K'(s,\cdot)\big)^2 .
-\]
+% ---------------------------------------------------------------------
+% [Rev.3-2] NEW FACT. WHY: Villani Cor. 5.22 requires s -> (K(s,.),K'(s,.))
+% to be Borel for the WEAK topology on P(Om), whereas Def. 2.1 gives only
+% measurability w.r.t. the evaluation sigma-algebra sigma(mu -> mu(A)).
+% On a Polish target these coincide; recording this once closes the gap
+% and also makes mixtures of coupling kernels (used in Fact msel(iii),
+% Lemma sweep, Lemma perturb, Lemma opdisc) well defined.
+% ---------------------------------------------------------------------
+\begin{fact}[Kernels are Borel maps into $(\cP(\Om),\mathrm{weak})$; mixtures]
+\label{fact:kernmeas}
+Let the target space $\Om$ be Polish (e.g.\ compact $\Om\subset\R^d$, or $\Om\times\Om$). On
+$\cP(\Om)$ the evaluation $\sigma$-algebra $\sigma\big(\mu\mapsto\mu(A):A\in\cF\big)$ coincides with
+the Borel $\sigma$-algebra of the weak topology \cite[Chs.~1 and 4]{Kallenberg}. Consequently:
+(i) a map $s\mapsto\mu_s$ from $(\mathsf S,\mathcal S)$ is a Markov kernel \emph{iff} it is Borel
+measurable into $\cP(\Om)$ carrying the weak topology; and
+(ii) for any Markov kernel $s\mapsto\gamma_s$ into $\cP(\Om)$ and any $\rho\in\cP(\mathsf S)$, the
+\emph{mixture} $\bar\gamma:=\int\gamma_s\,\rho(ds)$, defined by $\bar\gamma(C):=\int\gamma_s(C)\,\rho(ds)$,
+is a well-defined element of $\cP(\Om)$ (the integrand is measurable by the kernel property;
+countable additivity follows by monotone convergence).
 \end{fact}
 
+% ---------------------------------------------------------------------
+% [Rev.3-3] Fact msel restated as (i)-(iii) with a full proof.
+% WHY/HOW: (a) the previous "equivalently ... measurable" claimed an
+% equivalence where only one direction is needed; measurability of
+% s -> W_2 is now PROVED directly (continuity of W_2 in the weak topology
+% on compact Om, composed with the Borel map of Fact kernmeas);
+% (b) applicability of Villani Cor. 5.22 is now justified via Fact
+% kernmeas rather than asserted; (c) the operation int gamma_s rho(ds)
+% is a MIXTURE, not an application of the gluing lemma -- terminology
+% corrected here and at all call sites; (d) the mixture is renamed
+% bar-gamma to avoid clashing with Gamma(mu,nu) of Def. 10.1.
+% ---------------------------------------------------------------------
+\begin{fact}[Measurable selection of optimal couplings; averaged $W_2$ of kernels]
+\label{fact:msel}
+Let $K,K'$ be Markov kernels from $(\mathsf S,\mathcal S)$ to the compact $\Om$. Then:
+\emph{(i)} $s\mapsto W_2\big(K(s,\cdot),K'(s,\cdot)\big)$ is measurable;
+\emph{(ii)} there is a Markov kernel $s\mapsto\gamma_s$ from $(\mathsf S,\mathcal S)$ to
+$\Om\times\Om$ such that, for \emph{every} $s$, $\gamma_s$ is an \emph{optimal} coupling of
+$K(s,\cdot)$ and $K'(s,\cdot)$ \cite[Cor.~5.22]{Villani};
+\emph{(iii)} for every $\rho\in\cP(\mathsf S)$, the mixture $\bar\gamma:=\int\gamma_s\,\rho(ds)$ is a
+coupling of $\rho K$ and $\rho K'$, and hence
+\[
+  W_2(\rho K,\rho K')^2\ \le\ \int W_2\big(K(s,\cdot),K'(s,\cdot)\big)^2\,\rho(ds)
+  \ \le\ \sup_{s}\,W_2\big(K(s,\cdot),K'(s,\cdot)\big)^2 .
+\]
+\end{fact}
+\begin{proof}
+\emph{(i).} By Fact~\ref{fact:kernmeas}(i), $s\mapsto\big(K(s,\cdot),K'(s,\cdot)\big)$ is Borel into
+$\cP(\Om)\times\cP(\Om)$ with the weak topology. On compact $\Om$, $W_2$ metrizes that topology
+(Fact~\ref{fact:w2basic}), so $W_2:\cP(\Om)\times\cP(\Om)\to\R$ is continuous; the composition is
+measurable.
+
+\emph{(ii).} By Fact~\ref{fact:kernmeas}(i) the hypothesis of \cite[Cor.~5.22]{Villani} (Borel
+measurability of $s\mapsto(K(s,\cdot),K'(s,\cdot))$, target spaces Polish) is met; that corollary
+returns a Borel map $s\mapsto\gamma_s\in\cP(\Om\times\Om)$ with each $\gamma_s$ an optimal transport
+plan for the quadratic cost. By Fact~\ref{fact:kernmeas}(i) again (applied to the Polish
+$\Om\times\Om$), this Borel map \emph{is} a Markov kernel.
+
+\emph{(iii).} $\bar\gamma\in\cP(\Om\times\Om)$ is well defined by Fact~\ref{fact:kernmeas}(ii). Its
+marginals: for Borel $A\subseteq\Om$,
+$\bar\gamma(A\times\Om)=\int\gamma_s(A\times\Om)\,\rho(ds)=\int K(s,A)\,\rho(ds)=(\rho K)(A)$, and
+symmetrically $\bar\gamma(\Om\times A)=(\rho K')(A)$; so $\bar\gamma\in\Gamma(\rho K,\rho K')$.
+Therefore, using optimality of each $\gamma_s$ and Tonelli,
+\[
+  W_2(\rho K,\rho K')^2\le\int_{\Om\times\Om}\norm{x-y}^2\,\bar\gamma(dx,dy)
+  =\int_{\mathsf S}\!\int_{\Om\times\Om}\norm{x-y}^2\,\gamma_s(dx,dy)\,\rho(ds)
+  =\int W_2\big(K(s,\cdot),K'(s,\cdot)\big)^2\rho(ds).
+\]
+The last inequality of the statement is immediate.
+\end{proof}
+
+% ====================================================================
 \section{Conditional Lipschitzness and the sweep contraction}
 \label{sec:contraction}
 
+% [Rev.3-10] Notation in this and the following sections unified to the
+% bold convention of Secs. 1--8 (\bth, \bm u, \bm z_H, ...). Purely
+% notational; no mathematical content changed by this unification.
 We now quantify the mixing \emph{rate} of the same kernel $T$. Recall (Def.~\ref{def:condmaps}) the
 conditional laws
-$Q_H(\cdot\mid\theta)=(\mathcal B_H)\push\,\mathrm{law}(g_\phi(\theta,z_H)+\sigma_H\xi_H)$ and
-$Q_P(\cdot\mid u)=(\mathcal B_\Theta)\push\,\mathrm{law}(g_\psi(u,z_P)+\sigma_P\xi_P)$, where $z_H,z_P$
-are the CVAE latents and $\sigma_H,\sigma_P>0$ the injection-noise scales.
+$Q_H(\cdot\mid\bth)=(\mathcal B_H)\push\,\mathrm{law}(g_\phi(\bth,\bm z_H)+\sigma_H\bm\xi_H)$ and
+$Q_P(\cdot\mid\bm u)=(\mathcal B_\Theta)\push\,\mathrm{law}(g_\psi(\bm u,\bm z_P)+\sigma_P\bm\xi_P)$,
+where $\bm z_H,\bm z_P$ are the CVAE latents and $\sigma_H,\sigma_P>0$ the injection-noise scales.
 
 \begin{assumption}[Conditional Lipschitz decoders --- (A-contraction)]
 \label{ass:lip}
-There exist $L_H,L_P<\infty$ with, uniformly in the latent code $z$,
+There exist $L_H,L_P<\infty$ with, uniformly in the latent code $\bm z$,
 \[
-  \sup_{z}\ \mathrm{Lip}_{\theta\in\Om_\Theta}\big(g_\phi(\cdot,z)\big)\le L_H,\qquad
-  \sup_{z}\ \mathrm{Lip}_{u\in\Om_H}\big(g_\psi(\cdot,z)\big)\le L_P ,
+  \sup_{\bm z}\ \mathrm{Lip}_{\bth\in\Om_\Theta}\big(g_\phi(\cdot,\bm z)\big)\le L_H,\qquad
+  \sup_{\bm z}\ \mathrm{Lip}_{\bm u\in\Om_H}\big(g_\psi(\cdot,\bm z)\big)\le L_P ,
 \]
 i.e.\ each decoder mean is Lipschitz in its \emph{conditioning} variable, over the compact domains
 $\Om_\Theta,\Om_H$ (these contain the supports used below, cf.\ Assumption~\ref{ass:suptrue}). This is exactly the
@@ -698,64 +835,80 @@ quantity that condition-noise injection (N1) regularizes, by the noise-equals-Ti
 \cite{Bishop}: training penalizes $\E\|\nabla_{\text{cond}}g\|_F^2$, promoting small $L_H,L_P$. We
 posit this as an assumption (the penalty encourages but does not certify a bound) and
 support it empirically (autocorrelation decay). \emph{Crucially, $L_H,L_P$ constrain the dependence on
-the condition only --- not on the latent $z$ (N3) nor on the injection noise $\sigma\xi$ (N4).}
+the condition only --- not on the latent $\bm z$ (N3) nor on the injection noise $\sigma\bm\xi$ (N4).}
 \end{assumption}
 
+% [Rev.3-9] Quantifier domains made explicit (theta in Om_Theta, u in
+% Om_H), matching the Lipschitz domains fixed in Assumption lip. All
+% call sites already live in these ranges.
 \begin{lemma}[Conditional $W_2$-Lipschitzness; the injection noise cancels]
 \label{lem:condlip}
-Under Assumptions~\ref{ass:compact} and \ref{ass:lip}, for all $\theta,\theta',u,u'$,
+Under Assumptions~\ref{ass:compact} and \ref{ass:lip}, for all $\bth,\bth'\in\Om_\Theta$ and all
+$\bm u,\bm u'\in\Om_H$,
 \[
-  W_2\big(Q_H(\cdot\mid\theta),Q_H(\cdot\mid\theta')\big)\le L_H\norm{\theta-\theta'},\qquad
-  W_2\big(Q_P(\cdot\mid u),Q_P(\cdot\mid u')\big)\le L_P\norm{u-u'}.
+  W_2\big(Q_H(\cdot\mid\bth),Q_H(\cdot\mid\bth')\big)\le L_H\norm{\bth-\bth'},\qquad
+  W_2\big(Q_P(\cdot\mid\bm u),Q_P(\cdot\mid\bm u')\big)\le L_P\norm{\bm u-\bm u'}.
 \]
 \end{lemma}
 \begin{proof}
-Couple $Q_H(\cdot\mid\theta)$ and $Q_H(\cdot\mid\theta')$ by drawing the \emph{same} latent $z_H$ and
-the \emph{same} injection noise $\xi_H$: set $U=\mathcal B_H(g_\phi(\theta,z_H)+\sigma_H\xi_H)$ and
-$U'=\mathcal B_H(g_\phi(\theta',z_H)+\sigma_H\xi_H)$, which have the correct marginals, so $(U,U')$ is a
-coupling. Since $\mathcal B_H$ is $1$-Lipschitz (Fact~\ref{fact:proj}) and the shared term
-$\sigma_H\xi_H$ cancels inside the difference,
+Couple $Q_H(\cdot\mid\bth)$ and $Q_H(\cdot\mid\bth')$ by drawing the \emph{same} latent $\bm z_H$ and
+the \emph{same} injection noise $\bm\xi_H$: set $\bm U=\mathcal B_H(g_\phi(\bth,\bm z_H)+\sigma_H\bm\xi_H)$
+and $\bm U'=\mathcal B_H(g_\phi(\bth',\bm z_H)+\sigma_H\bm\xi_H)$, which have the correct marginals, so
+$(\bm U,\bm U')$ is a coupling. Since $\mathcal B_H$ is $1$-Lipschitz (Fact~\ref{fact:proj}) and the
+shared term $\sigma_H\bm\xi_H$ cancels inside the difference,
 \[
-  \norm{U-U'}\le\big\|(g_\phi(\theta,z_H)+\sigma_H\xi_H)-(g_\phi(\theta',z_H)+\sigma_H\xi_H)\big\|
-  =\norm{g_\phi(\theta,z_H)-g_\phi(\theta',z_H)}\le L_H\norm{\theta-\theta'}
+  \norm{\bm U-\bm U'}\le\big\|(g_\phi(\bth,\bm z_H)+\sigma_H\bm\xi_H)-(g_\phi(\bth',\bm z_H)+\sigma_H\bm\xi_H)\big\|
+  =\norm{g_\phi(\bth,\bm z_H)-g_\phi(\bth',\bm z_H)}\le L_H\norm{\bth-\bth'}
 \]
 pathwise (Assumption~\ref{ass:lip}). By Fact~\ref{fact:w2basic},
-$W_2\le(\E\norm{U-U'}^2)^{1/2}\le L_H\norm{\theta-\theta'}$. The $Q_P$ bound is identical. The
-cancellation of $\sigma_H\xi_H$ is the formal content of ``N4 sets the \emph{spread} of $Q_H$ but not
+$W_2\le(\E\norm{\bm U-\bm U'}^2)^{1/2}\le L_H\norm{\bth-\bth'}$. The $Q_P$ bound is identical. The
+cancellation of $\sigma_H\bm\xi_H$ is the formal content of ``N4 sets the \emph{spread} of $Q_H$ but not
 its \emph{sensitivity to the condition}.''
 \end{proof}
 
 \begin{lemma}[Sweep contraction]
 \label{lem:sweep}
-Let $K$ be the $\theta$-marginal one-sweep kernel,
-$K(\theta,\cdot)=\int_{\Om_H}Q_P(\cdot\mid u)\,Q_H(du\mid\theta)$ (draw $u\sim Q_H(\cdot\mid\theta)$,
-then $\theta'\sim Q_P(\cdot\mid u)$). Under Assumptions~\ref{ass:compact},\ref{ass:cont},\ref{ass:lip},
+Let $K$ be the $\bth$-marginal one-sweep kernel,
+$K(\bth,\cdot)=\int_{\Om_H}Q_P(\cdot\mid\bm u)\,Q_H(d\bm u\mid\bth)$ (draw $\bm u\sim Q_H(\cdot\mid\bth)$,
+then $\bth'\sim Q_P(\cdot\mid\bm u)$). Under Assumptions~\ref{ass:compact},\ref{ass:cont},\ref{ass:lip},
+for all $\bth,\bth'\in\Om_\Theta$,
 \[
-  W_2\big(K(\theta,\cdot),K(\theta',\cdot)\big)\le\kappa\,\norm{\theta-\theta'},\qquad \kappa:=L_HL_P .
+  W_2\big(K(\bth,\cdot),K(\bth',\cdot)\big)\le\kappa\,\norm{\bth-\bth'},\qquad \kappa:=L_HL_P .
 \]
 If moreover $\kappa<1$, then $K$ has a unique invariant $\nu^\ast\in\cP(\Om_\Theta)$ with
-$W_2(\mu_0K^n,\nu^\ast)\le\kappa^n W_2(\mu_0,\nu^\ast)$, and $\nu^\ast$ is the $\theta$-marginal of the
+$W_2(\mu_0K^n,\nu^\ast)\le\kappa^n W_2(\mu_0,\nu^\ast)$, and $\nu^\ast$ is the $\bth$-marginal of the
 joint invariant law $\pi^\ast$ of Theorem~\ref{thm:A}.
 \end{lemma}
 \begin{proof}
-Couple $K(\theta,\cdot),K(\theta',\cdot)$ by sharing all four noises $(z_H,\xi_H,z_P,\xi_P)$. With
-$U,U'$ as in Lemma~\ref{lem:condlip} and
-$\Theta'=\mathcal B_\Theta(g_\psi(U,z_P)+\sigma_P\xi_P)$,
-$\tilde\Theta'=\mathcal B_\Theta(g_\psi(U',z_P)+\sigma_P\xi_P)$, the same cancellation
-($\mathcal B_\Theta$ $1$-Lipschitz, shared $\sigma_P\xi_P$) gives, pathwise,
+% [Rev.3-1] Proof reorganized into labelled steps (cosmetic; the
+% argument is unchanged). [Rev.3-3] In Step 2 the operation is now
+% called MIXING (against an optimal coupling), not gluing.
+\emph{Step 1 (pathwise contraction).} Couple $K(\bth,\cdot),K(\bth',\cdot)$ by sharing all four
+noises $(\bm z_H,\bm\xi_H,\bm z_P,\bm\xi_P)$. With $\bm U,\bm U'$ as in Lemma~\ref{lem:condlip} and
+$\bm\Theta'=\mathcal B_\Theta(g_\psi(\bm U,\bm z_P)+\sigma_P\bm\xi_P)$,
+$\tilde{\bm\Theta}'=\mathcal B_\Theta(g_\psi(\bm U',\bm z_P)+\sigma_P\bm\xi_P)$, the same cancellation
+($\mathcal B_\Theta$ $1$-Lipschitz, shared $\sigma_P\bm\xi_P$) gives, pathwise,
 \[
-  \norm{\Theta'-\tilde\Theta'}\le\norm{g_\psi(U,z_P)-g_\psi(U',z_P)}\le L_P\norm{U-U'}\le L_PL_H\norm{\theta-\theta'}.
+  \norm{\bm\Theta'-\tilde{\bm\Theta}'}\le\norm{g_\psi(\bm U,\bm z_P)-g_\psi(\bm U',\bm z_P)}
+  \le L_P\norm{\bm U-\bm U'}\le L_PL_H\norm{\bth-\bth'}.
 \]
-Hence $W_2(K(\theta,\cdot),K(\theta',\cdot))\le(\E\norm{\Theta'-\tilde\Theta'}^2)^{1/2}\le\kappa\norm{\theta-\theta'}$.
+Hence $W_2(K(\bth,\cdot),K(\bth',\cdot))\le(\E\norm{\bm\Theta'-\tilde{\bm\Theta}'}^2)^{1/2}\le\kappa\norm{\bth-\bth'}$.
 ($K$ is a Markov kernel on $\Om_\Theta$ by Fact~\ref{fact:compose}, exactly as for $T$, so
-Fact~\ref{fact:banachw2} applies.) For the measure action, note the shared-noise coupling above is an
-\emph{explicit measurable} map $(\theta,\theta')\mapsto\Gamma_{\theta,\theta'}$ (no selection needed);
-gluing it against an optimal coupling $\gamma$ of the two fixed measures $\mu,\mu'$ and integrating the
-pointwise bound gives $W_2(\mu K,\mu'K)^2\le\int\kappa^2\norm{\theta-\theta'}^2\gamma(d\theta,d\theta')=\kappa^2W_2(\mu,\mu')^2$.
-When $\kappa<1$, Fact~\ref{fact:banachw2} yields $\nu^\ast$ and the rate. Finally, if
-$(u,\theta)\sim\pi^\ast$ then the swept $\theta'\sim K(\theta,\cdot)$ has the same law as the
-$\theta$-marginal of $\pi^\ast$ (invariance of $\pi^\ast$ under $T$), so that marginal is
-$K$-invariant and hence equals the unique $\nu^\ast$.
+Fact~\ref{fact:banachw2} applies below.)
+
+\emph{Step 2 (measure action).} The shared-noise construction of Step 1 defines an \emph{explicit}
+coupling kernel $(\bth,\bth')\mapsto\gamma_{\bth,\bth'}:=\mathrm{law}(\bm\Theta',\tilde{\bm\Theta}')$,
+jointly measurable in $(\bth,\bth')$ (a pushforward of the fixed noise law under a map that is jointly
+continuous by Assumption~\ref{ass:cont} and Fact~\ref{fact:proj}); no measurable selection is needed
+here. Mixing this kernel against an optimal coupling $\gamma\in\Gamma(\mu,\mu')$ of the two fixed
+measures (exactly as in Fact~\ref{fact:msel}(iii), with the explicit kernel in place of a selected
+one) and integrating the pathwise bound of Step 1 gives
+$W_2(\mu K,\mu'K)^2\le\int\kappa^2\norm{\bth-\bth'}^2\,\gamma(d\bth,d\bth')=\kappa^2\,W_2(\mu,\mu')^2$.
+
+\emph{Step 3 (invariant law and its identification).} When $\kappa<1$, Fact~\ref{fact:banachw2}
+yields $\nu^\ast$ and the rate. Finally, if $(\bm u,\bth)\sim\pi^\ast$ then the swept
+$\bth'\sim K(\bth,\cdot)$ has the same law as the $\bth$-marginal of $\pi^\ast$ (invariance of
+$\pi^\ast$ under $T$), so that marginal is $K$-invariant and hence equals the unique $\nu^\ast$.
 \end{proof}
 
 \begin{remark}[Roles of the four noises; the collapse ``paradox'' dissolves]
@@ -779,8 +932,8 @@ it proves existence/uniqueness of $\pi^\ast$ \emph{without} assuming any contrac
 $\sigma>0$ and compactness alone, quantities the algorithm guarantees. In the split we adopt,
 Theorem~\ref{thm:A} (TV, minorization) supplies existence unconditionally, while
 Lemma~\ref{lem:sweep} ($W_2$, condition-Lipschitz) supplies the \emph{rate} and, next, the stability
-constant $1/(1-\kappa)$ for the steering bound (Theorem~B). We work on the $\theta$-marginal chain
-$K$ because $p(\theta\mid\xobs)$ is the reported target; a joint contraction holds as well under a
+constant $1/(1-\kappa)$ for the steering bound (Theorem~B). We work on the $\bth$-marginal chain
+$K$ because $p(\bth\mid\xobs)$ is the reported target; a joint contraction holds as well under a
 suitably weighted product metric, with constant still governed by $L_H,L_P$, and is omitted.
 \end{remark}
 
@@ -797,7 +950,7 @@ Let $K$ be a Markov kernel on $\Om_\Theta$ whose measure action is a $\kappa$-co
 ($\kappa\in[0,1)$) with invariant $\nu^\ast$, and let $K'$ be any Markov kernel with an invariant
 $\nu'$. Then
 \[
-  W_2(\nu^\ast,\nu')\ \le\ \frac{1}{1-\kappa}\,\sup_{\theta}\,W_2\big(K(\theta,\cdot),K'(\theta,\cdot)\big).
+  W_2(\nu^\ast,\nu')\ \le\ \frac{1}{1-\kappa}\,\sup_{\bth\in\Om_\Theta}\,W_2\big(K(\bth,\cdot),K'(\bth,\cdot)\big).
 \]
 \end{lemma}
 \begin{proof}
@@ -806,67 +959,111 @@ Using $\nu^\ast=\nu^\ast K$ and $\nu'=\nu'K'$,
   W_2(\nu^\ast,\nu')=W_2(\nu^\ast K,\nu'K')\le W_2(\nu^\ast K,\nu'K)+W_2(\nu'K,\nu'K').
 \]
 The first term is $\le\kappa\,W_2(\nu^\ast,\nu')$ ($\kappa$-contraction of $K$). For the second,
-$W_2(\nu'K,\nu'K')\le\sup_\theta W_2(K(\theta,\cdot),K'(\theta,\cdot))$ by the averaged-kernel bound of
-Fact~\ref{fact:msel} (a \emph{measurable} family of optimal couplings glued against $\nu'$).
-Rearranging gives the claim. Only $K$ need contract; $K'$ need only possess an invariant law.
+% [Rev.3-3] Terminology: the family of optimal couplings is MIXED against
+% nu' (Fact msel(iii)); "glued" removed. Substance unchanged from Rev.2.
+$W_2(\nu'K,\nu'K')\le\sup_{\bth} W_2(K(\bth,\cdot),K'(\bth,\cdot))$ by the averaged-kernel bound of
+Fact~\ref{fact:msel}(iii) (a measurable family of optimal couplings, selected by
+Fact~\ref{fact:msel}(ii) and mixed against $\nu'$). Rearranging gives the claim (all quantities are
+finite since $\Om_\Theta$ is compact). Only $K$ need contract; $K'$ need only possess an invariant
+law.
 \end{proof}
 
+% ====================================================================
 \section{Theorem B: steering / consistency of the invariant law}
 \label{sec:thmB}
 
+% [Rev.3-5] Assumption suptrue is kept HERE (not moved into Sec. 6) so
+% that Secs. 1--9 remain verbatim; it is standing for this section, and
+% is now cited explicitly by Lemma opdisc and Theorem B (it was silently
+% used in Rev.2: domain of the true sweep, definition of eps_H/eps_P,
+% and coverage of the Lipschitz domains of Assumption lip all need it).
 \begin{assumption}[The domain contains the true support]
 \label{ass:suptrue}
 $\operatorname{supp}\Pi^\dagger\subseteq\Om=\Om_H\times\Om_\Theta$, where $\Pi^\dagger:=p(\xhid,\bth\mid\xobs)$
 is the true joint posterior. (Physically, the projection box is chosen to contain the plausible
 parameter/state range.) Fix, once and for all, regular versions of the true conditionals
-$p^\dagger_H(\cdot\mid\theta),p^\dagger_P(\cdot\mid u)$ defined for every $\theta\in\Om_\Theta,u\in\Om_H$.
+$p^\dagger_H(\cdot\mid\bth),p^\dagger_P(\cdot\mid\bm u)$ defined for every $\bth\in\Om_\Theta$,
+$\bm u\in\Om_H$; being regular versions, these are Markov kernels.
 \end{assumption}
 
-\paragraph{The target.} With conditionals $p^\dagger_H,p^\dagger_P$ as in Assumption~\ref{ass:suptrue},
-let $K^\dagger(\theta,\cdot)=\int p^\dagger_P(\cdot\mid u)\,p^\dagger_H(du\mid\theta)$ be the true sweep,
-a Markov kernel on $\Om_\Theta$ (Assumption~\ref{ass:suptrue} keeps every step inside $\Om$). Because
-$p^\dagger_H,p^\dagger_P$ are conditionals of one joint (hence compatible), Gibbs sampling is exact:
-$\Pi^\dagger$ is $K^\dagger$-invariant and its $\theta$-marginal $\nu^\dagger:=p(\bth\mid\xobs)$ is
-$K^\dagger$-invariant. This $\nu^\dagger$ is the estimand.
-
-\paragraph{Approximation defects.} Define
+% ---------------------------------------------------------------------
+% [Rev.3-4] Target paragraph rewritten. WHY: (a) Rev.2 said "Pi-dagger is
+% K-dagger-invariant", a category error (K-dagger acts on P(Om_Theta),
+% not on joint laws on Om_H x Om_Theta); (b) the needed statement
+% nu-dagger K-dagger = nu-dagger was carried by the slogan "Gibbs
+% sampling is exact" without argument. HOW: the kernel-ness of K-dagger
+% is pointed to Fact compose (as for T), and the invariance is PROVED by
+% the same sweep-reproduction argument used in Prop. inc.
+% ---------------------------------------------------------------------
+\paragraph{The target.}
+With the fixed versions $p^\dagger_H,p^\dagger_P$ of Assumption~\ref{ass:suptrue}, define the true
+sweep
 \[
-  \varepsilon_H:=\sup_\theta W_2\big(Q_H(\cdot\mid\theta),\,p^\dagger_H(\cdot\mid\theta)\big),\qquad
-  \varepsilon_P:=\sup_u W_2\big(Q_P(\cdot\mid u),\,p^\dagger_P(\cdot\mid u)\big),
+  K^\dagger(\bth,\cdot)\ :=\ \int p^\dagger_P(\cdot\mid\bm u)\,p^\dagger_H(d\bm u\mid\bth).
+\]
+This is a Markov kernel on $\Om_\Theta$: Assumption~\ref{ass:suptrue} keeps every step inside $\Om$,
+and measurability follows from Fact~\ref{fact:compose} exactly as for $T$ (Lemma~\ref{lem:measurable}).
+Moreover the forward sweep \emph{reproduces} $\Pi^\dagger$: if $(\bm u,\bth)\sim\Pi^\dagger$ and one
+redraws $\bm u'\sim p^\dagger_H(\cdot\mid\bth)$, then $(\bm u',\bth)\sim\Pi^\dagger$ (as $p^\dagger_H$
+is its $\bm u\mid\bth$ conditional); redrawing $\bth'\sim p^\dagger_P(\cdot\mid\bm u')$ then gives
+$(\bm u',\bth')\sim\Pi^\dagger$ (as $p^\dagger_P$ is its $\bth\mid\bm u$ conditional). Taking
+$\bth$-marginals of the first and last joints yields
+\[
+  \nu^\dagger K^\dagger=\nu^\dagger,\qquad \nu^\dagger:=p(\bth\mid\xobs)\ \text{the $\bth$-marginal of }\Pi^\dagger .
+\]
+This $\nu^\dagger$ is the estimand.
+
+\paragraph{Approximation defects.}
+Define
+\[
+  \varepsilon_H:=\sup_{\bth\in\Om_\Theta} W_2\big(Q_H(\cdot\mid\bth),\,p^\dagger_H(\cdot\mid\bth)\big),\qquad
+  \varepsilon_P:=\sup_{\bm u\in\Om_H} W_2\big(Q_P(\cdot\mid\bm u),\,p^\dagger_P(\cdot\mid\bm u)\big),
 \]
 the worst-case $W_2$ gaps between each \emph{learned} conditional and the corresponding \emph{true}
 conditional, both suprema taken over the compact domains and with respect to the fixed versions of
 Assumption~\ref{ass:suptrue}. (These absorb finite-sample/finite-capacity error, the injection-noise
 smoothing, and the boundary projection; see Remark~\ref{rem:edist}.)
 
+% [Rev.3-5] Assumption citation now includes suptrue.
 \begin{lemma}[Operator discrepancy]
 \label{lem:opdisc}
-Under Assumptions~\ref{ass:compact}--\ref{ass:lip},
-$\ \sup_\theta W_2\big(K(\theta,\cdot),K^\dagger(\theta,\cdot)\big)\le L_P\,\varepsilon_H+\varepsilon_P.$
+Under Assumptions~\ref{ass:compact}--\ref{ass:lip} and~\ref{ass:suptrue},
+$\ \sup_{\bth\in\Om_\Theta} W_2\big(K(\bth,\cdot),K^\dagger(\bth,\cdot)\big)\le L_P\,\varepsilon_H+\varepsilon_P.$
 \end{lemma}
 \begin{proof}
-Interpolate through $K'(\theta,\cdot)=\int Q_P(\cdot\mid u)\,p^\dagger_H(du\mid\theta)$ (true $H$-step,
-learned $P$-step):
+Interpolate through $K'(\bth,\cdot)=\int Q_P(\cdot\mid\bm u)\,p^\dagger_H(d\bm u\mid\bth)$ (true
+$H$-step, learned $P$-step):
 \[
-  W_2\big(K(\theta,\cdot),K^\dagger(\theta,\cdot)\big)\le W_2\big(K(\theta,\cdot),K'(\theta,\cdot)\big)+W_2\big(K'(\theta,\cdot),K^\dagger(\theta,\cdot)\big).
+  W_2\big(K(\bth,\cdot),K^\dagger(\bth,\cdot)\big)\le W_2\big(K(\bth,\cdot),K'(\bth,\cdot)\big)+W_2\big(K'(\bth,\cdot),K^\dagger(\bth,\cdot)\big).
 \]
-\emph{First term (swap $H$).} At the fixed $\theta$, take one optimal coupling $(U,U^\dagger)$ of
-$Q_H(\cdot\mid\theta),p^\dagger_H(\cdot\mid\theta)$ with $\E\norm{U-U^\dagger}^2=W_2(Q_H,p^\dagger_H)^2$;
-then draw $\theta',\theta'^\dagger$ from $Q_P(\cdot\mid U),Q_P(\cdot\mid U^\dagger)$ by shared noise
-$(z_P,\xi_P)$ \emph{independent of} $(U,U^\dagger)$ (Lemma~\ref{lem:condlip}), so
-$\norm{\theta'-\theta'^\dagger}\le L_P\norm{U-U^\dagger}$. As this is a single fixed coupling, no
-selection is needed; $W_2(K,K')\le L_P\,W_2(Q_H(\cdot\mid\theta),p^\dagger_H(\cdot\mid\theta))\le L_P\varepsilon_H$.
-\emph{Second term (swap $P$).} Both use $p^\dagger_H(\cdot\mid\theta)$ for the $u$-step; couple with the
-\emph{same} $u$, then couple $Q_P(\cdot\mid u),p^\dagger_P(\cdot\mid u)$ by a \emph{measurable} family of
-optimal couplings $u\mapsto\gamma_u$ (Fact~\ref{fact:msel}) and glue against $p^\dagger_H(\cdot\mid\theta)$,
-giving $W_2(K',K^\dagger)\le\big(\int W_2(Q_P(\cdot\mid u),p^\dagger_P(\cdot\mid u))^2\,p^\dagger_H(du\mid\theta)\big)^{1/2}\le\varepsilon_P$.
-Sum and take $\sup_\theta$.
+
+\emph{First term (swap $H$).} At the fixed $\bth$, take one optimal coupling $(\bm U,\bm U^\dagger)$
+of $Q_H(\cdot\mid\bth),p^\dagger_H(\cdot\mid\bth)$ with
+$\E\norm{\bm U-\bm U^\dagger}^2=W_2\big(Q_H(\cdot\mid\bth),p^\dagger_H(\cdot\mid\bth)\big)^2$; note
+$\bm U,\bm U^\dagger\in\Om_H$ a.s.\ ($Q_H$ is post-projection; $p^\dagger_H$ by
+Assumption~\ref{ass:suptrue}), so the Lipschitz domain of Assumption~\ref{ass:lip} covers both. Then
+draw $\bth',\bth'^\dagger$ from $Q_P(\cdot\mid\bm U),Q_P(\cdot\mid\bm U^\dagger)$ by shared noise
+$(\bm z_P,\bm\xi_P)$ \emph{independent of} $(\bm U,\bm U^\dagger)$ (Lemma~\ref{lem:condlip}), so
+$\norm{\bth'-\bth'^\dagger}\le L_P\norm{\bm U-\bm U^\dagger}$. As this is a single fixed coupling, no
+selection is needed;
+$W_2(K,K')\le L_P\,W_2\big(Q_H(\cdot\mid\bth),p^\dagger_H(\cdot\mid\bth)\big)\le L_P\varepsilon_H$.
+
+\emph{Second term (swap $P$).} Both use $p^\dagger_H(\cdot\mid\bth)$ for the $\bm u$-step; couple with
+the \emph{same} $\bm u$, then couple $Q_P(\cdot\mid\bm u),p^\dagger_P(\cdot\mid\bm u)$ by a
+\emph{measurable} family of optimal couplings $\bm u\mapsto\gamma_{\bm u}$
+(Fact~\ref{fact:msel}(ii); both are Markov kernels --- $Q_P$ by Lemma~\ref{lem:measurable},
+$p^\dagger_P$ by the fixed regular version of Assumption~\ref{ass:suptrue}) and mix against
+$p^\dagger_H(\cdot\mid\bth)$ (Fact~\ref{fact:msel}(iii)), giving
+$W_2(K',K^\dagger)\le\big(\int W_2\big(Q_P(\cdot\mid\bm u),p^\dagger_P(\cdot\mid\bm u)\big)^2\,p^\dagger_H(d\bm u\mid\bth)\big)^{1/2}\le\varepsilon_P$.
+
+Sum and take $\sup_{\bth}$.
 \end{proof}
 
+% [Rev.3-5] Assumption citation now includes suptrue.
 \begin{theorem}[Steering bound]
 \label{thm:B}
-Under Assumptions~\ref{ass:compact}--\ref{ass:lip} with $\kappa=L_HL_P<1$, the invariant
-$\theta$-law $\nu^\ast$ of the learned sweep satisfies
+Under Assumptions~\ref{ass:compact}--\ref{ass:lip} and~\ref{ass:suptrue}, with $\kappa=L_HL_P<1$, the
+invariant $\bth$-law $\nu^\ast$ of the learned sweep satisfies
 \[
   W_2\big(\nu^\ast,\ p(\bth\mid\xobs)\big)\ \le\ \frac{L_P\,\varepsilon_H+\varepsilon_P}{1-\kappa}.
 \]
@@ -874,88 +1071,114 @@ In particular, if $\varepsilon_H=\varepsilon_P=0$ then $\nu^\ast=p(\bth\mid\xobs
 (\textbf{Corollary B1}, the well-specified/compatible case).
 \end{theorem}
 \begin{proof}
-$K$ is a $\kappa$-contraction with invariant $\nu^\ast$ (Lemma~\ref{lem:sweep}) and $K^\dagger$ has
-invariant $\nu^\dagger=p(\bth\mid\xobs)$. Apply Lemma~\ref{lem:perturb} and bound the operator
-discrepancy by Lemma~\ref{lem:opdisc}.
+$K$ is a $\kappa$-contraction with invariant $\nu^\ast$ (Lemma~\ref{lem:sweep}) and $K^\dagger$ is a
+Markov kernel on $\Om_\Theta$ with invariant $\nu^\dagger=p(\bth\mid\xobs)$ (the target paragraph
+above). Apply Lemma~\ref{lem:perturb} and bound the operator discrepancy by Lemma~\ref{lem:opdisc}.
 \end{proof}
 
-\paragraph{The computable self-consistency defect.} Theorem~\ref{thm:B} bounds the distance to the
-\emph{true} posterior, but $\varepsilon_H,\varepsilon_P$ require the unknown truth. We therefore also
-define an intrinsic, \emph{model-only} defect that certifies whether the learned pair even admits a
-coherent joint. Let $\mu^\ast(du):=\int Q_H(du\mid\theta)\,\nu^\ast(d\theta)$ be the $u$-marginal the
-forward sweep induces, and form the two joints on $\Om_\Theta\times\Om_H$
+\paragraph{The computable self-consistency defect.}
+Theorem~\ref{thm:B} bounds the distance to the \emph{true} posterior, but
+$\varepsilon_H,\varepsilon_P$ require the unknown truth. We therefore also define an intrinsic,
+\emph{model-only} defect that certifies whether the learned pair even admits a coherent joint. Let
+$\mu^\ast(d\bm u):=\int Q_H(d\bm u\mid\bth)\,\nu^\ast(d\bth)$ be the $\bm u$-marginal the forward
+sweep induces, and form the two joints on $\Om_\Theta\times\Om_H$
 \[
-  \Pi^{\rightarrow}(d\theta,du):=\nu^\ast(d\theta)\,Q_H(du\mid\theta),\qquad
-  \Pi^{\leftarrow}(d\theta,du):=Q_P(d\theta\mid u)\,\mu^\ast(du),\qquad
+  \Pi^{\rightarrow}(d\bth,d\bm u):=\nu^\ast(d\bth)\,Q_H(d\bm u\mid\bth),\qquad
+  \Pi^{\leftarrow}(d\bth,d\bm u):=Q_P(d\bth\mid\bm u)\,\mu^\ast(d\bm u),\qquad
   \varepsilon_{\mathrm{inc}}:=W_2\big(\Pi^{\rightarrow},\Pi^{\leftarrow}\big).
 \]
-Both have the same $u$-marginal $\mu^\ast$; they differ only in the $\theta\mid u$ law (the forward
-posterior of $\theta$ under $\Pi^\rightarrow$ vs.\ the learned $Q_P$), so $\varepsilon_{\mathrm{inc}}$
-is the ``forward-vs-backward sweep inconsistency'' and is estimable from samples of the trained model
-alone.
+Both have the same $\bm u$-marginal $\mu^\ast$; they differ only in the $\bth\mid\bm u$ law (the
+forward posterior of $\bth$ under $\Pi^\rightarrow$ vs.\ the learned $Q_P$), so
+$\varepsilon_{\mathrm{inc}}$ is the ``forward-vs-backward sweep inconsistency'' and is estimable from
+samples of the trained model alone.
 
+% [Rev.3-6] Standing assumptions of the Proposition made explicit
+% (uniqueness of nu* is via Lemma sweep, which needs Assumptions 1--3).
 \begin{proposition}[$\varepsilon_{\mathrm{inc}}$ certifies compatibility]
 \label{prop:inc}
-Assume $\kappa<1$. Then $\varepsilon_{\mathrm{inc}}=0$ iff $Q_H,Q_P$ are compatible (equal, a.e., the
-conditionals of a common joint); in that case the witnessing joint is
-$\Pi=\Pi^\rightarrow=\Pi^\leftarrow$, and $\nu^\ast$ is exactly its $\theta$-marginal --- i.e.\ the
-sampler draws from a genuine joint's marginal.
+Let Assumptions~\ref{ass:compact}--\ref{ass:lip} hold with $\kappa=L_HL_P<1$. Then
+$\varepsilon_{\mathrm{inc}}=0$ iff $Q_H,Q_P$ are compatible (equal, a.e., the conditionals of a
+common joint); in that case the witnessing joint is $\Pi=\Pi^\rightarrow=\Pi^\leftarrow$, and
+$\nu^\ast$ is exactly its $\bth$-marginal --- i.e.\ the sampler draws from a genuine joint's marginal.
 \end{proposition}
 \begin{proof}
-$(\Leftarrow)$ Suppose a joint $\Pi'$ has $u\mid\theta$-conditional $Q_H$ and $\theta\mid u$-conditional
-$Q_P$ (a.e.). Running one forward sweep from $\Pi'$ reproduces $\Pi'$, so its $\theta$-marginal
-$\Pi'_\theta$ is $K$-invariant, hence $\Pi'_\theta=\nu^\ast$ (unique, $\kappa<1$). Thus
-$\Pi'=\nu^\ast\otimes Q_H=\Pi^\rightarrow$; its $u$-marginal is $\mu^\ast$ and its
-$\theta\mid u$-conditional is $Q_P$, so also $\Pi'=Q_P\otimes\mu^\ast=\Pi^\leftarrow$, giving
-$\varepsilon_{\mathrm{inc}}=0$. $(\Rightarrow)$ If $\varepsilon_{\mathrm{inc}}=0$ then
-$\Pi^\rightarrow=\Pi^\leftarrow=:\Pi$; by construction $\Pi$ has $u\mid\theta$-conditional $Q_H$ (from
-$\Pi^\rightarrow$) and $\theta\mid u$-conditional $Q_P$ (from $\Pi^\leftarrow$), so $Q_H,Q_P$ are
-compatible with witness $\Pi$, whose $\theta$-marginal is $\nu^\ast$.
+$(\Leftarrow)$ Suppose a joint $\Pi'$ has $\bm u\mid\bth$-conditional $Q_H$ and
+$\bth\mid\bm u$-conditional $Q_P$ (a.e.). Running one forward sweep from $\Pi'$ reproduces $\Pi'$, so
+its $\bth$-marginal $\Pi'_{\bth}$ is $K$-invariant, hence $\Pi'_{\bth}=\nu^\ast$ (unique, $\kappa<1$).
+Thus $\Pi'=\nu^\ast\otimes Q_H=\Pi^\rightarrow$; its $\bm u$-marginal is $\mu^\ast$ and its
+$\bth\mid\bm u$-conditional is $Q_P$, so also $\Pi'=Q_P\otimes\mu^\ast=\Pi^\leftarrow$, giving
+$\varepsilon_{\mathrm{inc}}=0$.
+
+$(\Rightarrow)$ If $\varepsilon_{\mathrm{inc}}=0$ then $\Pi^\rightarrow=\Pi^\leftarrow=:\Pi$; by
+construction $\Pi$ has $\bm u\mid\bth$-conditional $Q_H$ (from $\Pi^\rightarrow$) and
+$\bth\mid\bm u$-conditional $Q_P$ (from $\Pi^\leftarrow$), so $Q_H,Q_P$ are compatible with witness
+$\Pi$, whose $\bth$-marginal is $\nu^\ast$.
 \end{proof}
 
+% [Rev.3-6] kappa<1 noted as in force (nu*, mu* are otherwise undefined).
 \begin{remark}[$\Pi^\leftarrow$ is the stationary joint]
 \label{rem:pileftpi}
-The backward-assembled joint is exactly the joint invariant law: at stationarity the swept state
-$(u',\theta')$ has $u'\sim\mu^\ast$ and $\theta'\sim Q_P(\cdot\mid u')$, i.e.\ $\pi^\ast=\Pi^\leftarrow$
-(up to the coordinate identification $\Om_H\times\Om_\Theta\cong\Om_\Theta\times\Om_H$). Hence
-$\varepsilon_{\mathrm{inc}}=W_2(\Pi^\rightarrow,\pi^\ast)$: the self-consistency defect measures how far
-the forward pairing $(\theta,u\!\sim\!Q_H(\cdot\mid\theta))$ sits from the sampler's own stationary
-joint --- a quantity one estimates directly from a single run.
+(Throughout this remark $\kappa<1$ is in force, so $\nu^\ast$ --- and with it $\mu^\ast$ --- is
+defined.) The backward-assembled joint is exactly the joint invariant law: at stationarity the swept
+state $(\bm u',\bth')$ has $\bm u'\sim\mu^\ast$ and $\bth'\sim Q_P(\cdot\mid\bm u')$, i.e.\
+$\pi^\ast=\Pi^\leftarrow$ (up to the coordinate identification
+$\Om_H\times\Om_\Theta\cong\Om_\Theta\times\Om_H$). Hence
+$\varepsilon_{\mathrm{inc}}=W_2(\Pi^\rightarrow,\pi^\ast)$: the self-consistency defect measures how
+far the forward pairing $(\bth,\bm u\!\sim\!Q_H(\cdot\mid\bth))$ sits from the sampler's own
+stationary joint --- a quantity one estimates directly from a single run.
 \end{remark}
 
+% [Rev.3-8] Hedge sharpened: the swap-learned-first triangle route
+% suggests the constant closes with kappa, L_H, L_P only (no regularity
+% of the TRUE conditionals is needed, since Lemma condlip is only ever
+% applied to the LEARNED conditionals); precise constant still deferred.
 \begin{remark}[Why the defects are not summed --- no double counting]
 \label{rem:nodouble}
 It is tempting to add $\varepsilon_{\mathrm{inc}}$ to the bound of Theorem~\ref{thm:B}; this would
 double count. Since the true conditionals are compatible, the true joints built forward and backward
 coincide ($\Pi^\rightarrow_\dagger=\Pi^\leftarrow_\dagger=\Pi^\dagger$), so by a triangle inequality
-$\varepsilon_{\mathrm{inc}}\le W_2(\Pi^\rightarrow,\Pi^\dagger)+W_2(\Pi^\dagger,\Pi^\leftarrow)$; each
-term can in turn be controlled by $W_2(\nu^\ast,\nu^\dagger)$ (Theorem~\ref{thm:B}) together with
-$\varepsilon_H,\varepsilon_P$ and Lemma~\ref{lem:condlip}. One expects, accordingly, a bound
-$\varepsilon_{\mathrm{inc}}\le C\,(\varepsilon_H+\varepsilon_P)$ with $C$ depending on $\kappa,L_H,L_P$
-(and the regularity of the true conditionals); we defer the precise constant to a later note. The
-qualitative point stands regardless: $\varepsilon_{\mathrm{inc}}$ is \emph{dominated by} the
-approximation defects, not independent of them --- $\varepsilon_H,\varepsilon_P$ govern the distance to
-truth (Theorem~\ref{thm:B}), while $\varepsilon_{\mathrm{inc}}$ is its computable \emph{shadow}, the
-quantity one can actually monitor (e.g.\ across noise scales; cf.\ the ablation program).
+$\varepsilon_{\mathrm{inc}}\le W_2(\Pi^\rightarrow,\Pi^\dagger)+W_2(\Pi^\dagger,\Pi^\leftarrow)$. Each
+term can in turn be controlled by swapping the \emph{learned} conditional first --- e.g.\
+$W_2\big(Q_H(\cdot\mid\bth),p^\dagger_H(\cdot\mid\bth^\dagger)\big)\le\varepsilon_H+L_H\norm{\bth-\bth^\dagger}$
+by the triangle inequality and Lemma~\ref{lem:condlip} applied to the learned $Q_H$ --- together with
+$W_2(\nu^\ast,\nu^\dagger)$ from Theorem~\ref{thm:B}. One expects, accordingly, a bound
+$\varepsilon_{\mathrm{inc}}\le C(\kappa,L_H,L_P)\,(\varepsilon_H+\varepsilon_P)$; since
+Lemma~\ref{lem:condlip} is only ever invoked on the learned conditionals along this route, no
+regularity of the \emph{true} conditionals should be needed. We defer the precise constant to a later
+note. The qualitative point stands regardless: $\varepsilon_{\mathrm{inc}}$ is \emph{dominated by} the
+approximation defects, not independent of them --- $\varepsilon_H,\varepsilon_P$ govern the distance
+to truth (Theorem~\ref{thm:B}), while $\varepsilon_{\mathrm{inc}}$ is its computable \emph{shadow},
+the quantity one can actually monitor (e.g.\ across noise scales; cf.\ the ablation program).
 \end{remark}
 
+% [Rev.3-7] Law of Y specified (stationary PRE-projection proposal), and
+% sqrt(d) dimension factors flagged (consistent with Remark rem:scope's
+% policy of flagging dimension dependence).
 \begin{remark}[Where the distortion defect lives; the $\sigma$ decomposition]
 \label{rem:edist}
 Here $p^\dagger_H,p^\dagger_P$ are the \emph{clean} true conditionals, so $\varepsilon_H,\varepsilon_P$
 silently include the injection-noise smoothing (N4) and the boundary projection --- i.e.\ a distortion
-defect $\varepsilon_{\mathrm{dist}}=O(\sigma_H+\sigma_P)+\big(\E\norm{\bm Y-\mathcal B(\bm Y)}^2\big)^{1/2}$
-is folded in, where the last term is the RMS projection displacement (a length, not the boundary
-\emph{mass} $\pi^\ast(\partial\Om)$; the two are distinct). To display it separately, reference instead
-the $\sigma$-smoothed, projected true conditionals
-$p^{\dagger,\sigma}_H,p^{\dagger,\sigma}_P$: then $\varepsilon_H,\varepsilon_P$ reduce to pure
-learning error (vanishing with data/capacity), and one adds the single term
-$W_2(\nu^{\dagger,\sigma},\nu^\dagger)=O(\sigma)$ for the smoothing bias. Because Theorem~\ref{thm:A}
-and non-collapse require $\sigma_H,\sigma_P>0$ (N4), this term has an irreducible floor; in the
-non-identifiable regime it is small relative to the width of the true posterior ridge, so the ridge
-is faithfully covered.
+defect
+$\varepsilon_{\mathrm{dist}}=O\big((\sigma_H+\sigma_P)\sqrt{d}\big)+\big(\E\norm{\bm Y-\mathcal B(\bm Y)}^2\big)^{1/2}$
+is folded in, where $\bm Y$ denotes the stationary \emph{pre-projection} proposal (for the $H$-step,
+$\bm Y=g_\phi(\bth,\bm z_H)+\sigma_H\bm\xi_H$ with $\bth\sim\nu^\ast$; analogously for the $P$-step,
+with the two contributions combined) and $\mathcal B$ the corresponding projection. The last term is
+an RMS projection \emph{displacement} --- a length, not the boundary \emph{mass}
+$\pi^\ast(\partial\Om)$; the two are distinct. The $\sqrt d$ factors make the dimension dependence
+explicit (adding $\Normal(\bm0,\sigma^2I_d)$ noise moves a law by $\sigma\sqrt d$ in $W_2$; cf.\ the
+dimension-flagging policy of Remark~\ref{rem:scope}). To display the distortion separately, reference
+instead the $\sigma$-smoothed, projected true conditionals $p^{\dagger,\sigma}_H,p^{\dagger,\sigma}_P$:
+then $\varepsilon_H,\varepsilon_P$ reduce to pure learning error (vanishing with data/capacity), and
+one adds the single term $W_2(\nu^{\dagger,\sigma},\nu^\dagger)=O(\sigma\sqrt d)$ for the smoothing
+bias. Because Theorem~\ref{thm:A} and non-collapse require $\sigma_H,\sigma_P>0$ (N4), this term has
+an irreducible floor; in the non-identifiable regime it is small relative to the width of the true
+posterior ridge, so the ridge is faithfully covered.
 \end{remark}
 
 % ====================================================================
+% [Rev.3-11] Bibliography parentheticals extended: Villani Cor. 5.22
+% (measurable selection) and Kallenberg (measurable structure of P(Om)),
+% both now load-bearing via Facts kernmeas/msel.
 \begin{thebibliography}{9}
 \bibitem{Bishop} C.~M.~Bishop. Training with noise is equivalent to Tikhonov regularization.
   \emph{Neural Computation}, 7(1):108--116, 1995.
@@ -964,13 +1187,15 @@ is faithfully covered.
 \bibitem{HiriartLemarechal} J.-B.~Hiriart-Urruty and C.~Lemar\'echal.
   \emph{Fundamentals of Convex Analysis}. Springer, 2001. (Projection onto a convex set, Ch.~III.)
 \bibitem{Kallenberg} O.~Kallenberg. \emph{Foundations of Modern Probability}, 2nd ed. Springer, 2002.
-  (Kernels and section integration, Ch.~1; Ionescu--Tulcea, Ch.~6. Chapter numbers to be verified
-  against the edition in use.)
+  (Kernels and section integration, Ch.~1; measurable structure of $\cP(\Om)$ --- evaluation
+  $\sigma$-algebra vs.\ weak Borel --- Chs.~1 and 4; Ionescu--Tulcea, Ch.~6. Chapter numbers to be
+  verified against the edition in use.)
 \bibitem{MeynTweedie} S.~Meyn and R.~L.~Tweedie.
   \emph{Markov Chains and Stochastic Stability}, 2nd ed. Cambridge Univ.\ Press, 2009.
   (Doeblin/uniform ergodicity, Ch.~16.)
 \bibitem{Villani} C.~Villani. \emph{Optimal Transport: Old and New}. Springer, 2009.
-  ($W_2$ metric and its properties, Ch.~6; gluing lemma, Ch.~1.)
+  ($W_2$ metric and its properties, Ch.~6; gluing lemma, Ch.~1; measurable selection of optimal
+  plans, Cor.~5.22.)
 \end{thebibliography}
 
 \end{document}

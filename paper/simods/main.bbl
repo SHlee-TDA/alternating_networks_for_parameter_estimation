@@ -1,0 +1,79 @@
+\begin{thebibliography}{10}
+
+\bibitem{bai2019deep}
+{\sc S.~Bai, J.~Z. Kolter, and V.~Koltun}, {\em Deep equilibrium models}, in
+  Advances in Neural Information Processing Systems (NeurIPS), 2019.
+
+\bibitem{cranmer2020frontier}
+{\sc K.~Cranmer, J.~Brehmer, and G.~Louppe}, {\em The frontier of
+  simulation-based inference}, Proceedings of the National Academy of Sciences,
+  117 (2020), pp.~30055--30062.
+
+\bibitem{ha2024iss}
+{\sc J.~Ha, S.~T. Chung, M.~Springer, J.~Y. Kim, P.~Chen, A.~Chhabra, M.~G.
+  Cree, C.~Diniz~Behn, A.~E. Sumner, S.~A. Arslanian, and A.~S. Sherman}, {\em
+  Estimating insulin sensitivity and {$\beta$}-cell function from the oral
+  glucose tolerance test: validation of a new insulin sensitivity and secretion
+  ({ISS}) model}, American Journal of Physiology-Endocrinology and Metabolism,
+  326 (2024), pp.~E454--E471, \url{https://doi.org/10.1152/ajpendo.00189.2023}.
+
+\bibitem{ha2025disposition}
+{\sc J.~Ha, J.~Y. Kim, M.~Springer, A.~Chhabra, S.~T. Chung, A.~E. Sumner,
+  A.~S. Sherman, and S.~Arslanian}, {\em A mathematical model-derived
+  disposition index without insulin validated in youth with obesity}, Journal
+  of Clinical Endocrinology \& Metabolism, 110 (2025), pp.~706--714,
+  \url{https://doi.org/10.1210/clinem/dgae582}.
+
+\bibitem{hermann1977nonlinear}
+{\sc R.~Hermann and A.~Krener}, {\em Nonlinear controllability and
+  observability}, IEEE Transactions on Automatic Control, 22 (1977),
+  pp.~728--740.
+
+\bibitem{kermack1927contribution}
+{\sc W.~O. Kermack and A.~G. McKendrick}, {\em A contribution to the
+  mathematical theory of epidemics}, Proceedings of the royal society of
+  london. Series A, Containing papers of a mathematical and physical character,
+  115 (1927), pp.~700--721.
+
+\bibitem{lotka1925elements}
+{\sc A.~J. Lotka}, {\em Elements of physical biology}, Williams \& Wilkins,
+  1925.
+
+\bibitem{miyato2018spectralnormalizationgenerativeadversarial}
+{\sc T.~Miyato, T.~Kataoka, M.~Koyama, and Y.~Yoshida}, {\em Spectral
+  normalization for generative adversarial networks}, 2018,
+  \url{https://arxiv.org/abs/1802.05957}.
+
+\bibitem{papamakarios2016fast}
+{\sc G.~Papamakarios and I.~Murray}, {\em Fast $\varepsilon$-free inference of
+  simulation models with {B}ayesian conditional density estimation}, in
+  Advances in Neural Information Processing Systems (NeurIPS), 2016.
+
+\bibitem{phelps2001choquet}
+{\sc R.~R. Phelps}, {\em Lectures on Choquet's Theorem}, vol.~1757 of Lecture
+  Notes in Mathematics, Springer, 2~ed., 2001.
+
+\bibitem{takens1981detecting}
+{\sc F.~Takens}, {\em Detecting strange attractors in turbulence}, in Dynamical
+  Systems and Turbulence, Warwick 1980, vol.~898 of Lecture Notes in
+  Mathematics, Springer, 1981, pp.~366--381.
+
+\bibitem{tarantola2005inverse}
+{\sc A.~Tarantola}, {\em Inverse problem theory and methods for model parameter
+  estimation}, SIAM, 2005.
+
+\bibitem{villaverde2016structural}
+{\sc A.~F. Villaverde, A.~Barreiro, and A.~Papachristodoulou}, {\em Structural
+  identifiability of dynamic systems biology models}, PLoS Computational
+  Biology, 12 (2016), p.~e1005153.
+
+\bibitem{volterra1927fluctuations}
+{\sc V.~Volterra}, {\em Fluctuations in the abundance of a species considered
+  mathematically}, Nature, 119 (1927), pp.~12--13.
+
+\bibitem{williams1989learning}
+{\sc R.~J. Williams and D.~Zipser}, {\em A learning algorithm for continually
+  running fully recurrent neural networks}, Neural computation, 1 (1989),
+  pp.~270--280.
+
+\end{thebibliography}
